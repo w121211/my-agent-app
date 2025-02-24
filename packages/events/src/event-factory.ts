@@ -1,125 +1,170 @@
-// src/eventFactory.ts
-
 import { Logger } from "tslog";
 import {
   BaseEvent,
-  CreateTaskCommand,
   EventType,
-  StartNewChatCommand,
+  CreateTaskCommand,
   StartTaskCommand,
-  TestEvent,
+  StartNewChatCommand,
   UserSubmitMessageCommand,
+  TestEvent,
 } from "./types.js";
 
-// 事件類型到事件類的映射
-const EVENT_TYPE_MAP: Record<EventType, new (data: any) => BaseEvent> = {
-  [EventType.CREATE_TASK_COMMAND]: CreateTaskCommandImpl,
-  [EventType.START_TASK_COMMAND]: StartTaskCommandImpl,
-  [EventType.START_NEW_CHAT_COMMAND]: StartNewChatCommandImpl,
-  [EventType.USER_SUBMIT_MESSAGE_COMMAND]: UserSubmitMessageCommandImpl,
-  [EventType.TEST_EVENT]: TestEventImpl,
-  // 可以根據需要添加其他映射
+const logger = new Logger({ name: "EventFactory" });
+
+// Event validator type
+type EventValidator<T extends BaseEvent> = (data: unknown) => data is T;
+
+// Event creator type
+type EventCreator<T extends BaseEvent> = (data: unknown) => T;
+
+// Generic event creation error
+class EventCreationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EventCreationError";
+  }
+}
+
+// Helper functions for data validation
+function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && !isNaN(value.getTime());
+}
+
+function ensureDate(value: unknown): Date {
+  if (typeof value === "string") {
+    const date = new Date(value);
+    if (isValidDate(date)) return date;
+  }
+  if (value instanceof Date && isValidDate(value)) return value;
+  throw new EventCreationError("Invalid date value");
+}
+
+function ensureString(value: unknown, fieldName: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new EventCreationError(
+      `Invalid ${fieldName}: must be a non-empty string`
+    );
+  }
+  return value;
+}
+
+// Base event creator
+function createBaseEventData(data: unknown, eventType: EventType): BaseEvent {
+  if (!data || typeof data !== "object") {
+    throw new EventCreationError("Event data must be an object");
+  }
+
+  const eventData = data as Record<string, unknown>;
+  return {
+    eventType,
+    timestamp: ensureDate(eventData.timestamp),
+    correlationId: eventData.correlationId as string | undefined,
+  };
+}
+
+// Event validators and creators
+const eventHandlers: Partial<Record<EventType, EventCreator<BaseEvent>>> = {
+  [EventType.CREATE_TASK_COMMAND]: (data: unknown): CreateTaskCommand => {
+    const base = createBaseEventData(data, EventType.CREATE_TASK_COMMAND);
+    const eventData = data as Record<string, unknown>;
+
+    return {
+      ...base,
+      eventType: EventType.CREATE_TASK_COMMAND,
+      taskName: ensureString(eventData.taskName, "taskName"),
+      taskConfig: eventData.taskConfig as Record<string, unknown>,
+    };
+  },
+
+  [EventType.START_TASK_COMMAND]: (data: unknown): StartTaskCommand => {
+    const base = createBaseEventData(data, EventType.START_TASK_COMMAND);
+    const eventData = data as Record<string, unknown>;
+
+    return {
+      ...base,
+      eventType: EventType.START_TASK_COMMAND,
+      taskId: ensureString(eventData.taskId, "taskId"),
+    };
+  },
+
+  [EventType.START_NEW_CHAT_COMMAND]: (data: unknown): StartNewChatCommand => {
+    const base = createBaseEventData(data, EventType.START_NEW_CHAT_COMMAND);
+    const eventData = data as Record<string, unknown>;
+
+    return {
+      ...base,
+      taskId: ensureString(eventData.taskId, "taskId"),
+      subtaskId: ensureString(eventData.subtaskId, "subtaskId"),
+      metadata: eventData.metadata as Record<string, unknown> | undefined,
+    };
+  },
+
+  [EventType.USER_SUBMIT_MESSAGE_COMMAND]: (
+    data: unknown
+  ): UserSubmitMessageCommand => {
+    const base = createBaseEventData(
+      data,
+      EventType.USER_SUBMIT_MESSAGE_COMMAND
+    );
+    const eventData = data as Record<string, unknown>;
+
+    return {
+      ...base,
+      chatId: ensureString(eventData.chatId, "chatId"),
+      content: ensureString(eventData.content, "content"),
+    };
+  },
+
+  [EventType.TEST_EVENT]: (data: unknown): TestEvent => {
+    const base = createBaseEventData(data, EventType.TEST_EVENT);
+    const eventData = data as Record<string, unknown>;
+
+    return {
+      ...base,
+      message: ensureString(eventData.message, "message"),
+    };
+  },
 };
 
-// 具體事件實現類
-class CreateTaskCommandImpl implements CreateTaskCommand {
-  eventType = EventType.CREATE_TASK_COMMAND;
-  timestamp: Date;
-  correlationId?: string;
-  taskName: string;
-  taskConfig: Record<string, any>;
-
-  constructor(data: any) {
-    this.timestamp = new Date(data.timestamp);
-    this.correlationId = data.correlationId;
-    this.taskName = data.taskName;
-    this.taskConfig = data.taskConfig;
-  }
-}
-
-class StartTaskCommandImpl implements StartTaskCommand {
-  eventType = EventType.START_TASK_COMMAND;
-  timestamp: Date;
-  correlationId?: string;
-  taskId: string;
-
-  constructor(data: any) {
-    this.timestamp = new Date(data.timestamp);
-    this.correlationId = data.correlationId;
-    this.taskId = data.taskId;
-  }
-}
-
-class StartNewChatCommandImpl implements StartNewChatCommand {
-  eventType = EventType.START_NEW_CHAT_COMMAND;
-  timestamp: Date;
-  correlationId?: string;
-  taskId: string;
-  subtaskId: string;
-  metadata?: import("./types.js").ChatMetadata;
-
-  constructor(data: any) {
-    this.timestamp = new Date(data.timestamp);
-    this.correlationId = data.correlationId;
-    this.taskId = data.taskId;
-    this.subtaskId = data.subtaskId;
-    this.metadata = data.metadata;
-  }
-}
-
-class UserSubmitMessageCommandImpl implements UserSubmitMessageCommand {
-  eventType = EventType.USER_SUBMIT_MESSAGE_COMMAND;
-  timestamp: Date;
-  correlationId?: string;
-  chatId: string;
-  content: string;
-
-  constructor(data: any) {
-    this.timestamp = new Date(data.timestamp);
-    this.correlationId = data.correlationId;
-    this.chatId = data.chatId;
-    this.content = data.content;
-  }
-}
-
-class TestEventImpl implements TestEvent {
-  eventType = EventType.TEST_EVENT;
-  timestamp: Date;
-  correlationId?: string;
-  message: string;
-
-  constructor(data: any) {
-    this.timestamp = new Date(data.timestamp);
-    this.correlationId = data.correlationId;
-    this.message = data.message;
-  }
-}
-
+// Event type conversion
 export function toEventType(eventTypeStr: string): EventType {
   const upperCaseType = eventTypeStr.toUpperCase();
-  if (!(upperCaseType in EventType)) {
-    throw new Error(`Invalid event type: ${eventTypeStr}`);
+  if (!Object.values(EventType).includes(upperCaseType as EventType)) {
+    throw new EventCreationError(`Invalid event type: ${eventTypeStr}`);
   }
-  return EventType[upperCaseType as keyof typeof EventType];
+  return upperCaseType as EventType;
 }
 
-export function createEvent(
+// Main event creation function
+export function createEvent<T extends BaseEvent>(
   eventType: EventType | string,
-  eventData: any
-): BaseEvent {
-  const logger = new Logger({ name: "EventFactory" });
-  logger.debug(`Creating event of type ${eventType} with data:`, eventData);
+  eventData: unknown
+): T {
+  try {
+    const resolvedEventType =
+      typeof eventType === "string" ? toEventType(eventType) : eventType;
 
-  // 如果 eventType 是字串，轉換為 EventType 枚舉
-  const resolvedEventType =
-    typeof eventType === "string" ? toEventType(eventType) : eventType;
+    const creator = eventHandlers[resolvedEventType];
+    if (!creator) {
+      throw new EventCreationError(
+        `No event handler found for type: ${resolvedEventType}`
+      );
+    }
 
-  // 獲取事件類
-  const EventClass = EVENT_TYPE_MAP[resolvedEventType];
-  if (!EventClass) {
-    throw new Error(`No event class found for type: ${resolvedEventType}`);
+    logger.debug(`Creating event of type ${resolvedEventType}`, {
+      eventData,
+    });
+
+    const event = creator(eventData) as T;
+    logger.debug("Event created successfully", { event });
+
+    return event;
+  } catch (error) {
+    if (error instanceof EventCreationError) {
+      throw error;
+    }
+    throw new EventCreationError(
+      `Failed to create event: ${(error as Error).message}`
+    );
   }
-
-  // 創建事件實例
-  return new EventClass(eventData);
 }

@@ -1,0 +1,205 @@
+pnpm dlx repomix 
+
+
+"dependencies": {
+    "@repo/events": "workspace:*",
+    "@repo/ui": "workspace:*",
+    "next": "15.1.7",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.1.7",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.7.3"
+  }
+
+我想要對以上 dependencies 都執行 pnpm up --recursive typescript@latest，來同步 repos 的 dependencies，請幫忙寫一個 command
+
+> pnpm up --recursive --latest
+
+
+
+我想要同步 pnpm workspace 中的 dependecy version 要怎樣做？
+https://turbo.build/repo/docs/crafting-your-repository/managing-dependencies#keeping-dependencies-on-the-same-version
+
+
+
+
+# turborepo init tsconfig.base.json
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": true,
+    "esModuleInterop": true,
+    "incremental": false,
+    "isolatedModules": true,
+    "lib": ["es2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleDetection": "force",
+    "moduleResolution": "NodeNext",
+    "noUncheckedIndexedAccess": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2022"
+  }
+}
+
+# next.js init tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+
+請比較兩者的差異並說明
+
+如果我要基於 turborepo 的base.json來擴展成為 next.js app 的 tsconfig，你會建議更改哪些？為什麼這樣建議
+
+
+
+請說明 esm 與 cjs 的差別？
+
+現在 node.js 與 js 的關係？
+背後的開發團隊？
+
+
+
+
+
+"dependencies": {
++ "@repo/math": "workspace:*",
+"next": "latest",
+"react": "latest",
+"react-dom": "latest"
+},
+
+我可以用 pnpm add ... 來增加 "@repo/math": "workspace:*" 嗎？
+
+
+
+
+若我想要用 ts-jest 分別測試前端跟後端的 code，要怎樣設定？
+
+我要用 websocket 來作為前後端事件傳輸接口，前端跟後端都分別要有 websocket client/server，我該如何配置 folder？
+
+.
+├── README.md
+├── eslint.config.mjs
+├── next-env.d.ts
+├── next.config.ts
+├── package.json
+├── pnpm-lock.yaml
+├── postcss.config.mjs
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── src
+│   └── app
+│       ├── favicon.ico
+│       ├── globals.css
+│       ├── layout.tsx
+│       └── page.tsx
+├── tailwind.config.ts
+└── tsconfig.json
+
+以下資料夾分別有哪些建議的位置？按主流做法
+1. tests
+2. event driven package
+
+我要開發一個 web/desktop app
+- 這是一個 MVP 專案
+- 前後端是用 next.js + typescript 架構
+- 測試用 jest
+- 有一個 event driven package，會給前後端使用
+
+你會建議用 npm 還是 pnpm？
+
+
+Typescript 有哪些主流的 logging 工具？你會推薦哪個？
+- 這是一個 MVP 專案
+- 前後端是用 next.js + typescript 架構
+
+
+請參考現行的事件驅動系統，用 node.js + typescript 實現
+* 要完整，每個部分都要對應
+* 命名請按照 typescript 的主流命名方式
+* 一次處理一個 file，順序由你決定
+
+我有些事件需要後端 handle，例如file service 會涉及到 fs，我的前端是否仍可以使用這個 library，只是在特定功能上受限
+
+我現在想要開發一個 typescript package
+- 他是一個 event driven library，用typescript，需要給前後端使用
+- 前後端是用 next.js + typescript 架構
+- 包含像是 event types, event bus 等等
+針對 jest test，我該如何放置 test files，有哪些主流做法，你會建議哪個？
+
+我需要為了前後端分別做什麼調整嗎？還是其實沒有關係，可以直接給兩邊使用？
+
+
+
+
+請建議一些主流的 typescript package 測試工具，你會選哪個？
+- 這是一個 MVP 專案
+- 這個 package是一個 event driven library，用typescript，需要給前後端使用
+- 前後端是用 next.js + typescript 架構
+
+
+
+我想用 turborepo 創一個internal package，該怎樣做？
+- 這個 package是一個 event driven library，用typescript
+- test 用 jest
+
+我只需要init package 的步驟指示，不需要實作
+
+turborepo docs中有建議怎樣為 internal package 設置 test嗎？流程是什麼？
+
+
+
+
+我用 next.js + typescript 開發前後端，今天我想要加入一個 event driven 系統分別給前後端使用，我要做成 mono repo 嗎？
+- 目前是在 MVP 階段
+
+
+我用 next.js + typescript 做前後端，當我用 websocket 傳輸前後端資料（json）時，可以自動驗證並 parse 成對應的 type 嗎？還是需要 zod 之類的庫？
+
+
+請參考現行的事件驅動系統，用 node.js + typescript 實現
+- 要完整，每個部分都要對應
+- 命名請按照 typescript 的主流命名方式
+- 一次處理一個 file

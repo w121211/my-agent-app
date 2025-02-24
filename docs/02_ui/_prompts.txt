@@ -1,0 +1,247 @@
+event = event_type.create_event(**event_data)
+
+目前的 event_type 是個 enum，請寫一個 create event method
+
+
+請修改 websocket server
+1. 定義一個 web socket message type，避免使用 Dict
+2. Command 改成 event，因為 command 本來就是 event 的一個 subset
+
+這是一個 MVP app，不需要過度強化，維持簡單易懂
+
+
+1. Code忽略了client send event 的情況
+2. _send_to_client 和 _send_event 有點重複，容易混淆
+
+
+
+我希望單純用 event 來做前後端的溝通，還有需要 send error, send response 嗎？
+
+1. CONFIG_LOADED 改成叫 app config loaded?
+2. USER_PREFERENCES_LOADED、USER_SETTINGS_LOADED、USER_DATA_LOADED 似乎可以合併？
+3. APP_LAUNCH_COMPLETED 應該不是在後端而是前端
+
+
+「開啟檔案並編輯」的情境流程：
+```
+[初始訂閱流程]
+UI (進入檔案編輯頁面) ->
+Frontend EventBus (emit "subscribe_file", {fileId}) ->
+WebSocketClient (send subscription) ->
+
+[Backend]
+WebSocket Server ->
+Backend EventBus ->
+SubscriptionHandler (處理訂閱)
+```
+
+請參考以上流程，寫一個 desktop app 開啟時的流程，用剛剛討論的 events 
+
+
+請比較以下 events 命名，分析並選出你覺得比較好的，說明為什麼
+1. Launch desktop app command vs Start desktop app command
+2. Desktop app initial data ready event vs Desktop app ready event
+
+
+讓我們想一想前後端的事件命名
+User open app -> initial app data ready
+
+請在建議幾個可能的替代名稱
+
+
+
+
+前端
+1. Subscribe：？？？
+2. Emit event: Request initial app state 
+
+後端
+1. On Request initial state
+2. 處理 initial state
+3. Emit event：？？？（不確定該怎樣命名比較適合）
+
+
+
+1. 贊成
+2. 前端有些時候會需要初始資料，這是應該透過 events 還是如何設計？請分析＆比較，不用寫code
+
+我想使用 websocket 作為單一通道，不考慮 HTTP
+當用戶打開 app 時，例如 file explorer 會需要取得 folder structure，是直接透過 web socket request 需要的資料，還是怎樣做比較適合？
+
+為什麼要是在 SUBSCRIBE 時給初始資料？不能設計一個 event 專門針對這種情況嗎？
+
+WSMessageType 需要這麼多types嗎？哪些type是主流常用的？
+請思考＆回答，不用寫 code
+
+1. 當前的設計 command 只是 event 的 subset，所以處理 event 就可以完全 cover command，不用另外區分
+2. 若讓 Web socket 負責兩個部分，一塊是針對 events 的傳輸，另一塊則是一般的 web socket 傳輸，你覺得如何？
+
+
+> _should_receive_event
+後端是使用 EventType enum，connection.subscriptions 直接使用 enum 是不是比較適合？
+
+當前設計是假設前端只會發出 commands ，這樣的假設足夠嗎？
+
+
+
+如果做成像是
+Connection(event_bus, …)
+- Subscribe: event_bus.subscribe(event_type, on_event)
+- On event -> forward to client
+- On client event/command -> event_bus.publish(event/command)
+
+connections <- a map of connection
+
+和現在的設計相比你覺得哪個比較適合？
+請思考＆回答，不用寫 code
+
+
+
+請參考此前後端架構設計，寫一個 WebSocket Server
+- 此設計只是個情境，你需要寫的是通用性的
+
+
+
+> Frontend EventBus (dispatch) -> SubscriptionHandler (更新訂閱狀態) 
+我知道這是收到on subscription_confirmed，但更新訂閱狀態具體是在做什麼？在我來看 on subscription_confirmed 好像不用特別做什麼？
+
+WebSocketEventBridge 有點過長？
+1. 請建議幾個主流常用的命名
+2. 既然後端叫 WebSocket Server ，前端一般叫什麼？
+
+
+
+
+
+1. 要有前端訂閱 open_file event 的流程
+2. WebSocketBridge 與 WebSocketManager 感覺是一樣的，應該可以整合在一起，你會覺得什麼命名合適？
+
+```
+[使用者開啟檔案]
+UI (點擊檔案) -> CommandEmitter (emit "open_file") -> WebSocketManager (send command) ->
+
+[Backend]
+WebSocket Server -> EventBus -> CommandHandlers ("open_file") ->
+FileSystem Module (讀取檔案) -> Events ("file_opened", {content, metadata}) ->
+EventBus -> SubscriptionRegistry (找出訂閱者) -> WebSocket Server (broadcast) ->
+
+[Frontend]
+WebSocketManager (receive "file_opened") -> EventSubscriptionManager (確認訂閱) ->
+StateManager (更新 editor state) -> Editor UI (顯示檔案內容)
+
+[使用者編輯檔案]
+Editor UI (輸入內容) -> CommandEmitter (emit "edit_file") -> WebSocketManager ->
+
+[Backend]
+WebSocket Server -> EventBus -> CommandHandlers ("edit_file") ->
+FileSystem Module (寫入檔案) -> 
+Events ("file_changed", {changes, metadata}) -> EventBus -> 
+SubscriptionRegistry -> WebSocket Server ->
+
+[Frontend]
+WebSocketManager (receive "file_changed") -> EventSubscriptionManager ->
+StateManager (更新 editor state) -> Editor UI (更新顯示)
+
+[其他已連接的 Frontend Client 同步更新]
+WebSocketManager (receive "file_changed") -> EventSubscriptionManager (有訂閱此檔案) ->
+StateManager (更新該檔案狀態) -> Editor UI (如果開啟中則更新顯示)
+```
+
+> EventBus -> SubscriptionRegistry (找出訂閱者) 
+為什麼要分成兩個components？而不整合於event bus 中？
+
+> WebSocketManager (receive "file_opened") -> EventSubscriptionManager (確認訂閱) ->
+這裡應該不是確認訂閱嗎？而是當收到這個 event 後要發給 event handlers 去更新 state，例如 on_file_opened(…)
+
+目前的設計看起來前端需要有一個 event bus 是不是比較好？因為看起來前端也需要訂閱、發送，而這個前端的 event bus 可以只是個 interface，用於橋接後端真實的 event bus？
+
+
+
+
+
+
+
+
+
+我現在是有 event_bus.subscribe(…)，但如果是前端要訂閱，是否是透過類似 web
+
+1. Frontend 為什麼要有 CommandHandlers？不是 command emitter 嗎？
+2. 請另外畫一個流程圖展示 Frontend 如何訂閱事件？
+
+Backend `EventBus (事件分發) -> SubscriptionRegistry (訂閱過濾) -> WebSocket Server (廣播過濾後事件) -> `
+1. 我在想為什麼不直接透過 websocket 
+
+
+
+流程圖改成類似這種寫法
+
+```
+[Frontend]
+UI Components -> CommandHandlers (…) -> WebSocket (…) -> 
+[Backend]
+…
+
+```
+
+1. 流程圖改成單欄
+2. 分別寫：UI 發起的 events 的流程、後端發起的events
+3. 只要給流程圖，其他不用輸出
+
+
+這個少了由 UI 發起的一些 events (user commands），例如 user open file command-> websocket -> [backend] event bus -> command handler -> …
+
+
+
+
+
+我正在做一個ai chat editor的desktop app，類似像vs code跑在用戶本機上，前端是用nextjs，後端是一個python server，也會跑在用戶本機上
+- 用戶會指定workspace folder，這個app會據此讀取folder裡的chat files及其他的檔案，並用app來進行編輯、與AI聊天，並用此執行ai agent等等
+- 後端是基於事件驅動，由event bus來控制
+- 採 Single Source of Truth，只在後端維護Event Bus，前端透過WebSocket等即時連接接收事件
+
+
+請分析這個架構設計，你會如何改進這個架構？
+
+請思考並回答，不用寫code
+
+
+
+
+
+讓我們思考 chat file 的命名＆背後的程式設計
+
+1. 後端有一個 chat repo object（記憶體）
+2. workspace folder 是存在於用戶的本機端，所以用戶可以輕易的修改檔案
+3. chat file 檔名可能會被用戶修改
+4. 當 workspace folder 有所變動時（即時偵測）
+  - 更新
+
+請建議一些 chat file 的命名方式
+
+
+
+
+
+
+# UI
+
+```
+Based on the given ui design, let’s develop a demo app to demonstrate the design
+- Use typescript
+- Follow MVP rules
+- Need to have some interactive.
+- Use mock data.
+- This app requires chat to interact with agent.
+
+Before start implement, please first ask yourself to make the plan. Such as what framework, etc.
+- Don’t write code yet.
+- Think broadly , consider various scenarios.
+- Make your plan to be completed.
+
+- Follow MVP rules
+- Need to have some interactive.
+- Use mock data.
+- This app requires chat to interact with agent.
+- For now we use mock data, but it also need to take consideration for the later server implementation. So don’t just focus on this demo app, but focus on the completed MVP app.
+- This demo app will be the start point. And later we will extend this to develop the full app.
+```

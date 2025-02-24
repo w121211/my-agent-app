@@ -1,324 +1,374 @@
-// src/types.ts
-
+import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 
-// Enums
-export enum TaskStatus {
-  CREATED = "CREATED",
-  INITIALIZED = "INITIALIZED",
-  IN_PROGRESS = "IN_PROGRESS",
-  COMPLETED = "COMPLETED",
-}
+// Enums defined using Zod
+export const TaskStatusSchema = z.enum([
+  "CREATED",
+  "INITIALIZED",
+  "IN_PROGRESS",
+  "COMPLETED",
+]);
 
-export enum SubtaskStatus {
-  PENDING = "PENDING",
-  IN_PROGRESS = "IN_PROGRESS",
-  COMPLETED = "COMPLETED",
-}
+export const SubtaskStatusSchema = z.enum([
+  "PENDING",
+  "IN_PROGRESS",
+  "COMPLETED",
+]);
 
-export enum ChatStatus {
-  ACTIVE = "ACTIVE",
-  CLOSED = "CLOSED",
-}
+export const ChatStatusSchema = z.enum(["ACTIVE", "CLOSED"]);
 
-export enum Role {
-  ASSISTANT = "ASSISTANT",
-  USER = "USER",
-  FUNCTION_EXECUTOR = "FUNCTION_EXECUTOR",
-}
+export const RoleSchema = z.enum(["ASSISTANT", "USER", "FUNCTION_EXECUTOR"]);
 
-export enum EventType {
+export const EventTypeSchema = z.enum([
   // Task Commands
-  CREATE_TASK_COMMAND = "CREATE_TASK_COMMAND",
-  START_TASK_COMMAND = "START_TASK_COMMAND",
+  "CREATE_TASK_COMMAND",
+  "START_TASK_COMMAND",
 
   // Task Events
-  TASK_CREATED_EVENT = "TASK_CREATED_EVENT",
-  TASK_FOLDER_CREATED_EVENT = "TASK_FOLDER_CREATED_EVENT",
-  TASK_INITIALIZED_EVENT = "TASK_INITIALIZED_EVENT",
-  TASK_LOADED_EVENT = "TASK_LOADED_EVENT",
+  "TASK_CREATED_EVENT",
+  "TASK_FOLDER_CREATED_EVENT",
+  "TASK_INITIALIZED_EVENT",
+  "TASK_LOADED_EVENT",
 
   // Subtask Commands
-  START_SUBTASK_COMMAND = "START_SUBTASK_COMMAND",
-  COMPLETE_SUBTASK_COMMAND = "COMPLETE_SUBTASK_COMMAND",
+  "START_SUBTASK_COMMAND",
+  "COMPLETE_SUBTASK_COMMAND",
 
   // Subtask Events
-  SUBTASK_STARTED_EVENT = "SUBTASK_STARTED_EVENT",
-  SUBTASK_COMPLETED_EVENT = "SUBTASK_COMPLETED_EVENT",
-  SUBTASK_UPDATED_EVENT = "SUBTASK_UPDATED_EVENT",
-  NEXT_SUBTASK_TRIGGERED_EVENT = "NEXT_SUBTASK_TRIGGERED_EVENT",
+  "SUBTASK_STARTED_EVENT",
+  "SUBTASK_COMPLETED_EVENT",
+  "SUBTASK_UPDATED_EVENT",
+  "NEXT_SUBTASK_TRIGGERED_EVENT",
 
   // Chat Commands
-  START_NEW_CHAT_COMMAND = "START_NEW_CHAT_COMMAND",
-  SUBMIT_INITIAL_PROMPT_COMMAND = "SUBMIT_INITIAL_PROMPT_COMMAND",
-  USER_SUBMIT_MESSAGE_COMMAND = "USER_SUBMIT_MESSAGE_COMMAND",
+  "START_NEW_CHAT_COMMAND",
+  "SUBMIT_INITIAL_PROMPT_COMMAND",
+  "USER_SUBMIT_MESSAGE_COMMAND",
 
   // Chat Events
-  CHAT_CREATED_EVENT = "CHAT_CREATED_EVENT",
-  CHAT_FILE_CREATED_EVENT = "CHAT_FILE_CREATED_EVENT",
-  CHAT_UPDATED_EVENT = "CHAT_UPDATED_EVENT",
-  AGENT_PROCESSED_MESSAGE_EVENT = "AGENT_PROCESSED_MESSAGE_EVENT",
-  AGENT_RESPONSE_GENERATED_EVENT = "AGENT_RESPONSE_GENERATED_EVENT",
-  MESSAGE_RECEIVED_EVENT = "MESSAGE_RECEIVED_EVENT",
-  MESSAGE_SAVED_TO_CHAT_FILE_EVENT = "MESSAGE_SAVED_TO_CHAT_FILE_EVENT",
-  USER_APPROVE_WORK_EVENT = "USER_APPROVE_WORK_EVENT",
+  "CHAT_CREATED_EVENT",
+  "CHAT_FILE_CREATED_EVENT",
+  "CHAT_UPDATED_EVENT",
+  "AGENT_PROCESSED_MESSAGE_EVENT",
+  "AGENT_RESPONSE_GENERATED_EVENT",
+  "MESSAGE_RECEIVED_EVENT",
+  "MESSAGE_SAVED_TO_CHAT_FILE_EVENT",
+  "USER_APPROVE_WORK_EVENT",
 
   // File System Events
-  FILE_SYSTEM_EVENT = "FILE_SYSTEM_EVENT",
+  "FILE_SYSTEM_EVENT",
 
   // Test Event
-  TEST_EVENT = "TEST_EVENT",
-}
+  "TEST_EVENT",
+]);
 
-// Base Interfaces
-export interface TeamConfig {
-  agent: Role;
-  human?: Role;
-}
+// Export inferred enum types
+export type TaskStatus = z.infer<typeof TaskStatusSchema>;
+export type SubtaskStatus = z.infer<typeof SubtaskStatusSchema>;
+export type ChatStatus = z.infer<typeof ChatStatusSchema>;
+export type Role = z.infer<typeof RoleSchema>;
+export type EventType = z.infer<typeof EventTypeSchema>;
 
-export interface Subtask {
-  id: string;
-  taskId: string;
-  seqNumber: number;
-  title: string;
-  status: SubtaskStatus;
-  description: string;
-  team: TeamConfig;
-  inputType: string;
-  outputType: string;
-}
+// Base schemas and their types
+export const TeamConfigSchema = z.object({
+  agent: RoleSchema,
+  human: RoleSchema.optional(),
+});
+export type TeamConfig = z.infer<typeof TeamConfigSchema>;
 
-export interface Task {
-  id: string;
-  seqNumber: number;
-  title: string;
-  status: TaskStatus;
-  currentSubtaskId?: string;
-  subtasks: Subtask[];
-  folderPath?: string;
-  config: Record<string, any>;
-  createdAt: Date;
-  updatedAt: Date;
-}
+export const SubtaskSchema = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  seqNumber: z.number(),
+  title: z.string(),
+  status: SubtaskStatusSchema,
+  description: z.string(),
+  team: TeamConfigSchema,
+  inputType: z.string(),
+  outputType: z.string(),
+});
+export type Subtask = z.infer<typeof SubtaskSchema>;
 
-export interface MessageMetadata {
-  subtaskId?: string;
-  taskId?: string;
-  functionCalls?: Record<string, any>[];
-  isPrompt?: boolean;
-}
+export const TaskSchema = z.object({
+  id: z.string(),
+  seqNumber: z.number(),
+  title: z.string(),
+  status: TaskStatusSchema,
+  currentSubtaskId: z.string().optional(),
+  subtasks: z.array(SubtaskSchema),
+  folderPath: z.string().optional(),
+  config: z.record(z.unknown()),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type Task = z.infer<typeof TaskSchema>;
 
-export interface Message {
-  id: string;
-  role: Role;
-  content: string;
-  timestamp: Date;
-  metadata?: MessageMetadata;
-}
+export const MessageMetadataSchema = z.object({
+  subtaskId: z.string().optional(),
+  taskId: z.string().optional(),
+  functionCalls: z.array(z.record(z.unknown())).optional(),
+  isPrompt: z.boolean().optional(),
+});
+export type MessageMetadata = z.infer<typeof MessageMetadataSchema>;
 
-export interface ChatMetadata {
-  title?: string;
-  summary?: string;
-  tags?: string[];
-}
+export const MessageSchema = z.object({
+  id: z.string(),
+  role: RoleSchema,
+  content: z.string(),
+  timestamp: z.date(),
+  metadata: MessageMetadataSchema.optional(),
+});
+export type Message = z.infer<typeof MessageSchema>;
 
-export interface Chat {
-  id: string;
-  taskId: string;
-  subtaskId: string;
-  messages: Message[];
-  status: ChatStatus;
-  createdAt: Date;
-  updatedAt: Date;
-  metadata?: ChatMetadata;
-}
+export const ChatMetadataSchema = z.object({
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+export type ChatMetadata = z.infer<typeof ChatMetadataSchema>;
 
-export interface ChatFile {
-  type: string;
-  chatId: string;
-  createdAt: Date;
-  updatedAt: Date;
-  title?: string;
-  messages: Message[];
-}
+export const ChatSchema = z.object({
+  id: z.string(),
+  taskId: z.string(),
+  subtaskId: z.string(),
+  messages: z.array(MessageSchema),
+  status: ChatStatusSchema,
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  metadata: ChatMetadataSchema.optional(),
+});
+export type Chat = z.infer<typeof ChatSchema>;
 
-// Base Event
-export interface BaseEvent {
-  eventType: EventType;
-  timestamp: Date;
-  correlationId?: string;
-}
+export const ChatFileSchema = z.object({
+  type: z.string(),
+  chatId: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+  title: z.string().optional(),
+  messages: z.array(MessageSchema),
+});
+export type ChatFile = z.infer<typeof ChatFileSchema>;
 
-// Task Events
-export interface CreateTaskCommand extends BaseEvent {
-  eventType: EventType.CREATE_TASK_COMMAND;
-  taskName: string;
-  taskConfig: Record<string, any>;
-}
+// Base Event Schema and Type
+export const BaseEventSchema = z.object({
+  eventType: EventTypeSchema,
+  timestamp: z.date(),
+  correlationId: z.string().optional(),
+});
+export type BaseEvent = z.infer<typeof BaseEventSchema>;
 
-export interface StartTaskCommand extends BaseEvent {
-  eventType: EventType.START_TASK_COMMAND;
-  taskId: string;
-}
+// Task Event Schemas and Types
+export const CreateTaskCommandSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.CREATE_TASK_COMMAND),
+  taskName: z.string(),
+  taskConfig: z.record(z.unknown()),
+});
+export type CreateTaskCommand = z.infer<typeof CreateTaskCommandSchema>;
 
-export interface TaskCreatedEvent extends BaseEvent {
-  eventType: EventType.TASK_CREATED_EVENT;
-  taskId: string;
-  taskName: string;
-  config: Record<string, any>;
-}
+export const StartTaskCommandSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.START_TASK_COMMAND),
+  taskId: z.string(),
+});
+export type StartTaskCommand = z.infer<typeof StartTaskCommandSchema>;
 
-export interface TaskFolderCreatedEvent extends BaseEvent {
-  eventType: EventType.TASK_FOLDER_CREATED_EVENT;
-  taskId: string;
-  folderPath: string;
-}
+export const TaskCreatedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.TASK_CREATED_EVENT),
+  taskId: z.string(),
+  taskName: z.string(),
+  config: z.record(z.unknown()),
+});
+export type TaskCreatedEvent = z.infer<typeof TaskCreatedEventSchema>;
 
-export interface TaskInitializedEvent extends BaseEvent {
-  eventType: EventType.TASK_INITIALIZED_EVENT;
-  taskId: string;
-  initialState: Record<string, any>;
-}
+export const TaskFolderCreatedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.TASK_FOLDER_CREATED_EVENT),
+  taskId: z.string(),
+  folderPath: z.string(),
+});
+export type TaskFolderCreatedEvent = z.infer<
+  typeof TaskFolderCreatedEventSchema
+>;
 
-export interface TaskLoadedEvent extends BaseEvent {
-  eventType: EventType.TASK_LOADED_EVENT;
-  taskId: string;
-  taskState: Task;
-}
+export const TaskInitializedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.TASK_INITIALIZED_EVENT),
+  taskId: z.string(),
+  initialState: z.record(z.unknown()),
+});
+export type TaskInitializedEvent = z.infer<typeof TaskInitializedEventSchema>;
 
-// Subtask Events
-export interface StartSubtaskCommand extends BaseEvent {
-  eventType: EventType.START_SUBTASK_COMMAND;
-  taskId: string;
-  subtaskId: string;
-}
+export const TaskLoadedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.TASK_LOADED_EVENT),
+  taskId: z.string(),
+  taskState: TaskSchema,
+});
+export type TaskLoadedEvent = z.infer<typeof TaskLoadedEventSchema>;
 
-export interface CompleteSubtaskCommand extends BaseEvent {
-  eventType: EventType.COMPLETE_SUBTASK_COMMAND;
-  taskId: string;
-  subtaskId: string;
-  output: string;
-  requiresApproval: boolean;
-}
+// Subtask Event Schemas and Types
+export const StartSubtaskCommandSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.START_SUBTASK_COMMAND),
+  taskId: z.string(),
+  subtaskId: z.string(),
+});
+export type StartSubtaskCommand = z.infer<typeof StartSubtaskCommandSchema>;
 
-export interface SubtaskStartedEvent extends BaseEvent {
-  eventType: EventType.SUBTASK_STARTED_EVENT;
-  taskId: string;
-  subtaskId: string;
-  input?: any;
-}
+export const CompleteSubtaskCommandSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.COMPLETE_SUBTASK_COMMAND),
+  taskId: z.string(),
+  subtaskId: z.string(),
+  output: z.string(),
+  requiresApproval: z.boolean(),
+});
+export type CompleteSubtaskCommand = z.infer<
+  typeof CompleteSubtaskCommandSchema
+>;
 
-export interface SubtaskCompletedEvent extends BaseEvent {
-  eventType: EventType.SUBTASK_COMPLETED_EVENT;
-  taskId: string;
-  subtaskId: string;
-}
+export const SubtaskStartedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.SUBTASK_STARTED_EVENT),
+  taskId: z.string(),
+  subtaskId: z.string(),
+  input: z.unknown().optional(),
+});
+export type SubtaskStartedEvent = z.infer<typeof SubtaskStartedEventSchema>;
 
-export interface SubtaskUpdatedEvent extends BaseEvent {
-  eventType: EventType.SUBTASK_UPDATED_EVENT;
-  taskId: string;
-  subtaskId: string;
-  status: SubtaskStatus;
-}
+export const SubtaskCompletedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.SUBTASK_COMPLETED_EVENT),
+  taskId: z.string(),
+  subtaskId: z.string(),
+});
+export type SubtaskCompletedEvent = z.infer<typeof SubtaskCompletedEventSchema>;
 
-export interface NextSubtaskTriggeredEvent extends BaseEvent {
-  eventType: EventType.NEXT_SUBTASK_TRIGGERED_EVENT;
-  taskId: string;
-  currentSubtaskId: string;
-}
+export const SubtaskUpdatedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.SUBTASK_UPDATED_EVENT),
+  taskId: z.string(),
+  subtaskId: z.string(),
+  status: SubtaskStatusSchema,
+});
+export type SubtaskUpdatedEvent = z.infer<typeof SubtaskUpdatedEventSchema>;
 
-// Chat Events
-export interface StartNewChatCommand extends BaseEvent {
-  eventType: EventType.START_NEW_CHAT_COMMAND;
-  taskId: string;
-  subtaskId: string;
-  metadata?: ChatMetadata;
-}
+export const NextSubtaskTriggeredEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.NEXT_SUBTASK_TRIGGERED_EVENT),
+  taskId: z.string(),
+  currentSubtaskId: z.string(),
+});
+export type NextSubtaskTriggeredEvent = z.infer<
+  typeof NextSubtaskTriggeredEventSchema
+>;
 
-export interface SubmitInitialPromptCommand extends BaseEvent {
-  eventType: EventType.SUBMIT_INITIAL_PROMPT_COMMAND;
-  chatId: string;
-  prompt: string;
-}
+// Chat Event Schemas and Types
+export const StartNewChatCommandSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.START_NEW_CHAT_COMMAND),
+  taskId: z.string(),
+  subtaskId: z.string(),
+  metadata: ChatMetadataSchema.optional(),
+});
+export type StartNewChatCommand = z.infer<typeof StartNewChatCommandSchema>;
 
-export interface UserSubmitMessageCommand extends BaseEvent {
-  eventType: EventType.USER_SUBMIT_MESSAGE_COMMAND;
-  chatId: string;
-  content: string;
-}
+export const SubmitInitialPromptCommandSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.SUBMIT_INITIAL_PROMPT_COMMAND),
+  chatId: z.string(),
+  prompt: z.string(),
+});
+export type SubmitInitialPromptCommand = z.infer<
+  typeof SubmitInitialPromptCommandSchema
+>;
 
-export interface ChatCreatedEvent extends BaseEvent {
-  eventType: EventType.CHAT_CREATED_EVENT;
-  taskId: string;
-  subtaskId: string;
-  chatId: string;
-}
+export const UserSubmitMessageCommandSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.USER_SUBMIT_MESSAGE_COMMAND),
+  chatId: z.string(),
+  content: z.string(),
+});
+export type UserSubmitMessageCommand = z.infer<
+  typeof UserSubmitMessageCommandSchema
+>;
 
-export interface ChatFileCreatedEvent extends BaseEvent {
-  eventType: EventType.CHAT_FILE_CREATED_EVENT;
-  taskId: string;
-  subtaskId: string;
-  chatId: string;
-  filePath: string;
-}
+export const ChatCreatedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.CHAT_CREATED_EVENT),
+  taskId: z.string(),
+  subtaskId: z.string(),
+  chatId: z.string(),
+});
+export type ChatCreatedEvent = z.infer<typeof ChatCreatedEventSchema>;
 
-export interface ChatUpdatedEvent extends BaseEvent {
-  eventType: EventType.CHAT_UPDATED_EVENT;
-  chatId: string;
-  lastMessageId: string;
-}
+export const ChatFileCreatedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.CHAT_FILE_CREATED_EVENT),
+  taskId: z.string(),
+  subtaskId: z.string(),
+  chatId: z.string(),
+  filePath: z.string(),
+});
+export type ChatFileCreatedEvent = z.infer<typeof ChatFileCreatedEventSchema>;
 
-export interface AgentProcessedMessageEvent extends BaseEvent {
-  eventType: EventType.AGENT_PROCESSED_MESSAGE_EVENT;
-  chatId: string;
-  messageId: string;
-}
+export const ChatUpdatedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.CHAT_UPDATED_EVENT),
+  chatId: z.string(),
+  lastMessageId: z.string(),
+});
+export type ChatUpdatedEvent = z.infer<typeof ChatUpdatedEventSchema>;
 
-export interface AgentResponseGeneratedEvent extends BaseEvent {
-  eventType: EventType.AGENT_RESPONSE_GENERATED_EVENT;
-  chatId: string;
-  response: Message;
-}
+export const AgentProcessedMessageEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.AGENT_PROCESSED_MESSAGE_EVENT),
+  chatId: z.string(),
+  messageId: z.string(),
+});
+export type AgentProcessedMessageEvent = z.infer<
+  typeof AgentProcessedMessageEventSchema
+>;
 
-export interface MessageReceivedEvent extends BaseEvent {
-  eventType: EventType.MESSAGE_RECEIVED_EVENT;
-  chatId: string;
-  message: Message;
-}
+export const AgentResponseGeneratedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.AGENT_RESPONSE_GENERATED_EVENT),
+  chatId: z.string(),
+  response: MessageSchema,
+});
+export type AgentResponseGeneratedEvent = z.infer<
+  typeof AgentResponseGeneratedEventSchema
+>;
 
-export interface MessageSavedToChatFileEvent extends BaseEvent {
-  eventType: EventType.MESSAGE_SAVED_TO_CHAT_FILE_EVENT;
-  chatId: string;
-  messageId: string;
-  filePath: string;
-}
+export const MessageReceivedEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.MESSAGE_RECEIVED_EVENT),
+  chatId: z.string(),
+  message: MessageSchema,
+});
+export type MessageReceivedEvent = z.infer<typeof MessageReceivedEventSchema>;
 
-export interface UserApproveWorkEvent extends BaseEvent {
-  eventType: EventType.USER_APPROVE_WORK_EVENT;
-  chatId: string;
-  approvedWork?: string;
-}
+export const MessageSavedToChatFileEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.MESSAGE_SAVED_TO_CHAT_FILE_EVENT),
+  chatId: z.string(),
+  messageId: z.string(),
+  filePath: z.string(),
+});
+export type MessageSavedToChatFileEvent = z.infer<
+  typeof MessageSavedToChatFileEventSchema
+>;
 
-// File System Events
-export interface FileSystemEventData {
-  eventType: string;
-  srcPath: string;
-  isDirectory: boolean;
-  destPath?: string;
-}
+export const UserApproveWorkEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.USER_APPROVE_WORK_EVENT),
+  chatId: z.string(),
+  approvedWork: z.string().optional(),
+});
+export type UserApproveWorkEvent = z.infer<typeof UserApproveWorkEventSchema>;
 
-export interface FileSystemEvent extends BaseEvent {
-  eventType: EventType.FILE_SYSTEM_EVENT;
-  data: FileSystemEventData;
-}
+// File System Event Schema and Types
+export const FileSystemEventDataSchema = z.object({
+  eventType: z.string(),
+  srcPath: z.string(),
+  isDirectory: z.boolean(),
+  destPath: z.string().optional(),
+});
+export type FileSystemEventData = z.infer<typeof FileSystemEventDataSchema>;
 
-// Test Event
-export interface TestEvent extends BaseEvent {
-  eventType: EventType.TEST_EVENT;
-  message: string;
-}
+export const FileSystemEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.FILE_SYSTEM_EVENT),
+  data: FileSystemEventDataSchema,
+});
+export type FileSystemEvent = z.infer<typeof FileSystemEventSchema>;
 
-// Utility functions
+// Test Event Schema and Type
+export const TestEventSchema = BaseEventSchema.extend({
+  eventType: z.literal(EventTypeSchema.enum.TEST_EVENT),
+  message: z.string(),
+});
+export type TestEvent = z.infer<typeof TestEventSchema>;
+
+// Utility function for generating IDs
 export function generateId(prefix: string): string {
   return `${prefix}_${Math.floor(Date.now() / 1000)}_${uuidv4().slice(0, 8)}`;
 }

@@ -1,36 +1,35 @@
 // src/eventBus.ts
 
 import { Logger } from "tslog";
-import { EventType, BaseEvent } from "./types";
+import { EventType, BaseEvent } from "./types.js";
 
 // 事件處理器類型定義
-type EventHandler<T extends BaseEvent> = (event: T) => void;
+// type EventHandler<T extends BaseEvent> = (event: T) => void;
 type AsyncEventHandler<T extends BaseEvent> = (event: T) => Promise<void>;
 
 export interface IEventBus {
   publish<T extends BaseEvent>(event: T): Promise<void>;
-  subscribe<T extends BaseEvent>(
-    eventType: EventType,
-    handler: EventHandler<T>
-  ): void;
+  // subscribe<T extends BaseEvent>(
+  //   eventType: EventType,
+  //   handler: EventHandler<T>
+  // ): void;
   subscribeAsync<T extends BaseEvent>(
     eventType: EventType,
     handler: AsyncEventHandler<T>
   ): void;
   unsubscribe<T extends BaseEvent>(
     eventType: EventType,
-    handler: EventHandler<T> | AsyncEventHandler<T>
+    // handler: EventHandler<T> | AsyncEventHandler<T>
+    handler: AsyncEventHandler<T>
   ): void;
 }
 
 export class EventBus implements IEventBus {
-  private handlers: Map<EventType, EventHandler<BaseEvent>[]>;
   private asyncHandlers: Map<EventType, AsyncEventHandler<BaseEvent>[]>;
-  private logger: Logger;
+  private logger: Logger<object>;
 
   constructor() {
-    this.handlers = new Map();
-    this.asyncHandlers = new Map();
+    this.asyncHandlers = new Map<EventType, AsyncEventHandler<BaseEvent>[]>();
     this.logger = new Logger({ name: "EventBus" });
   }
 
@@ -38,23 +37,6 @@ export class EventBus implements IEventBus {
     const eventType = event.eventType;
     const tasks: Promise<void>[] = [];
 
-    // 處理同步處理器
-    const syncHandlers = this.handlers.get(eventType) || [];
-    for (const handler of syncHandlers) {
-      tasks.push(
-        new Promise((resolve) => {
-          try {
-            handler(event);
-            resolve();
-          } catch (error) {
-            this.logger.error(`Error in sync event handler: ${error}`, error);
-            resolve(); // 即使出錯也繼續執行其他處理器
-          }
-        })
-      );
-    }
-
-    // 處理異步處理器
     const asyncHandlers = this.asyncHandlers.get(eventType) || [];
     for (const handler of asyncHandlers) {
       tasks.push(
@@ -72,17 +54,6 @@ export class EventBus implements IEventBus {
     }
   }
 
-  subscribe<T extends BaseEvent>(
-    eventType: EventType,
-    handler: EventHandler<T>
-  ): void {
-    if (!this.handlers.has(eventType)) {
-      this.handlers.set(eventType, []);
-    }
-    this.handlers.get(eventType)!.push(handler as EventHandler<BaseEvent>);
-    this.logger.debug(`Subscribed sync handler to ${eventType}`);
-  }
-
   subscribeAsync<T extends BaseEvent>(
     eventType: EventType,
     handler: AsyncEventHandler<T>
@@ -98,24 +69,13 @@ export class EventBus implements IEventBus {
 
   unsubscribe<T extends BaseEvent>(
     eventType: EventType,
-    handler: EventHandler<T> | AsyncEventHandler<T>
+    handler: AsyncEventHandler<T>
   ): void {
-    const isAsync = handler.constructor.name === "AsyncFunction";
-
-    if (isAsync) {
-      const handlers = this.asyncHandlers.get(eventType) || [];
-      const index = handlers.indexOf(handler as AsyncEventHandler<BaseEvent>);
-      if (index !== -1) {
-        handlers.splice(index, 1);
-        this.logger.debug(`Unsubscribed async handler from ${eventType}`);
-      }
-    } else {
-      const handlers = this.handlers.get(eventType) || [];
-      const index = handlers.indexOf(handler as EventHandler<BaseEvent>);
-      if (index !== -1) {
-        handlers.splice(index, 1);
-        this.logger.debug(`Unsubscribed sync handler from ${eventType}`);
-      }
+    const handlers = this.asyncHandlers.get(eventType) || [];
+    const index = handlers.indexOf(handler as AsyncEventHandler<BaseEvent>);
+    if (index !== -1) {
+      handlers.splice(index, 1);
+      this.logger.debug(`Unsubscribed async handler from ${eventType}`);
     }
   }
 }
