@@ -1,4 +1,4 @@
-// src/eventBus.ts
+// src/event-bus.ts
 
 import { Logger } from "tslog";
 import { EventType, BaseEvent } from "./types.js";

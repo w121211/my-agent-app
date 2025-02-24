@@ -1,3 +1,3 @@
 ```sh
-pnpm dlx repomix src
+pnpm dlx repomix src --ignore "**/*.*.ts"
 ```
