@@ -1,5 +1,5 @@
 {
-  "name": "@repo/events",
+  "name": "@repo/events-core",
   "version": "0.0.0",
   "type": "module",
   "private": true,
@@ -17,12 +17,14 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/jest": "^29.5.14",
+    "@types/mock-fs": "^4.13.4",
     "@types/node": "^22.13.5",
     "eslint": "^9.21.0",
     "jest": "^29.7.0",
+    "mock-fs": "^5.5.0",
     "prettier": "^3.5.2",
     "ts-jest": "^29.2.6",
-    "typescript": "5.7.3"
+    "typescript": "^5.7.3"
   },
   "dependencies": {
     "tslog": "^4.9.3",

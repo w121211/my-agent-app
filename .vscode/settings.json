@@ -14,5 +14,18 @@
       "mode": "auto"
     }
   ],
-
+  // Set to use pnpm cause error. See: https://github.com/jest-community/vscode-jest/issues/974 
+  // "jest.jestCommandLine": "pnpm run test --",
+  // 
+  // Needed for monorepos to properly locate tests in different packages
+  "jest.virtualFolders": [
+    {
+      "name": "events-relay",
+      "rootPath": "packages/events-relay"
+    },
+    {
+      "name": "events",
+      "rootPath": "packages/events"
+    },
+  ]
 }

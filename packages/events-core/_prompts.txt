@@ -1,3 +1,65 @@
+
+
+
+
+
+針對types.ts
+- 改用 zod 定義 event types，方便用於資料驗證
+- Enum 改用 zod.enum
+- Comments 用英文
+
+1. event 用 zod define 是不是會比較好？
+2. types 需要使用 enum 嗎？
+請分析
+
+
+看起來主要就是在做資料驗證，用 zod 是不是會方便很多？
+
+請分析event-factory.ts，指出錯誤，重新寫一個
+- Comments 用英文
+- 盡量改用 function based
+
+
+請基於新的 event bus 重寫 test
+
+IEventBus subscribe有需要刻意區分 async 與 sync 嗎？
+
+
+
+請為 workspace-manager.ts 寫 test
+- 測試用 jest + typescript
+- 用 mock-fs
+- Comments 用英文，只有必要的地方才加 comment，不用過度 comment，保持精簡
+
+要完整，每個部分都要對應 * 命名請按照 typescript 的主流命名方式 * 一次處理一個 file，順序由你決定
+
+
+
+
+
+請參考python events module，用 typescript 做一個 event driven system，每次只要輸出在一個 file，本次請寫 event bus
+- 這是一個 MVP 專案
+- 不用照原本的架構寫法，請依 typescript best practices 來寫
+- 把所有 event handlers 都視為async event handler，不另外考慮sync event handler
+- Logger 用 tslog
+- Comments 全用英文，只有需要的地方才加 comment，保持精簡
+
+
+
+請參考python events module，用 typescript 寫一個 event driven system，每次只做一個部分，本次請寫 workspace manager
+* 目前已經完成的部分請參考 typescript files
+* 這是一個 MVP 產品
+* 不用照原本的架構寫法，請依 typescript best practices
+* 你可以按照自己的想法修改設計
+* 把所有 event handlers 都視為async event handler，不另外考慮sync event handler
+* Logger 用 tslog
+* 測試用 jest + typescript
+* Comments 用英文，只有必要的地方才加 comment，不用過度 comment，保持精簡
+
+
+
+
+
 pnpm dlx repomix 
 
 

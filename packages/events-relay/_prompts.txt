@@ -1,0 +1,109 @@
+
+
+
+
+
+
+請參考python的 websocket manager，用 typescript 寫一個 websocket server
+
+請寫一個用於傳輸前後端 events 的 websocket server
+* 我已經有 event system（參考 types），這個 package 不用管 event system
+- 前端的 client 參考 websocket-event-client.ts
+- MVP 階段，不要過度設計，只要基本實用
+- Mono repo
+- Typescript，依照 typescript best practices
+* 用 tslog
+* 測試：jest + typescript 
+- WebSocket：用 ws 做 server
+* 每次只輸出一個file，等我確認才輸出下一個
+* Comments 用英文，只有必要的地方才加 comment，不用過度 comment，保持精簡
+
+
+
+
+
+
+我現在在開發一個前後端 events 傳輸的開發用的 package
+- MVP 階段，不要過度設計，只要基本實用
+- Mono repo
+- Typescript
+- 架構: 前端 event bus <-> transport layer (websocket or ipc) <->  後端 event bus
+- Transport layer 做的事很簡單，就是把收到的 events 轉傳到前端/後端、subscribe/unsubscribe
+- 透過 websocket 或 ipc 傳輸 events，ipc 未來才需要，先不要管
+- WebSocket：用 ws 做 server
+- 我已經有 event system（參考 types），這個 package 不用管 event system
+- 前端需要有 transport 的 client，例如 websocket client
+- 我只要 interfaces ，不要 implement code，只有等我確認 OK interfaces後才繼續
+- Comments 全用英文，只有需要的地方才加 comment，保持精簡
+
+請分析這個 interface，不用寫 code
+
+
+
+如何用 ws 實現一個基本的 websocket server？
+- 用 typescript
+
+在 next.js 後端要如何做 websocket？
+- Typescript
+- 用 websocket server
+
+
+
+
+我發現直接在 electron 上開發很難測試，是否可以先開發一個 web app 然後再遷移至 electron？
+
+在我的架構中，有哪些我需要個別開發？
+- 例如 ipc vs websocket
+
+若我的web app的後端是直接放在使用者主機上跑，是不是可以共用檔案系統？
+
+既然先開發 web app，你會建議我直接用 next.js 開發，還是用 vite 開發？
+
+如果我未來預定將 next.js 遷移到 vite，我在開發時需要避免使用哪些 next.js 功能？
+
+如果我的後端只需要跑一個websocket server，用 next.js會比較方便嗎？還是有哪些更輕便的方案？
+
+
+
+
+我想要先跑一個基本的 electron app，該怎樣做？
+- 前端：vite + react + typescript + swc
+- 後端：typescript node.js
+
+
+我在用 vite typescript 開發一個 desktop app 的前端，我不想用 route 但是我想分別開發不同的 component，我要如何分別測試各組件？
+
+
+我在做一個ai chat editor的desktop app，類似像vs code，跑在用戶本機電腦上
+- MVP 階段
+- 用 electron
+- 前端：vite + react + typescript + swc
+- 後端：typescript node.js
+- sub/pub pattern
+- 會做一個 event emitter module，分別給前後端使用
+- 前後端的事件傳輸: IPC （ api 設計要考慮到其他溝通介面，例如 websocket）
+- 未來可能有web app
+
+
+
+我在做一個ai chat editor的desktop app，類似像vs code，跑在用戶本機電腦上
+- 考慮用 electron
+- 前後端用 typescript
+- 採用 sub/pub pattern
+
+
+
+你會如何設計前後端的事件傳輸？
+
+假如我前後端事件傳輸先用 IPC ，之後方便轉移到 web socket 上嗎？
+
+
+
+我在做一個ai chat editor的desktop app，類似像vs code，跑在用戶本機電腦上
+- 考慮用 electron
+- 前後端用 typescript
+- 採用 event driven system
+- 前後端透過 WebSocket來傳輸 events
+
+我想知道：
+- vs code似乎是用electron，也採用類似事件驅動系統，他是怎樣做事件的前後端傳輸?
