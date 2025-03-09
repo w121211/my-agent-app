@@ -3,6 +3,7 @@ import {
   EventUnion,
   isClientEvent,
   isServerEvent,
+  ClientEventUnion,
 } from "@repo/events-core/types";
 import {
   RelayMessageType,
@@ -97,9 +98,8 @@ export class WebSocketEventClient {
     // Unsubscribe first to prevent duplicate handlers
     this.unsubscribeFromEventBus();
 
-    // Subscribe to all events and filter client events to forward
-    this.eventBusUnsubscriber = this.eventBus.subscribe<EventUnion>(
-      "*", // Wildcard subscription for all events
+    // Subscribe to all client events to forward to the server
+    this.eventBusUnsubscriber = this.eventBus.subscribeToAllClientEvents(
       async (event) => {
         // Only forward client events to the server
         if (isClientEvent(event)) {
@@ -180,7 +180,11 @@ export class WebSocketEventClient {
           const serverEvent = (data as ServerEventMessage).event;
 
           if (isServerEvent(serverEvent)) {
-            this.eventBus.publish(serverEvent);
+            this.eventBus.emit(serverEvent);
+          } else {
+            throw new Error(
+              `Invalid server event received: ${JSON.stringify(serverEvent)}`
+            );
           }
           break;
 
