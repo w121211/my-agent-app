@@ -1,8 +1,9 @@
 import { WebSocketEventConnection } from "../src/websocket-event-connection.js";
-import { IEventBus } from "../../events-core/src/event-bus.js";
-import { EventUnion, EventType } from "../../events-core/src/types.js";
+import { IEventBus } from "@repo/events-core/event-bus";
+import { EventUnion, EventType } from "@repo/events-core/types";
 import { Logger, ILogObj } from "tslog";
 import WebSocket from "ws";
+import { RelayMessageType } from "../src/types.js";
 
 // Mock dependencies
 jest.mock("ws");
@@ -71,15 +72,13 @@ describe("WebSocketEventConnection", () => {
   });
 
   it("should handle subscription requests", () => {
-    // Simulate subscription message
+    // Simulate subscription message - using correct format
     const subscribeMessage = {
-      data: {
-        message_type: "subscribe",
-        event_type: "TEST_EVENT",
-      },
+      type: RelayMessageType.SUBSCRIBE,
+      eventType: EventType.TEST_EVENT,
     };
 
-    // Trigger message handler
+    // Trigger message handler with JSON string
     messageHandler(JSON.stringify(subscribeMessage));
 
     // Verify subscription logic
@@ -87,36 +86,32 @@ describe("WebSocketEventConnection", () => {
     expect(mockSocket.send).toHaveBeenCalledWith(
       expect.stringContaining("subscribed")
     );
-    expect(connection.isSubscribedTo("TEST_EVENT")).toBeTruthy();
+    expect(connection.isSubscribedTo(EventType.TEST_EVENT)).toBeTruthy();
   });
 
   it("should handle unsubscribe requests", () => {
     // First subscribe
     const subscribeMessage = {
-      data: {
-        message_type: "subscribe",
-        event_type: "TEST_EVENT",
-      },
+      type: RelayMessageType.SUBSCRIBE,
+      eventType: EventType.TEST_EVENT,
     };
     messageHandler(JSON.stringify(subscribeMessage));
 
     // Then unsubscribe
     const unsubscribeMessage = {
-      data: {
-        message_type: "unsubscribe",
-        event_type: "TEST_EVENT",
-      },
+      type: RelayMessageType.UNSUBSCRIBE,
+      eventType: EventType.TEST_EVENT,
     };
     messageHandler(JSON.stringify(unsubscribeMessage));
 
-    // Verify unsubscription - Updated expectation
+    // Verify unsubscription
     expect(mockLogger.debug).toHaveBeenCalledWith(
-      `Client ${clientId} unsubscribing from: TEST_EVENT`
+      `Client ${clientId} unsubscribing from: ${EventType.TEST_EVENT}`
     );
     expect(mockSocket.send).toHaveBeenCalledWith(
       expect.stringContaining("unsubscribed")
     );
-    expect(connection.isSubscribedTo("TEST_EVENT")).toBeFalsy();
+    expect(connection.isSubscribedTo(EventType.TEST_EVENT)).toBeFalsy();
   });
 
   it("should forward client events to event bus", () => {
@@ -130,18 +125,16 @@ describe("WebSocketEventConnection", () => {
     // Create a serialized version of the event (to match what happens with JSON)
     const serializedEvent = JSON.parse(JSON.stringify(testEvent));
 
-    // Simulate client event message
+    // Simulate client event message with correct format
     const clientEventMessage = {
-      data: {
-        message_type: "client_event",
-        payload: serializedEvent,
-      },
+      type: RelayMessageType.CLIENT_EVENT,
+      event: serializedEvent,
     };
 
     // Trigger message handler
     messageHandler(JSON.stringify(clientEventMessage));
 
-    // Verify event bus publishing - use serialized event or objectContaining
+    // Verify event bus publishing
     expect(mockEventBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: testEvent.eventType,
@@ -221,9 +214,7 @@ describe("WebSocketEventConnection", () => {
   it("should handle unknown message types", () => {
     // Simulate unknown message type
     const unknownMessage = {
-      data: {
-        message_type: "unknown_type",
-      },
+      type: "unknown_type", // This doesn't match any RelayMessageType
     };
 
     // Trigger message handler

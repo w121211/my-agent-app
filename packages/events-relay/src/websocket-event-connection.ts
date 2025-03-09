@@ -1,10 +1,10 @@
 import WebSocket from "ws";
 import { Logger, ILogObj } from "tslog";
-import { IEventBus } from "../../events-core/src/event-bus.js";
-import { EventUnion } from "../../events-core/src/types.js";
+import { IEventBus } from "@repo/events-core/event-bus";
+import { EventUnion } from "@repo/events-core/types";
 import {
-  TransportMessageType,
-  TransportMessage,
+  RelayMessageType,
+  RelayMessage,
   SubscribeMessage,
   UnsubscribeMessage,
   ClientEventMessage,
@@ -40,7 +40,7 @@ export class WebSocketEventConnection {
    */
   public sendEvent(event: EventUnion): void {
     const message: ServerEventMessage = {
-      type: TransportMessageType.SERVER_EVENT,
+      type: RelayMessageType.SERVER_EVENT,
       event: event,
     };
     this.sendMessage(message);
@@ -67,7 +67,7 @@ export class WebSocketEventConnection {
   private setupEventListeners(): void {
     this.socket.on("message", (data: WebSocket.Data) => {
       try {
-        const message = JSON.parse(data.toString()) as TransportMessage;
+        const message = JSON.parse(data.toString()) as RelayMessage;
         this.handleMessage(message);
       } catch (error) {
         this.logger.error(
@@ -91,15 +91,15 @@ export class WebSocketEventConnection {
   /**
    * Handle an incoming message from the client
    */
-  private handleMessage(message: TransportMessage): void {
+  private handleMessage(message: RelayMessage): void {
     switch (message.type) {
-      case TransportMessageType.SUBSCRIBE:
+      case RelayMessageType.SUBSCRIBE:
         this.handleSubscribe(message as SubscribeMessage);
         break;
-      case TransportMessageType.UNSUBSCRIBE:
+      case RelayMessageType.UNSUBSCRIBE:
         this.handleUnsubscribe(message as UnsubscribeMessage);
         break;
-      case TransportMessageType.CLIENT_EVENT:
+      case RelayMessageType.CLIENT_EVENT:
         this.handleClientEvent(message as ClientEventMessage);
         break;
       default:
@@ -121,7 +121,7 @@ export class WebSocketEventConnection {
     this.subscriptions.add(eventType);
 
     this.sendMessage({
-      type: TransportMessageType.SUBSCRIBED,
+      type: RelayMessageType.SUBSCRIBED,
       eventType,
     });
   }
@@ -138,7 +138,7 @@ export class WebSocketEventConnection {
     this.subscriptions.delete(eventType);
 
     this.sendMessage({
-      type: TransportMessageType.UNSUBSCRIBED,
+      type: RelayMessageType.UNSUBSCRIBED,
       eventType,
     });
   }
@@ -167,7 +167,7 @@ export class WebSocketEventConnection {
   /**
    * Send a message to the client
    */
-  private sendMessage(message: TransportMessage): void {
+  private sendMessage(message: RelayMessage): void {
     if (this.socket.readyState !== WebSocket.OPEN) {
       this.logger.warn(
         `Cannot send message to client ${this.clientId}: connection not open`
@@ -190,7 +190,7 @@ export class WebSocketEventConnection {
    */
   private sendError(code: string, message: string): void {
     const errorMessage: ErrorMessage = {
-      type: TransportMessageType.ERROR,
+      type: RelayMessageType.ERROR,
       code,
       message,
     };

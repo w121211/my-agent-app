@@ -1,4 +1,4 @@
-import { Event, EventType } from "./types";
+import { EventType, EventUnion } from "@repo/events-core/types";
 
 /**
  * Client-side event bus with transport capabilities

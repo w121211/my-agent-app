@@ -20,12 +20,12 @@
   // Needed for monorepos to properly locate tests in different packages
   "jest.virtualFolders": [
     {
-      "name": "events-relay",
-      "rootPath": "packages/events-relay"
+      "name": "events-core",
+      "rootPath": "packages/events-core"
     },
     {
-      "name": "events",
-      "rootPath": "packages/events"
+      "name": "events-relay",
+      "rootPath": "packages/events-relay"
     },
   ]
 }

@@ -1,8 +1,8 @@
 import { WebSocketServer } from "ws";
 import { createServer, Server as HttpServer } from "http";
 import { Logger, ILogObj } from "tslog";
-import { EventUnion, EventType } from "../../events-core/src/types.js";
-import { IEventBus } from "../../events-core/src/event-bus.js";
+import { EventUnion, EventType } from "@repo/events-core/types";
+import { IEventBus } from "@repo/events-core/event-bus";
 import { WebSocketEventConnection } from "./websocket-event-connection.js";
 
 /**

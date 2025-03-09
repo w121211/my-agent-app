@@ -1,21 +1,12 @@
-import { EventType, EventUnion } from "../../events-core/src/types.js";
+import { EventUnion } from "@repo/events-core/types";
 
 /**
- * Message types for events relay communication
+ * Message types for bidirectional event relay
  */
 export enum RelayMessageType {
-  // Client to server messages
-  SUBSCRIBE = "subscribe",
-  UNSUBSCRIBE = "unsubscribe",
-  CLIENT_EVENT = "client_event",
-
-  // Server to client messages
-  SUBSCRIBED = "subscribed",
-  UNSUBSCRIBED = "unsubscribed",
-  SERVER_EVENT = "server_event",
-
-  // Error messages
-  ERROR = "error",
+  CLIENT_EVENT = "client_event", // Client to server events
+  SERVER_EVENT = "server_event", // Server to client events
+  ERROR = "error", // Error messages
 }
 
 /**
@@ -23,38 +14,6 @@ export enum RelayMessageType {
  */
 export interface BaseRelayMessage {
   type: RelayMessageType;
-}
-
-/**
- * Message to subscribe to specific event types
- */
-export interface SubscribeMessage extends BaseRelayMessage {
-  type: RelayMessageType.SUBSCRIBE;
-  eventType: EventType;
-}
-
-/**
- * Message to unsubscribe from specific event types
- */
-export interface UnsubscribeMessage extends BaseRelayMessage {
-  type: RelayMessageType.UNSUBSCRIBE;
-  eventType: EventType;
-}
-
-/**
- * Confirmation of successful subscription
- */
-export interface SubscribedMessage extends BaseRelayMessage {
-  type: RelayMessageType.SUBSCRIBED;
-  eventType: EventType;
-}
-
-/**
- * Confirmation of successful unsubscription
- */
-export interface UnsubscribedMessage extends BaseRelayMessage {
-  type: RelayMessageType.UNSUBSCRIBED;
-  eventType: EventType;
 }
 
 /**
@@ -86,10 +45,6 @@ export interface ErrorMessage extends BaseRelayMessage {
  * Union type of all possible relay messages
  */
 export type RelayMessage =
-  | SubscribeMessage
-  | UnsubscribeMessage
-  | SubscribedMessage
-  | UnsubscribedMessage
   | ClientEventMessage
   | ServerEventMessage
   | ErrorMessage;

@@ -85,6 +85,12 @@ Learn more about the power of Turborepo:
 
 # Notes
 
+Repomix
+
+```
+pnpm dlx repomix -ignore "node_modules,.log,tmp/"
+```
+
 Syncpack
 
 ```
