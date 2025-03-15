@@ -11,7 +11,8 @@
     "build": "tsc",
     "test": "jest",
     "lint": "eslint . --max-warnings 0",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "example": "tsx examples/example-script.ts"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -24,6 +25,7 @@
     "mock-fs": "^5.5.0",
     "prettier": "^3.5.2",
     "ts-jest": "^29.2.6",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   },
   "dependencies": {

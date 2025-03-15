@@ -2,7 +2,7 @@ import {
   EventBus,
   createClientEventBus,
   createServerEventBus,
-} from "../src/event-bus.js";
+} from "../event-bus.js";
 import {
   ClientEventType,
   ServerEventType,
@@ -10,7 +10,7 @@ import {
   ClientApproveWork,
   ServerChatCreated,
   ServerTestEvent,
-} from "../src/types.js";
+} from "../types.js";
 
 // Mock logger to prevent unnecessary logs during testing
 jest.mock("tslog", () => {

@@ -5,7 +5,7 @@
   },
   "include": [
     "src",
-    "__tests__"
+    "examples"
   ],
   "exclude": [
     "node_modules",

@@ -1,7 +1,7 @@
 import mockFs from "mock-fs";
 import fs from "fs/promises";
 import path from "path";
-import { WorkspaceManager } from "../src/workspace-manager.js";
+import { WorkspaceManager } from "../workspace-manager.js";
 import {
   Task,
   Chat,
@@ -9,7 +9,7 @@ import {
   SubtaskStatus,
   ChatStatus,
   Role,
-} from "../src/types.js";
+} from "../types.js";
 
 describe("WorkspaceManager", () => {
   const WORKSPACE_PATH = "/workspace";

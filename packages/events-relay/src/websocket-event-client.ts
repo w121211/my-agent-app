@@ -3,7 +3,6 @@ import {
   EventUnion,
   isClientEvent,
   isServerEvent,
-  ClientEventUnion,
 } from "@repo/events-core/types";
 import {
   RelayMessageType,

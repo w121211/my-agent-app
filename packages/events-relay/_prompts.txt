@@ -2,6 +2,170 @@
 
 
 
+請基於`msw-websocket-mock-example.test.ts`寫 websocket event client test
+- 用 msw 來 mock Websocket
+- 請盡量維持 `msw-websocket-mock-example.test.ts` 的寫法、內容，只是將 client 換成 WebSocketEventClient
+- 每次只要寫一個test，由我確認 mock websocket 沒問題後才繼續寫下一個 test
+- Typescript、ts-jest, 環境：jsdom
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請為 event bus 寫 test
+- Typescript, Jest
+- Jest env: node
+- Comments 用英文，只有必要的地方才加 comment，不用過度 comment，保持精簡
+
+
+
+Event bus 可以通用於client 或 server端，無需任何修改
+- 增加一個 option 讓 user 指名是給誰
+- 針對 logger name: "EventBus" -> 要能區分 server or client
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+請基於修改的 event types，重寫 types, websocket event client
+* Typescript best practice
+* Functions
+    * [client] client events  ->  websocket -> forward to server
+        * Self event bus subscribes to all client events, so it can forward the client event (handling)
+    * [server] server events -> websocket -> [client] on websocket message -> self event bus publish the server event
+* RelayMessageType:
+    * No need to have subscribe, unsubscribe => we just forward all clients events to server, and all server events to client
+* Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請基於修改的 event types，重寫 event bus
+* Typescript best practice
+* Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請修改 EventType，將 event 分成 client 與 server event
+* Typescript best practice
+* Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+請先給建議做法，我同意後才執行
+
+
+
+
+重寫 WebSocketEventClient
+* 
+
+
+
+
+請分析目前的WebSocketEventClient，我感覺當前的 code 有許多問題
+* Client events 應該要被 forward 到後端，目前除了 test event 外其他沒有
+* 可以指出目前有問題的 code
+* 只要分析，不要寫code
+
+
+* 當 client event bus subscribe 一個 server event 時，當 ws 收到 server event 後應該client event bus應該要 publish吧？
+
+
+
+
+請基於`websocket-event-client.test.ts`繼續寫 WebSocketEventClient 的測試
+* Typescript、ts-jest, 環境：jsdom
+* 用 msw 來 mock Websocket
+* 請盡量維持 `msw-websocket-mock-example.test.ts` 的寫法、內容，只是將 client 換成 WebSocketEventClient
+* 每次只要寫一個test，由我確認 mock websocket 沒問題後才繼續寫下一個 test
+* Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+請基於`msw-websocket-mock-example.test.ts`寫 WebSocketEventClient 的測試
+- 用 msw 來 mock Websocket
+- 請盡量維持 `msw-websocket-mock-example.test.ts` 的寫法、內容，只是將 client 換成 WebSocketEventClient
+- 每次只要寫一個test，由我確認 mock websocket 沒問題後才繼續寫下一個 test
+- Typescript、ts-jest, 環境：jsdom
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請參考 msw 的 doc 寫測試，測試目標：WebSocketEventClient
+- 用 msw 來 mock Websocket
+- 每次只要寫一個test，由我確認 mock websocket 沒問題後才繼續寫下一個 test
+- MVP 階段，不要過度設計，只要基本實用
+- Typescript、ts-jest, 環境：jsdom
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+我如果要用Mock Service Worker 2.0 測試瀏覽器端的 websocket client，我是應該要採用哪種測試環境？
+- 例如jsdom、playwright … ？
+
+
+請參考教學、example，簡單示範用 Mock Service Worker v2 測試瀏覽器端的 websocket client
+- Typescript, jest-fixed-jsdom
+
+
+簡單展示如何用 Mock Service Worker 測試瀏覽器端的 websocket client
+- 用typescript, jest-dom
+- msw v2
+
+
+如果我想用測試前端及後端的 websocket service 實際的聯繫情形，有哪些作法? 
+-  這是一個 full stack app，用 typescript, jest
+- 我有寫前端、後端
+- 不用寫 code，只要提供想法
+
+
+
+
+
+
+
+
+
+
+
+
+我在開發一個用於前後端傳輸 events 的module: event-relay
+- MVP 階段，不要過度設計，只要基本實用
+- Mono repo
+- Typescript，採 typescript best practices
+- 架構: 前端 event bus <-> relay layer (websocket or ipc) <->  後端 event bus
+- Relay layer 做的事很簡單，就是把收到的 events 轉傳到前端/後端、subscribe/unsubscribe
+- 透過 websocket 或 ipc 傳輸 events，ipc 未來才需要，先不要管
+- WebSocket：用 `ws` library 做 server
+
+我現在想要測試前端及後端實際的連接情況，主流上是會分開測試嗎？
+- 不用寫 code，只要提供想法
+
+
+
+
+
+
+
+我想要測試 WebSocketEventServer 實際運作情形，有哪些方法？
+
+請寫測試，測試目標：WebSocketEventServer 的實際運作
+- 用 jest 和實際的網絡連接來測試
+
+請寫測試，測試目標：WebSocketClient
+- MVP 階段，不要過度設計，只要基本實用
+- Typescript，採 typescript best practices
+- ts-jest
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+我現在在開發一個用於前後端傳輸 events 的module: event-transport
+- MVP 階段，不要過度設計，只要基本實用
+- Mono repo
+- Typescript，採 typescript best practices
+- 架構: 前端 event bus <-> transport layer (websocket or ipc) <->  後端 event bus
+- Transport layer 做的事很簡單，就是把收到的 events 轉傳到前端/後端、subscribe/unsubscribe
+- 透過 websocket 或 ipc 傳輸 events，ipc 未來才需要，先不要管
+- WebSocket：用 ws 做 server
+- event system 已經實作（參考 types），這個 package 可以直接 import types，不要另外實作
+- 前端的 client 參考 websocket-event-client.ts
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+WebSocketServer 應該要寫成 class 好還是函數好？請分析比較，不要寫 code
+
+
 
 
 請參考python的 websocket manager，用 typescript 寫一個 websocket server
