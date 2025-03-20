@@ -2,14 +2,13 @@ import { Logger, ILogObj } from "tslog";
 import {
   EventType,
   EventUnion,
-  ClientEventUnion,
-  ServerEventUnion,
   ClientEventType,
   ServerEventType,
-} from "./types.js";
+  BaseEvent,
+} from "./event-types.js";
 
 // Handler type for both sync and async event handlers
-export type EventHandler<T extends EventUnion> = (
+export type EventHandler<T extends BaseEvent> = (
   event: T
 ) => void | Promise<void>;
 
@@ -17,18 +16,18 @@ export type EventHandler<T extends EventUnion> = (
  * Core event bus interface
  */
 export interface IEventBus {
-  emit<T extends EventUnion>(event: T): Promise<void>;
-  subscribe<T extends EventUnion>(
+  emit<T extends BaseEvent>(event: T): Promise<void>;
+  subscribe<T extends BaseEvent>(
     eventType: EventType,
     handler: EventHandler<T>
   ): () => void;
-  subscribeToAllClientEvents(
-    handler: EventHandler<ClientEventUnion>
+  subscribeToAllClientEvents<T extends BaseEvent>(
+    handler: EventHandler<T>
   ): () => void;
-  subscribeToAllServerEvents(
-    handler: EventHandler<ServerEventUnion>
+  subscribeToAllServerEvents<T extends BaseEvent>(
+    handler: EventHandler<T>
   ): () => void;
-  unsubscribe<T extends EventUnion>(
+  unsubscribe<T extends BaseEvent>(
     eventType: EventType,
     handler: EventHandler<T>
   ): void;
@@ -63,7 +62,7 @@ export class EventBus implements IEventBus {
    * Subscribe to events of a specific type
    * Returns an unsubscribe function for easy cleanup
    */
-  public subscribe<T extends EventUnion>(
+  public subscribe<T extends BaseEvent>(
     eventType: EventType,
     handler: EventHandler<T>
   ): () => void {
@@ -83,8 +82,8 @@ export class EventBus implements IEventBus {
    * Subscribe to all client events
    * Returns an unsubscribe function for easy cleanup
    */
-  public subscribeToAllClientEvents(
-    handler: EventHandler<ClientEventUnion>
+  public subscribeToAllClientEvents<T extends BaseEvent>(
+    handler: EventHandler<T>
   ): () => void {
     const unsubscribers: Array<() => void> = [];
 
@@ -105,8 +104,8 @@ export class EventBus implements IEventBus {
    * Subscribe to all server events
    * Returns an unsubscribe function for easy cleanup
    */
-  public subscribeToAllServerEvents(
-    handler: EventHandler<ServerEventUnion>
+  public subscribeToAllServerEvents<T extends BaseEvent>(
+    handler: EventHandler<T>
   ): () => void {
     const unsubscribers: Array<() => void> = [];
 
@@ -126,7 +125,7 @@ export class EventBus implements IEventBus {
   /**
    * Unsubscribe a specific handler from an event type
    */
-  public unsubscribe<T extends EventUnion>(
+  public unsubscribe<T extends BaseEvent>(
     eventType: EventType,
     handler: EventHandler<T>
   ): void {
@@ -152,7 +151,7 @@ export class EventBus implements IEventBus {
   /**
    * Emit an event to all subscribed handlers
    */
-  public async emit<T extends EventUnion>(event: T): Promise<void> {
+  public async emit<T extends BaseEvent>(event: T): Promise<void> {
     const eventType = event.eventType;
     const handlers = this.handlers.get(eventType);
 
@@ -165,6 +164,7 @@ export class EventBus implements IEventBus {
     );
 
     await Promise.all(promises);
+
     this.logger.debug(`Emitted ${eventType} to ${handlers.size} handlers`);
   }
 

@@ -1,42 +1,56 @@
+import { ILogObj, Logger } from "tslog";
 import { IEventBus } from "@repo/events-core/event-bus";
 import {
-  EventUnion,
+  BaseClientEvent,
   isClientEvent,
   isServerEvent,
-} from "@repo/events-core/types";
+} from "@repo/events-core/event-types";
 import {
   RelayMessageType,
   ClientEventMessage,
   ServerEventMessage,
   RelayMessage,
-} from "./types.js";
+} from "./relay-types.js";
+
+/**
+ * Interface defining the WebSocket event client contract
+ */
+export interface IWebSocketEventClient {
+  connect(): void;
+  disconnect(): void;
+}
 
 /**
  * Configuration options for the WebSocket client
  */
-export interface WebSocketClientOptions {
+export type WebSocketClientOptions = {
   port?: number;
   hostname?: string;
   protocol?: string;
   eventBus: IEventBus;
-}
+  logger?: Logger<ILogObj>;
+};
 
 /**
  * WebSocket client that provides bidirectional event communication
  * between client and server event buses
  */
-export class WebSocketEventClient {
+export class WebSocketEventClient implements IWebSocketEventClient {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private readonly maxReconnectAttempts = 5;
   private readonly reconnectDelay = 1000;
   private eventBusUnsubscriber: (() => void) | null = null;
   private isConnected = false;
+  private logger: Logger<ILogObj>;
 
   constructor(
     private readonly url: string,
-    private readonly eventBus: IEventBus
-  ) {}
+    private readonly eventBus: IEventBus,
+    logger?: Logger<ILogObj>
+  ) {
+    this.logger = logger || new Logger({ name: "WebSocketEventClient" });
+  }
 
   /**
    * Connects to the WebSocket server and sets up bidirectional event relay
@@ -46,7 +60,7 @@ export class WebSocketEventClient {
       this.ws = new WebSocket(this.url);
       this.setupEventListeners();
     } catch (error) {
-      console.error("WebSocket connection error:", error);
+      this.logger.error("WebSocket connection error:", error);
       this.handleReconnect();
     }
   }
@@ -60,7 +74,7 @@ export class WebSocketEventClient {
       this.ws = null;
     }
 
-    this.unsubscribeFromEventBus();
+    this.subscribeToClientEventsForForwarding();
     this.isConnected = false;
   }
 
@@ -68,23 +82,23 @@ export class WebSocketEventClient {
     if (!this.ws) return;
 
     this.ws.onopen = () => {
-      console.log("WebSocket connected");
+      this.logger.info("WebSocket connected");
       this.reconnectAttempts = 0;
       this.isConnected = true;
 
       // Subscribe to client events to forward to server
-      this.subscribeToEventBus();
+      this.subscribeToClientEventsForForwarding();
     };
 
     this.ws.onclose = () => {
-      console.log("WebSocket connection closed");
-      this.unsubscribeFromEventBus();
+      this.logger.info("WebSocket connection closed");
+      this.subscribeToClientEventsForForwarding();
       this.isConnected = false;
       this.handleReconnect();
     };
 
     this.ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      this.logger.error("WebSocket error:", error);
     };
 
     this.ws.onmessage = this.handleServerMessage;
@@ -93,25 +107,31 @@ export class WebSocketEventClient {
   /**
    * Subscribes to client events on the event bus to forward them to the server
    */
-  private subscribeToEventBus(): void {
+  private subscribeToClientEventsForForwarding(): void {
     // Unsubscribe first to prevent duplicate handlers
-    this.unsubscribeFromEventBus();
+    this.unsubscribeFromClientEventsForwarding();
 
     // Subscribe to all client events to forward to the server
     this.eventBusUnsubscriber = this.eventBus.subscribeToAllClientEvents(
       async (event) => {
+        this.logger.debug("Received client event:", event.eventType);
+
         // Only forward client events to the server
         if (isClientEvent(event)) {
           await this.sendClientEvent(event);
         }
       }
     );
+
+    this.logger.debug("Subscribed to all client events for forwarding");
   }
 
   /**
    * Unsubscribes from the event bus
    */
-  private unsubscribeFromEventBus(): void {
+  private unsubscribeFromClientEventsForwarding(): void {
+    this.logger.debug("Unsubscribing from client events for forwarding");
+
     if (this.eventBusUnsubscriber) {
       this.eventBusUnsubscriber();
       this.eventBusUnsubscriber = null;
@@ -123,7 +143,7 @@ export class WebSocketEventClient {
    */
   private handleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Max reconnection attempts reached");
+      this.logger.error("Max reconnection attempts reached");
       return;
     }
 
@@ -131,7 +151,7 @@ export class WebSocketEventClient {
 
     setTimeout(() => {
       this.reconnectAttempts++;
-      console.log(
+      this.logger.info(
         `Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
       );
       this.connect();
@@ -141,13 +161,13 @@ export class WebSocketEventClient {
   /**
    * Sends a client event to the server
    */
-  private async sendClientEvent(event: EventUnion): Promise<void> {
+  private async sendClientEvent(event: BaseClientEvent): Promise<void> {
     if (
       !this.ws ||
       this.ws.readyState !== WebSocket.OPEN ||
       !this.isConnected
     ) {
-      console.warn(
+      this.logger.warn(
         "WebSocket is not connected, cannot send event:",
         event.eventType
       );
@@ -160,9 +180,13 @@ export class WebSocketEventClient {
     };
 
     try {
+      this.logger.debug("Sending event to server:", event.eventType);
       this.ws.send(JSON.stringify(message));
     } catch (error) {
-      console.error(`Error sending event ${event.eventType} to server:`, error);
+      this.logger.error(
+        `Error sending event ${event.eventType} to server:`,
+        error
+      );
     }
   }
 
@@ -188,27 +212,27 @@ export class WebSocketEventClient {
           break;
 
         case RelayMessageType.ERROR:
-          console.error("Received error from server:", data);
+          this.logger.error("Received error from server:", data);
           break;
 
         default:
-          console.warn("Received unknown message type:", data.type);
+          this.logger.warn("Received unknown message type:", data.type);
       }
     } catch (error) {
-      console.error("Error handling server message:", error);
+      this.logger.error("Error handling server message:", error);
     }
   };
 }
 
 // Singleton instance
-let webSocketEventClientInstance: WebSocketEventClient | null = null;
+let webSocketEventClientInstance: IWebSocketEventClient | null = null;
 
 /**
  * Gets or creates a WebSocket client instance
  */
 export function getWebSocketEventClient(
   options: WebSocketClientOptions
-): WebSocketEventClient {
+): IWebSocketEventClient {
   // Only create in browser environment
   if (typeof window === "undefined") {
     throw new Error(
@@ -224,14 +248,16 @@ export function getWebSocketEventClient(
   // Create new instance with provided options
   const port = options.port || 8000;
   const hostname = options.hostname || window.location.hostname;
+  // const hostname = options.hostname || "localhost";
   const protocol =
     options.protocol ||
     (window.location.protocol === "https:" ? "wss:" : "ws:");
-  const url = `${protocol}//${hostname}:${port}/ws`;
+  const url = `${options.protocol}//${hostname}:${port}/ws`;
 
   webSocketEventClientInstance = new WebSocketEventClient(
     url,
-    options.eventBus
+    options.eventBus,
+    options.logger
   );
   return webSocketEventClientInstance;
 }

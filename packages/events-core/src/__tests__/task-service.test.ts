@@ -11,7 +11,7 @@ import {
   Task,
   TaskStatus,
   SubtaskStatus,
-} from "../types.js";
+} from "../event-types.js";
 import { IWorkspaceManager } from "../workspace-manager.js";
 
 // Mock dependencies

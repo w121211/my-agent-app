@@ -8,7 +8,7 @@ import {
   EntityNotFoundError,
   ConcurrencyError,
   EntityWithId,
-} from "./types.js";
+} from "./event-types.js";
 import { IWorkspaceManager } from "./workspace-manager.js";
 
 /**

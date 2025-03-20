@@ -83,7 +83,15 @@ Learn more about the power of Turborepo:
 - [Configuration Options](https://turbo.build/repo/docs/reference/configuration)
 - [CLI Usage](https://turbo.build/repo/docs/reference/command-line-reference)
 
+---
+
 # Notes
+
+pnpm
+
+```
+
+```
 
 Repomix
 
@@ -97,3 +105,17 @@ Syncpack
 pnpm dlx syncpack list-mismatches
 pnpm dlx syncpack fix-mismatches --types '!local'
 ```
+
+# 用到的庫、技術、架構
+
+事件驅動 pattern
+https://ithelp.ithome.com.tw/articles/10289860
+
+Monorepo
+
+1. pnpm + turbo repo https://turbo.build/repo/docs
+2. Syncpack
+
+NEXT.js https://nextjs.org/docs/app/getting-started/installation
+
+Jest

@@ -10,7 +10,7 @@ import {
   ClientApproveWork,
   ServerChatCreated,
   ServerTestEvent,
-} from "../types.js";
+} from "../event-types.js";
 
 // Mock logger to prevent unnecessary logs during testing
 jest.mock("tslog", () => {

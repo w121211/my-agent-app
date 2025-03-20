@@ -13,7 +13,7 @@ import {
   ClientCreateTaskCommand,
   ClientEventType,
   ServerEventType,
-} from "../types.js";
+} from "../event-types.js";
 
 // File: task-creation-flow.test.ts
 describe("Task Creation and Initialization Flow", () => {

@@ -1,15 +1,27 @@
 "use client";
 
-import WebSocketClientProvider from "./websocket-client-provider";
+import React from "react";
+import { ILogObj, Logger } from "tslog";
+import { WebSocketEventClientProvider } from "./websocket-client-provider";
 import WebSocketTestPanel from "./websocket-test-panel";
 
-// 包裝主頁面，提供 WebSocket 連接
-const WebSocketTestPage = () => {
+// Create logger
+const logger: Logger<ILogObj> = new Logger({
+  name: "WebSocketTestApp",
+  minLevel: 2,
+});
+
+const TestPanelPage: React.FC = () => {
   return (
-    <WebSocketClientProvider>
+    <WebSocketEventClientProvider
+      hostname="localhost"
+      port={8000}
+      protocol="ws:"
+      logger={logger}
+    >
       <WebSocketTestPanel />
-    </WebSocketClientProvider>
+    </WebSocketEventClientProvider>
   );
 };
 
-export default WebSocketTestPage;
+export default TestPanelPage;

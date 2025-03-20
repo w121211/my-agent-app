@@ -1,6 +1,5 @@
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
-
 import { IEventBus } from "./event-bus.js";
 import { TaskRepository } from "./repositories.js";
 import {
@@ -19,7 +18,7 @@ import {
   ServerTaskLoaded,
   TaskStatus,
   TeamConfig,
-} from "./types.js";
+} from "./event-types.js";
 
 /**
  * Service for managing task lifecycle and operations

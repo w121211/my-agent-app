@@ -1,7 +1,12 @@
-import fs from "fs/promises";
-import path from "path";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { ILogObj, Logger } from "tslog";
-import { Chat, Task, EntityNotFoundError, RepositoryError } from "./types.js";
+import {
+  Chat,
+  Task,
+  EntityNotFoundError,
+  RepositoryError,
+} from "./event-types.js";
 
 /**
  * Interface defining workspace management operations

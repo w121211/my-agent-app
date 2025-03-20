@@ -1,6 +1,5 @@
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
-
 import { IEventBus } from "./event-bus.js";
 import { ChatRepository } from "./repositories.js";
 import {
@@ -16,7 +15,7 @@ import {
   ClientStartNewChatCommand,
   ServerEventType,
   ClientEventType,
-} from "./types.js";
+} from "./event-types.js";
 
 /**
  * Service for managing chat interactions between users and agents

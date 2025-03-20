@@ -13,7 +13,7 @@ import {
   ClientCreateTaskCommand,
   ServerTaskCreated,
   ServerSubtaskStarted,
-} from "../types.js";
+} from "../event-types.js";
 
 // Mock implementation of WorkspaceManager
 interface IWorkspaceManager {

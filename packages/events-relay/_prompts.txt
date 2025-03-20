@@ -1,6 +1,109 @@
 
 
 
+請寫集成測試，測試 websocket event server 實際運作
+- 不要 mock
+- 不用管 client，只要測試 event server
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript, Jest.
+- Test env: node
+- Follow typescript best practices
+- Test 不要過多階層，保持簡潔清楚
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+請寫測試，測試目標：websocket event server
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript, Jest.
+- Test env: node
+- Follow typescript best practices
+- Test 不要過多階層，保持簡潔清楚
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+我可以用 msw 來測試自己寫的 websocket server 嗎？還是其實 msw 根本不是用測試 server？
+
+
+
+請基於更新的 relay types，寫websocket event server
+- 所有的 server events 都會 forward 給所有的 clients
+- 為了避免 cyclic loop，event 傳輸做成單向式
+  - server events -> websocket forward to all clients
+  - on receive client events through websocket -> event bus emit
+
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript、環境：node
+- Follow typescript best practices
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+請基於 page.tsx，寫一個用於簡單測試 event system 前後端傳輸的測試頁
+- events import 範例
+```
+import { ClientTestEvent } from "@repo/events-core/types";
+```
+- 使用現有的 events，不需要新增
+
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript, next.js
+- Follow typescript best practices
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+請寫一個 demo script，用來展示 event system & file watcher
+專注在 file watcher events flow
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript、環境：node
+- Follow typescript best practices
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+請寫 test，測試目標：file watcher
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript, Jest.
+- Test env: node
+- Follow typescript best practices
+- Test 不要過多階層，保持簡潔清楚
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+請用 typescript 寫一個 file watcher
+* 他會監控使用者的 workspace 資料夾（後端），用於同步前端與後端
+* 前端類似 vs code editor，需要監控 workspace 資料夾
+* 前後端是透過事件驅動系統串起來
+
+* MVP 階段，不要過度設計，保持簡潔清楚
+* typescript, follow typescript best practices
+* logger: tslog
+* env: node 
+* 不需要 try, catch，只需要throw error
+* 避免用 as ，確保 type safe，follow typescript best practices
+* Comments 用英文，只有必要的地方才加 comment，不用過度 comment，保持精簡
+
+你會怎樣設計？不要寫 code
+
+
+
 
 請基於`msw-websocket-mock-example.test.ts`寫 websocket event client test
 - 用 msw 來 mock Websocket

@@ -26,6 +26,7 @@
     "msw": "^2.7.3",
     "prettier": "^3.5.2",
     "ts-jest": "^29.2.6",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   },
   "dependencies": {

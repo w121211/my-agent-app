@@ -1,3 +1,128 @@
+如果要用 ts 做 local file watcher，你推薦哪個開源庫？
+
+
+
+
+
+請寫一個 jest 測試，測試 event flow
+每次測一個 flow，本次寫第一個
+- Typescript、Jest、環境：node
+- 要模擬真實環境的集成測試，不用 mock
+- 要包含檔名
+- 檔案系統用 node:fs/promises 與 node:os，例如
+```
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+```
+- 不用管 websocket event
+- 對 event flow 所產生的資料夾、檔案做 snapshot test，這樣方便有一個完整的資料夾展示讓開發者檢查，避免因為測完檔案就被刪了
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Use typescript best practices
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+### 1. Task Creation and Initialization Flow
+This flow demonstrates how a task is created, initialized, and its first subtask started:
+- `CLIENT_CREATE_TASK_COMMAND` → Creates a new task with default subtasks
+- `SERVER_TASK_CREATED` → Confirms task creation
+- `SERVER_TASK_FOLDER_CREATED` → Indicates folder structure is ready
+- `CLIENT_START_TASK_COMMAND` → Auto-triggered to start the task
+- `SERVER_TASK_LOADED` → Task state is loaded
+- `CLIENT_START_SUBTASK_COMMAND` → First subtask automatically starts
+
+### 2. Subtask Execution Flow
+This demonstrates how a subtask is executed and completed:
+- `CLIENT_START_SUBTASK_COMMAND` → Start a specific subtask
+- `SERVER_SUBTASK_UPDATED` → Update subtask status to IN_PROGRESS
+- `CLIENT_START_NEW_CHAT_COMMAND` → Creates a chat for the subtask
+- `SERVER_CHAT_CREATED` → Chat is created
+- `SERVER_SUBTASK_STARTED` → Subtask begins execution
+- `CLIENT_COMPLETE_SUBTASK_COMMAND` → Mark subtask as completed
+- `SERVER_SUBTASK_COMPLETED` → Confirm subtask is completed
+- `SERVER_NEXT_SUBTASK_TRIGGERED` → Trigger the next subtask
+
+### 3. Chat Interaction Flow
+This flow shows the communication between user and assistant:
+- `CLIENT_START_NEW_CHAT_COMMAND` → Create a new chat
+- `SERVER_CHAT_CREATED` → Chat is created
+- `SERVER_CHAT_FILE_CREATED` → Chat file is created
+- `CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND` → Submit initial prompt
+- `SERVER_MESSAGE_RECEIVED` → Message is received
+- `SERVER_MESSAGE_SAVED_TO_CHAT_FILE` → Message saved to file
+- `SERVER_AGENT_PROCESSED_MESSAGE` → Agent processes the message
+- `SERVER_AGENT_RESPONSE_GENERATED` → Agent generates a response
+
+### 4. Work Approval Flow
+This demonstrates the approval process:
+- `CLIENT_COMPLETE_SUBTASK_COMMAND` → Complete subtask with requiresApproval=true
+- `SERVER_SUBTASK_COMPLETED` → Subtask marked as completed
+- `CLIENT_APPROVE_WORK` → User approves the completed work
+- `SERVER_NEXT_SUBTASK_TRIGGERED` → Next subtask is triggered after approval
+
+### 5. End-to-End Task Lifecycle
+A complete demonstration would show the full lifecycle:
+- Create a task with multiple subtasks
+- Execute each subtask with appropriate agent and user interactions
+- Complete the task with all subtasks finished
+
+請寫一個 example script，用來示範如何使用 event system
+每次寫一個 example，本次寫第 4 個
+- 不用寫測試，不用 mock
+- 包含檔名
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript、環境：node
+- Use typescript best practices
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+若要寫 example script，用來示範如何使用 event system，有哪些 event flow 可以展示？
+請分析，不用寫 code
+
+
+
+
+
+
+
+
+請參考python events module，用 typescript 寫一個 event driven system，每次只做一個部分
+本次請寫：subtask service
+* MVP 階段，不要過度設計，保持簡潔清楚
+* 目前已經完成的部分請參考 typescript files
+* 不用照原本的架構寫法，請依 typescript best practices
+* 你可以按照自己的想法修改設計
+* 把所有 event handlers 都視為async event handler，不另外考慮sync event handler
+* Logger 用 tslog
+* 環境：node 
+* 不需要 try, catch，只需要throw error
+* 避免用 as ，確保 type safe，follow typescript best practices
+* Comments 用英文，只有必要的地方才加 comment，不用過度 comment，保持精簡
+
+
+請寫 subtask service 的 test
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Use typescript best practices
+- Typescript、Jest、測試環境：node
+- Test 不要過多階層，保持簡潔清楚
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請寫一個集成測試，用於測試開始一個新的 task
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Use typescript best practices
+- Typescript、Jest、測試環境：node
+- Test 不要過多階層，保持簡潔清楚
+- 使用 `mock-fs` 來 mock file operations
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
 
 
 

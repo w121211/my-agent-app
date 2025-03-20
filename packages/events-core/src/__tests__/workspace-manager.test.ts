@@ -9,7 +9,7 @@ import {
   SubtaskStatus,
   ChatStatus,
   Role,
-} from "../types.js";
+} from "../event-types.js";
 
 describe("WorkspaceManager", () => {
   const WORKSPACE_PATH = "/workspace";

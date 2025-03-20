@@ -12,7 +12,7 @@ import {
   ServerSubtaskStarted,
   ServerSubtaskUpdated,
   SubtaskStatus,
-} from "./types.js";
+} from "./event-types.js";
 
 /**
  * Service for managing subtask lifecycle and operations

@@ -18,7 +18,7 @@ import {
   ServerTaskCreated,
   ServerSubtaskCompleted,
   ServerChatCreated,
-} from "../src/types.js";
+} from "../src/event-types.js";
 
 // Setup logger
 const logger = new Logger({ name: "WorkApprovalDemo" });

@@ -1,201 +1,242 @@
-import { WebSocketServer } from "ws";
-import { createServer, Server as HttpServer } from "http";
-import { Logger, ILogObj } from "tslog";
-import { EventUnion, EventType } from "@repo/events-core/types";
+import WebSocket, { WebSocketServer } from "ws";
+import { ILogObj, Logger } from "tslog";
 import { IEventBus } from "@repo/events-core/event-bus";
-import { WebSocketEventConnection } from "./websocket-event-connection.js";
+import {
+  EventUnion,
+  isClientEvent,
+  isServerEvent,
+} from "@repo/events-core/event-types";
+import {
+  RelayMessageType,
+  ClientEventMessage,
+  ServerEventMessage,
+  ErrorMessage,
+  isMessageType,
+  RelayMessage,
+} from "./relay-types.js";
 
 /**
- * WebSocket server that handles real-time event communication
- * between frontend and backend
+ * Configuration options for the WebSocket server
+ */
+export interface WebSocketServerOptions {
+  port?: number;
+  eventBus: IEventBus;
+  logger?: Logger<ILogObj>;
+}
+
+/**
+ * WebSocket server that provides bidirectional event communication
+ * between client and server event buses
  */
 export class WebSocketEventServer {
-  private wsServer: WebSocketServer | null = null;
-  private httpServer: HttpServer | null = null;
-  private connections: Map<string, WebSocketEventConnection> = new Map();
+  private wss: WebSocketServer | null = null;
+  private clients: Set<WebSocket> = new Set();
+  private eventBusUnsubscriber: (() => void) | null = null;
+  private isStarted = false;
   private logger: Logger<ILogObj>;
-  private port: number;
-  private eventUnsubscriber: (() => void) | null = null;
-  private eventBus: IEventBus;
 
   constructor(
-    eventBus: IEventBus,
-    options: { port?: number; logger?: Logger<ILogObj> } = {}
+    private readonly port: number,
+    private readonly eventBus: IEventBus,
+    logger?: Logger<ILogObj>
   ) {
-    this.eventBus = eventBus;
-    this.port = options.port || 8000;
-    this.logger =
-      options.logger || new Logger({ name: "WebSocketEventServer" });
+    this.logger = logger || new Logger({ name: "WebSocketEventServer" });
+    this.logger.debug("WebSocketEventServer created");
   }
 
   /**
-   * Start the WebSocket server
+   * Starts the WebSocket server and sets up bidirectional event relay
    */
-  public start(): void {
-    if (this.wsServer) {
-      this.logger.warn("WebSocket server is already running");
+  start(): void {
+    if (this.isStarted) {
       return;
     }
 
-    this.httpServer = createServer();
-    this.wsServer = new WebSocketServer({ server: this.httpServer });
+    this.wss = new WebSocketServer({ port: this.port });
+    this.setupEventListeners();
+    this.subscribeToServerEventsForForwarding();
+    this.isStarted = true;
+    this.logger.info(`WebSocket server started on port ${this.port}`);
+  }
 
-    this.wsServer.on("connection", (socket, request) => {
-      const clientId = this.generateClientId();
-      this.logger.info(`New client connected: ${clientId}`);
+  /**
+   * Stops the WebSocket server
+   */
+  stop(): void {
+    if (!this.isStarted || !this.wss) {
+      return;
+    }
 
-      const connection = new WebSocketEventConnection(
-        socket,
-        clientId,
-        this.eventBus,
-        this.logger
+    this.unsubscribeFromServerEventsForwarding();
+
+    for (const client of this.clients) {
+      client.close();
+    }
+    this.clients.clear();
+
+    this.wss.close();
+    this.wss = null;
+    this.isStarted = false;
+    this.logger.info("WebSocket server stopped");
+  }
+
+  private setupEventListeners(): void {
+    if (!this.wss) return;
+
+    this.wss.on("connection", (ws: WebSocket) => {
+      this.handleNewConnection(ws);
+    });
+
+    this.wss.on("error", (error) => {
+      this.logger.error("WebSocket server error:", error);
+    });
+  }
+
+  private handleNewConnection(ws: WebSocket): void {
+    this.clients.add(ws);
+    this.logger.info(
+      `New client connected, total clients: ${this.clients.size}`
+    );
+
+    ws.on("message", (message: WebSocket.Data) => {
+      this.logger.debug("Received message from client:", message);
+      this.handleClientMessage(ws, message);
+    });
+
+    ws.on("close", () => {
+      this.clients.delete(ws);
+      this.logger.info(
+        `Client disconnected, remaining clients: ${this.clients.size}`
       );
-      this.connections.set(clientId, connection);
-
-      connection.onClose(() => {
-        this.logger.info(`Client disconnected: ${clientId}`);
-        this.connections.delete(clientId);
-      });
     });
 
-    // Subscribe to all events to forward them to clients
-    this.subscribeToEvents();
-
-    this.httpServer.listen(this.port, () => {
-      this.logger.info(`WebSocket server started on port ${this.port}`);
+    ws.on("error", (error) => {
+      this.logger.error("WebSocket connection error:", error);
+      this.clients.delete(ws);
     });
   }
 
   /**
-   * Stop the WebSocket server
+   * Subscribes to server events on the event bus to forward them to clients
    */
-  public stop(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.wsServer) {
-        this.logger.warn("WebSocket server is not running");
-        resolve();
-        return;
-      }
+  private subscribeToServerEventsForForwarding(): void {
+    this.unsubscribeFromServerEventsForwarding();
 
-      // Unsubscribe from events
-      if (this.eventUnsubscriber) {
-        this.eventUnsubscriber();
-        this.eventUnsubscriber = null;
-      }
-
-      // Close all connections
-      for (const connection of this.connections.values()) {
-        connection.close();
-      }
-      this.connections.clear();
-
-      // Close WebSocket server
-      this.wsServer.close((err) => {
-        if (err) {
-          this.logger.error("Error closing WebSocket server:", err);
-          reject(err);
-          return;
+    this.eventBusUnsubscriber = this.eventBus.subscribeToAllServerEvents(
+      async (event) => {
+        if (isServerEvent(event)) {
+          await this.broadcastServerEvent(event);
         }
-
-        // Close HTTP server
-        if (this.httpServer) {
-          this.httpServer.close((err) => {
-            if (err) {
-              this.logger.error("Error closing HTTP server:", err);
-              reject(err);
-              return;
-            }
-
-            this.wsServer = null;
-            this.httpServer = null;
-            this.logger.info("WebSocket server stopped");
-            resolve();
-          });
-        } else {
-          this.wsServer = null;
-          this.logger.info("WebSocket server stopped");
-          resolve();
-        }
-      });
-    });
+      }
+    );
   }
 
   /**
-   * Broadcast an event to all connected clients
+   * Unsubscribes from the event bus
    */
-  public broadcastEvent(event: EventUnion): void {
-    for (const connection of this.connections.values()) {
-      connection.sendEvent(event);
+  private unsubscribeFromServerEventsForwarding(): void {
+    if (this.eventBusUnsubscriber) {
+      this.eventBusUnsubscriber();
+      this.eventBusUnsubscriber = null;
     }
   }
 
   /**
-   * Generate a unique client ID
+   * Broadcasts a server event to all connected clients
    */
-  private generateClientId(): string {
-    return `client-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-  }
-
-  /**
-   * Subscribe to all events to forward them to clients
-   */
-  private subscribeToEvents(): void {
-    // Subscribe to each event type individually
-    const eventTypes = Object.values(EventType);
-
-    // Create an array of unsubscribe functions
-    const unsubscribers: Array<() => void> = [];
-
-    for (const eventType of eventTypes) {
-      const unsubscribe = this.eventBus.subscribe(
-        eventType,
-        async (event: EventUnion) => {
-          this.broadcastToSubscribers(event);
-        }
-      );
-      unsubscribers.push(unsubscribe);
+  private async broadcastServerEvent(event: EventUnion): Promise<void> {
+    if (this.clients.size === 0) {
+      return;
     }
 
-    // Store a function that will unsubscribe from all events
-    this.eventUnsubscriber = () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    const message: ServerEventMessage = {
+      type: RelayMessageType.SERVER_EVENT,
+      event,
     };
+
+    const messageString = JSON.stringify(message);
+
+    this.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(messageString);
+      }
+    });
+
+    this.logger.debug(
+      `Broadcasted ${event.eventType} to ${this.clients.size} clients`
+    );
   }
 
   /**
-   * Broadcast an event to clients that are subscribed to its type
+   * Handles incoming messages from clients
    */
-  private broadcastToSubscribers(event: EventUnion): void {
-    for (const connection of this.connections.values()) {
-      if (connection.isSubscribedTo(event.eventType)) {
-        connection.sendEvent(event);
+  private handleClientMessage(ws: WebSocket, data: WebSocket.Data): void {
+    let message: RelayMessage;
+
+    this.logger.debug("Received message from client:", data);
+
+    try {
+      const messageString = data.toString();
+      message = JSON.parse(messageString) as RelayMessage;
+    } catch (error) {
+      this.sendError(ws, "PARSE_ERROR", "Invalid message format");
+      return;
+    }
+
+    if (
+      isMessageType<ClientEventMessage>(message, RelayMessageType.CLIENT_EVENT)
+    ) {
+      const clientEvent = message.event;
+
+      if (isClientEvent(clientEvent)) {
+        this.eventBus.emit(clientEvent).catch((error) => {
+          this.logger.error(
+            `Error emitting event ${clientEvent.eventType}:`,
+            error
+          );
+          this.sendError(
+            ws,
+            "EVENT_ERROR",
+            `Error processing event: ${error.message}`
+          );
+        });
+      } else {
+        this.sendError(ws, "INVALID_EVENT", "Invalid client event format");
       }
+    } else {
+      this.sendError(
+        ws,
+        "UNKNOWN_MESSAGE_TYPE",
+        `Unknown message type: ${message.type}`
+      );
     }
   }
+
+  /**
+   * Sends an error message to a client
+   */
+  private sendError(ws: WebSocket, code: string, message: string): void {
+    if (ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const errorMessage: ErrorMessage = {
+      type: RelayMessageType.ERROR,
+      code,
+      message,
+    };
+
+    ws.send(JSON.stringify(errorMessage));
+    this.logger.warn(`Sent error to client: [${code}] ${message}`);
+  }
 }
 
-// Singleton instance
-let wsServerInstance: WebSocketEventServer | null = null;
-
 /**
- * Get or create the WebSocket server instance
+ * Factory function to create a WebSocket server
  */
-export function getWebSocketEventServer(
-  eventBus: IEventBus,
-  options?: {
-    port?: number;
-    logger?: Logger<ILogObj>;
-  }
+export function createWebSocketEventServer(
+  options: WebSocketServerOptions
 ): WebSocketEventServer {
-  if (!wsServerInstance) {
-    wsServerInstance = new WebSocketEventServer(eventBus, options);
-  }
-  return wsServerInstance;
-}
-
-/**
- * Reset the WebSocket server instance (mainly for testing)
- */
-export function resetWebSocketEventServer(): void {
-  wsServerInstance = null;
+  const port = options.port || 8000;
+  return new WebSocketEventServer(port, options.eventBus, options.logger);
 }

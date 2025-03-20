@@ -12,7 +12,7 @@ import {
   Task,
   TaskStatus,
   Role,
-} from "../types.js";
+} from "../event-types.js";
 
 // Type for accessing private methods during testing
 type PrivateSubtaskService = {

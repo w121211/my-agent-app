@@ -1,5 +1,5 @@
+import path from "node:path";
 import { Logger } from "tslog";
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
 
 // Import core components
@@ -17,7 +17,7 @@ import {
   ServerTaskFolderCreated,
   ServerEventType,
   Role,
-} from "../src/types.js";
+} from "../src/event-types.js";
 
 // Create root logger
 const logger = new Logger({ name: "EventSystemExample" });

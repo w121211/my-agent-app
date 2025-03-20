@@ -10,7 +10,7 @@ import {
   SubtaskStatus,
   ChatStatus,
   EntityNotFoundError,
-} from "../types.js";
+} from "../event-types.js";
 
 // Mock the workspace manager
 const mockWorkspaceManager: jest.Mocked<IWorkspaceManager> = {

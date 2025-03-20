@@ -9,7 +9,7 @@ import {
   Message,
   Role,
   ServerEventType,
-} from "../types.js";
+} from "../event-types.js";
 import { IWorkspaceManager } from "../workspace-manager.js"; // Import workspace manager interface
 
 // Mock dependencies
