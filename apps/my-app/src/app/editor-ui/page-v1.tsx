@@ -17,14 +17,16 @@ const log = new Logger({ name: "workspace-ui" });
 
 // Types
 type MessageRole = "User" | "AI";
-type Message = {
+
+interface Message {
   role: MessageRole;
   content: string;
   timestamp: Date;
-};
+}
 
 type FileType = "chat" | "file";
-type ItemType = {
+
+interface ItemType {
   id: string;
   name: string;
   type: FileType | "folder";
@@ -32,7 +34,7 @@ type ItemType = {
   status?: "🏃" | undefined;
   content?: string;
   messages?: Message[];
-};
+}
 
 // Mock data
 const mockData: ItemType = {
@@ -41,97 +43,99 @@ const mockData: ItemType = {
   type: "folder",
   children: [
     {
-      id: "t21",
-      name: "t21-hello_world",
+      id: "project1",
+      name: "project1-dashboard",
       type: "folder",
       status: "🏃",
       children: [
         {
-          id: "s0",
-          name: "s0-planning",
+          id: "planning",
+          name: "planning",
           type: "folder",
           children: [
             {
-              id: "c01",
-              name: "c01-20240121_153000.chat.json",
+              id: "chat1",
+              name: "chat-20240322_103000.chat.json",
               type: "chat",
-              content: `[User] 請按照需求編寫...
-
-[AI] 我已分析完需求...
-
-[User] 這部分需要調整...
-
-[AI] 根據反饋，我建議...`,
               messages: [
                 {
                   role: "User",
-                  content: "請按照需求編寫...",
-                  timestamp: new Date("2024-01-21T15:30:00"),
+                  content: "I need a dashboard with user analytics features",
+                  timestamp: new Date("2024-03-22T10:30:00"),
                 },
                 {
                   role: "AI",
-                  content: "我已分析完需求...",
-                  timestamp: new Date("2024-01-21T15:31:00"),
+                  content:
+                    "I'll design a dashboard with user analytics. What specific metrics would you like to track?",
+                  timestamp: new Date("2024-03-22T10:31:00"),
                 },
                 {
                   role: "User",
-                  content: "這部分需要調整...",
-                  timestamp: new Date("2024-01-21T15:32:00"),
+                  content:
+                    "We need daily active users, session duration and conversion rates",
+                  timestamp: new Date("2024-03-22T10:32:00"),
                 },
                 {
                   role: "AI",
-                  content: "根據反饋，我建議...",
-                  timestamp: new Date("2024-01-21T15:33:00"),
+                  content:
+                    "I've drafted a dashboard design with three main sections: DAU trends, average session time, and conversion funnels. Would you like to see a mockup?",
+                  timestamp: new Date("2024-03-22T10:33:00"),
                 },
               ],
             },
             {
-              id: "c02",
-              name: "c02-20240121_154500.chat.json",
+              id: "chat2",
+              name: "chat-20240322_114500.chat.json",
               type: "chat",
               messages: [],
             },
           ],
         },
         {
-          id: "s1",
-          name: "s1-implementation",
+          id: "implementation",
+          name: "implementation",
           type: "folder",
           children: [
             {
-              id: "nav1",
-              name: "navbar.v1.py",
+              id: "dashboard1",
+              name: "dashboard.v1.tsx",
               type: "file",
               content:
-                "def create_navbar():\n    # Navbar implementation\n    pass",
+                "import React from 'react';\n\nexport default function Dashboard() {\n  // Dashboard implementation v1\n  return (\n    <div>\n      <h1>User Analytics Dashboard</h1>\n      {/* Components will be added here */}\n    </div>\n  );\n}",
             },
             {
-              id: "nav2",
-              name: "navbar.v2.py",
+              id: "dashboard2",
+              name: "dashboard.v2.tsx",
               type: "file",
+              content:
+                'import React from \'react\';\nimport { UserMetrics } from \'./types\';\n\nexport default function Dashboard() {\n  // Dashboard implementation v2 with metrics\n  return (\n    <div className="dashboard-container">\n      <h1>User Analytics Dashboard</h1>\n      <div className="metrics-grid">\n        <MetricsCard title="Daily Active Users" />\n        <MetricsCard title="Avg Session Time" />\n        <MetricsCard title="Conversion Rate" />\n      </div>\n    </div>\n  );\n}',
             },
             {
               id: "api",
               name: "api-spec.md",
               type: "file",
+              content:
+                "# Dashboard API Specifications\n\n## Endpoints\n\n- GET /api/metrics/daily - Returns daily active users\n- GET /api/metrics/session - Returns session duration data\n- GET /api/metrics/conversion - Returns conversion funnel data",
             },
           ],
         },
         {
-          id: "task",
-          name: "task.json",
+          id: "requirements",
+          name: "requirements.md",
           type: "file",
+          content:
+            "# Dashboard Requirements\n\n1. Display daily active users (DAU) for last 30 days\n2. Show average session duration by user segment\n3. Visualize conversion funnel from visitor to customer\n4. Allow date range filtering\n5. Support data export to CSV",
         },
       ],
     },
     {
-      id: "t20",
-      name: "t20-feature_xyz",
+      id: "project2",
+      name: "project2-user_auth",
       type: "folder",
     },
     {
-      id: "t19",
-      name: "t19-bug_fix",
+      id: "project3",
+      name: "project3-performance_optimization",
       type: "folder",
     },
   ],
@@ -165,8 +169,10 @@ interface WorkspaceStore {
 const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   data: mockData,
   selectedItem: null,
-  expandedFolders: new Set(["root", "t21"]), // Initially expand root and first folder
+  expandedFolders: new Set(["root", "project1"]), // Initially expand root and first folder
+
   setSelectedItem: (item) => set({ selectedItem: item }),
+
   toggleFolder: (folderId) =>
     set((state) => {
       const newExpanded = new Set(state.expandedFolders);
@@ -177,7 +183,9 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       }
       return { expandedFolders: newExpanded };
     }),
+
   isExpanded: (folderId) => get().expandedFolders.has(folderId),
+
   sendMessage: (itemId, content) =>
     set((state) => {
       // Create a deep copy of the data
@@ -209,12 +217,35 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
 
       chatItem.messages.push(newMessage);
 
-      // Update the content string for backward compatibility
-      chatItem.content = chatItem.messages
-        .map((msg) => `[${msg.role}] ${msg.content}`)
-        .join("\n\n");
+      // Simulate AI response (in a real app, this would come from an API)
+      setTimeout(() => {
+        set((state) => {
+          const newData = JSON.parse(JSON.stringify(state.data)) as ItemType;
+          const chatItem = findItemById(newData, itemId);
 
-      // Also update the selected item if it's the chat we're modifying
+          if (!chatItem || chatItem.type !== "chat" || !chatItem.messages) {
+            return state;
+          }
+
+          const aiMessage: Message = {
+            role: "AI",
+            content: "I've received your message and will process it shortly.",
+            timestamp: new Date(),
+          };
+
+          chatItem.messages.push(aiMessage);
+
+          const newSelectedItem =
+            state.selectedItem?.id === itemId ? chatItem : state.selectedItem;
+
+          return {
+            data: newData,
+            selectedItem: newSelectedItem,
+          };
+        });
+      }, 1000);
+
+      // Update the selected item if it's the chat we're modifying
       const newSelectedItem =
         state.selectedItem?.id === itemId ? chatItem : state.selectedItem;
 
@@ -265,7 +296,9 @@ const ExplorerItem = ({
     <div>
       <div
         onClick={handleClick}
-        className={`flex items-center px-2 py-1 cursor-pointer hover:bg-gray-100 ${selectedItem?.id === item.id ? "bg-blue-100" : ""}`}
+        className={`flex items-center px-2 py-1 cursor-pointer hover:bg-gray-100 ${
+          selectedItem?.id === item.id ? "bg-blue-100" : ""
+        }`}
         style={{ paddingLeft }}
       >
         <span className="mr-1">{icon}</span>
@@ -311,6 +344,9 @@ const ChatView = ({ item }: { item: ItemType }) => {
     >
       <div className="font-bold">[{msg.role}]</div>
       <div>{msg.content}</div>
+      <div className="text-xs text-gray-500 mt-1">
+        {msg.timestamp.toLocaleString()}
+      </div>
     </div>
   ));
 
@@ -356,7 +392,7 @@ const ChatView = ({ item }: { item: ItemType }) => {
 // File View Component
 const FileView = ({ content }: { content: string }) => {
   return (
-    <div className="p-4">
+    <div className="p-4 h-full overflow-auto">
       <pre className="whitespace-pre-wrap font-mono">{content}</pre>
     </div>
   );
@@ -366,7 +402,13 @@ const FileView = ({ content }: { content: string }) => {
 const ContentView = () => {
   const selectedItem = useWorkspaceStore((state) => state.selectedItem);
 
-  if (!selectedItem) return null;
+  if (!selectedItem) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-500">
+        Select a file or chat from the explorer
+      </div>
+    );
+  }
 
   return (
     <>
@@ -379,14 +421,14 @@ const ContentView = () => {
       {selectedItem.type === "chat" ? (
         <ChatView item={selectedItem} />
       ) : (
-        <FileView content={selectedItem.content || ""} />
+        <FileView content={selectedItem.content || "No content available"} />
       )}
     </>
   );
 };
 
 // Main Workspace Component
-const WorkspaceUI = () => {
+export default function WorkspaceUI() {
   return (
     <div className="flex h-screen bg-white">
       {/* Explorer */}
@@ -401,6 +443,4 @@ const WorkspaceUI = () => {
       </div>
     </div>
   );
-};
-
-export default WorkspaceUI;
+}

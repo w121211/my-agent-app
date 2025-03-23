@@ -155,7 +155,14 @@ export class EventBus implements IEventBus {
     const eventType = event.eventType;
     const handlers = this.handlers.get(eventType);
 
+    this.logger.debug(
+      `Emitting ${eventType} to ${handlers?.size || 0} handlers`
+    );
+
     if (!handlers || handlers.size === 0) {
+      this.logger.warn(
+        `No handlers found for ${eventType} - event will not be processed`
+      );
       return;
     }
 

@@ -2,7 +2,7 @@
 
 import { type JSX } from "react";
 import { ILogObj, Logger } from "tslog";
-import { DIProvider } from "../../features/file-explorer-di/di-provider";
+import { DIProvider } from "../../lib/di/di-provider";
 import FileExplorer from "../../features/file-explorer-di/file-explorer-components";
 
 // Create logger

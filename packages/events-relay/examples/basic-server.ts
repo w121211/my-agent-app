@@ -1,8 +1,8 @@
+// How to run: pnpm tsx packages/events-relay/examples/basic-server.ts
+
 import { ILogObj, Logger } from "tslog";
 import { createServerEventBus } from "@repo/events-core/event-bus";
 import {
-  ServerEventType,
-  ClientEventType,
   isEventType,
   ServerTestEvent,
   ClientTestEvent,
@@ -34,31 +34,28 @@ function runEventServerDemo(): void {
   eventServer.start();
 
   // Register handler for client test events
-  eventBus.subscribe(
-    ClientEventType.CLIENT_TEST_EVENT,
-    (event: ClientTestEvent) => {
-      if (isEventType(event, ClientEventType.CLIENT_TEST_EVENT)) {
-        logger.info(`Received CLIENT_TEST_EVENT: ${event.message}`);
+  eventBus.subscribe("client-test-event", (event: ClientTestEvent) => {
+    if (isEventType(event, "CLIENT_TEST_EVENT")) {
+      logger.info(`Received CLIENT_TEST_EVENT: ${event.message}`);
 
-        // Respond with a server test event
-        const serverTestEvent: ServerTestEvent = {
-          eventType: ServerEventType.SERVER_TEST_EVENT,
-          timestamp: new Date(),
-          message: `Response to: ${event.message}`,
-          correlationId: event.correlationId,
-        };
+      // Respond with a server test event
+      const serverTestEvent: ServerTestEvent = {
+        eventType: "SERVER_TEST_EVENT",
+        timestamp: new Date(),
+        message: `Response to: ${event.message}`,
+        correlationId: event.correlationId,
+      };
 
-        eventBus.emit(serverTestEvent).catch((error) => {
-          logger.error("Failed to emit server test event:", error);
-        });
-      }
+      eventBus.emit(serverTestEvent).catch((error) => {
+        logger.error("Failed to emit server test event:", error);
+      });
     }
-  );
+  });
 
   // Send periodic test events
   setInterval(() => {
     const serverTestEvent: ServerTestEvent = {
-      eventType: ServerEventType.SERVER_TEST_EVENT,
+      eventType: "SERVER_TEST_EVENT",
       timestamp: new Date(),
       message: `Periodic test event - ${new Date().toISOString()}`,
     };

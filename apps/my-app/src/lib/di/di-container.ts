@@ -6,7 +6,8 @@ import {
   IWebSocketEventClient,
   getWebSocketEventClient,
 } from "@repo/events-relay/websocket-event-client";
-import { FileExplorerService } from "./file-explorer-service";
+import { FileExplorerService } from "../../features/file-explorer-di/file-explorer-service";
+import { EditorService } from "../../features/editor/editor-service";
 import { DI_TOKENS } from "./di-tokens";
 
 // Create default logger
@@ -20,10 +21,11 @@ container.register<Logger<ILogObj>>(DI_TOKENS.LOGGER, {
 // Register EventBus (lazy singleton)
 container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
   useFactory: (dependencyContainer) => {
-    const logger = dependencyContainer.resolve<Logger<ILogObj>>(
+    const appLogger = dependencyContainer.resolve<Logger<ILogObj>>(
       DI_TOKENS.LOGGER
     );
-    return createClientEventBus({ logger });
+    const eventBusLogger = appLogger.getSubLogger({ name: "ClientEventBus" });
+    return createClientEventBus({ logger: eventBusLogger });
   },
 });
 
@@ -31,6 +33,12 @@ container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
 container.registerSingleton<FileExplorerService>(
   DI_TOKENS.FILE_EXPLORER_SERVICE,
   FileExplorerService
+);
+
+// Register EditorService (singleton)
+container.registerSingleton<EditorService>(
+  DI_TOKENS.EDITOR_SERVICE,
+  EditorService
 );
 
 // WebSocketClient is registered dynamically with configuration

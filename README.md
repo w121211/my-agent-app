@@ -85,25 +85,29 @@ Learn more about the power of Turborepo:
 
 ---
 
-# Notes
+# Cheatsheet
 
-pnpm
-
-```
-
-```
-
-Repomix
-
-```
+```sh
+# Repomix
 pnpm dlx repomix -ignore "node_modules,.log,tmp/"
-```
 
-Syncpack
-
-```
+# Syncpack
 pnpm dlx syncpack list-mismatches
 pnpm dlx syncpack fix-mismatches --types '!local'
+
+# Tree: 印出 direcotry 樹狀圖（tree） + 利用.gitignore
+git ls-files | sort | tree --fromfile
+
+# Jest
+pnpm jest
+
+```
+
+This app (my-agent-app)
+
+```sh
+# 啟動 websocket server,
+pnpm tsx packages/events-relay/examples/basic-server.ts
 ```
 
 # 用到的庫、技術、架構

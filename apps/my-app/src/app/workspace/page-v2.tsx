@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, KeyboardEvent } from "react";
+import React from "react";
 import { create } from "zustand";
 import {
   ChevronDown,
@@ -10,19 +10,8 @@ import {
   Paperclip,
   Send,
 } from "lucide-react";
-import { Logger } from "tslog";
-
-// Setup logger
-const log = new Logger({ name: "workspace-ui" });
 
 // Types
-type MessageRole = "User" | "AI";
-type Message = {
-  role: MessageRole;
-  content: string;
-  timestamp: Date;
-};
-
 type FileType = "chat" | "file";
 type ItemType = {
   id: string;
@@ -31,7 +20,6 @@ type ItemType = {
   children?: ItemType[];
   status?: "🏃" | undefined;
   content?: string;
-  messages?: Message[];
 };
 
 // Mock data
@@ -62,34 +50,11 @@ const mockData: ItemType = {
 [User] 這部分需要調整...
 
 [AI] 根據反饋，我建議...`,
-              messages: [
-                {
-                  role: "User",
-                  content: "請按照需求編寫...",
-                  timestamp: new Date("2024-01-21T15:30:00"),
-                },
-                {
-                  role: "AI",
-                  content: "我已分析完需求...",
-                  timestamp: new Date("2024-01-21T15:31:00"),
-                },
-                {
-                  role: "User",
-                  content: "這部分需要調整...",
-                  timestamp: new Date("2024-01-21T15:32:00"),
-                },
-                {
-                  role: "AI",
-                  content: "根據反饋，我建議...",
-                  timestamp: new Date("2024-01-21T15:33:00"),
-                },
-              ],
             },
             {
               id: "c02",
               name: "c02-20240121_154500.chat.json",
               type: "chat",
-              messages: [],
             },
           ],
         },
@@ -137,33 +102,16 @@ const mockData: ItemType = {
   ],
 };
 
-// Helper function to find an item by ID in the tree
-function findItemById(root: ItemType, id: string): ItemType | null {
-  if (root.id === id) return root;
-
-  if (root.children) {
-    for (const child of root.children) {
-      const found = findItemById(child, id);
-      if (found) return found;
-    }
-  }
-
-  return null;
-}
-
 // Zustand store
 interface WorkspaceStore {
-  data: ItemType;
   selectedItem: ItemType | null;
   expandedFolders: Set<string>;
   setSelectedItem: (item: ItemType | null) => void;
   toggleFolder: (folderId: string) => void;
   isExpanded: (folderId: string) => boolean;
-  sendMessage: (itemId: string, content: string) => void;
 }
 
 const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
-  data: mockData,
   selectedItem: null,
   expandedFolders: new Set(["root", "t21"]), // Initially expand root and first folder
   setSelectedItem: (item) => set({ selectedItem: item }),
@@ -178,53 +126,6 @@ const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
       return { expandedFolders: newExpanded };
     }),
   isExpanded: (folderId) => get().expandedFolders.has(folderId),
-  sendMessage: (itemId, content) =>
-    set((state) => {
-      // Create a deep copy of the data
-      const newData = JSON.parse(JSON.stringify(state.data)) as ItemType;
-
-      // Find the chat item
-      const chatItem = findItemById(newData, itemId);
-
-      if (!chatItem || chatItem.type !== "chat") {
-        log.error(
-          `Cannot send message: Item ${itemId} not found or not a chat`
-        );
-        throw new Error(
-          `Cannot send message: Item ${itemId} not found or not a chat`
-        );
-      }
-
-      // Ensure the messages array exists
-      if (!chatItem.messages) {
-        chatItem.messages = [];
-      }
-
-      // Add the new user message
-      const newMessage: Message = {
-        role: "User",
-        content,
-        timestamp: new Date(),
-      };
-
-      chatItem.messages.push(newMessage);
-
-      // Update the content string for backward compatibility
-      chatItem.content = chatItem.messages
-        .map((msg) => `[${msg.role}] ${msg.content}`)
-        .join("\n\n");
-
-      // Also update the selected item if it's the chat we're modifying
-      const newSelectedItem =
-        state.selectedItem?.id === itemId ? chatItem : state.selectedItem;
-
-      log.info(`Message sent to chat ${itemId}`);
-
-      return {
-        data: newData,
-        selectedItem: newSelectedItem,
-      };
-    }),
 }));
 
 // Explorer Item Component
@@ -284,46 +185,11 @@ const ExplorerItem = ({
 };
 
 // Chat Component
-const ChatView = ({ item }: { item: ItemType }) => {
-  const [inputValue, setInputValue] = useState("");
-  const { sendMessage } = useWorkspaceStore();
-
-  const handleSendMessage = useCallback(() => {
-    if (inputValue.trim()) {
-      sendMessage(item.id, inputValue.trim());
-      setInputValue("");
-    }
-  }, [inputValue, sendMessage, item.id]);
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  // Format messages for display
-  const messages = item.messages || [];
-  const formattedContent = messages.map((msg, index) => (
-    <div
-      key={index}
-      className={`mb-4 ${msg.role === "User" ? "text-blue-600" : "text-green-600"}`}
-    >
-      <div className="font-bold">[{msg.role}]</div>
-      <div>{msg.content}</div>
-    </div>
-  ));
-
+const ChatView = ({ content }: { content: string }) => {
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-grow p-4 overflow-auto">
-        {formattedContent.length > 0 ? (
-          formattedContent
-        ) : (
-          <div className="text-gray-400">
-            No messages yet. Start a conversation!
-          </div>
-        )}
+      <div className="flex-grow p-4 overflow-auto whitespace-pre-wrap">
+        {content}
       </div>
       <div className="border-t p-4">
         <div className="flex items-center gap-2">
@@ -332,19 +198,12 @@ const ChatView = ({ item }: { item: ItemType }) => {
               type="text"
               placeholder="Write a message..."
               className="w-full px-3 py-2 border rounded-md"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
             />
           </div>
           <button className="p-2 hover:bg-gray-100 rounded-md">
             <Paperclip className="w-5 h-5" />
           </button>
-          <button
-            className="p-2 hover:bg-gray-100 rounded-md"
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim()}
-          >
+          <button className="p-2 hover:bg-gray-100 rounded-md">
             <Send className="w-5 h-5" />
           </button>
         </div>
@@ -377,7 +236,7 @@ const ContentView = () => {
 
       {/* Content */}
       {selectedItem.type === "chat" ? (
-        <ChatView item={selectedItem} />
+        <ChatView content={selectedItem.content || ""} />
       ) : (
         <FileView content={selectedItem.content || ""} />
       )}

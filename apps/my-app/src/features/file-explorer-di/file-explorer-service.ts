@@ -1,13 +1,22 @@
 import { ILogObj, Logger } from "tslog";
 import { inject, injectable } from "tsyringe";
 import { type IEventBus } from "@repo/events-core/event-bus";
+import { DI_TOKENS } from "../../lib/di/di-tokens";
 import {
-  FileExplorerEventType,
   FileSystemNode,
-  FileExplorerEventUnion,
+  ClientExplorerFileCreatedEvent,
+  ClientExplorerFileDeletedEvent,
+  ClientExplorerFileRenamedEvent,
+  ClientExplorerFileMovedEvent,
+  ClientExplorerDirectoryCreatedEvent,
+  ClientExplorerDirectoryDeletedEvent,
+  ClientExplorerDirectoryRenamedEvent,
+  ClientExplorerDirectoryMovedEvent,
+  ClientExplorerNodeSelectedEvent,
+  ClientExplorerDirectoryExpandedEvent,
+  ClientExplorerDirectoryCollapsedEvent,
 } from "./file-explorer-types";
 import { useFileExplorerStore } from "./file-explorer-store";
-import { DI_TOKENS } from "./di-tokens";
 
 @injectable()
 export class FileExplorerService {
@@ -25,83 +34,95 @@ export class FileExplorerService {
   }
 
   private registerEventHandlers(): void {
-    // Register handlers for all file explorer events
-    Object.values(FileExplorerEventType).forEach((eventType) => {
-      this.eventBus.subscribe(eventType, (event: FileExplorerEventUnion) => {
-        this.handleEvent(event);
-      });
-    });
-
-    this.logger.debug("Registered event handlers for file explorer events");
-  }
-
-  private handleEvent(event: FileExplorerEventUnion): void {
     const store = useFileExplorerStore.getState();
 
-    switch (event.eventType) {
-      case "CLIENT_EXPLORER_FILE_CREATED":
+    // Register handlers for each file explorer event directly
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_FILE_CREATED",
+      (event: ClientExplorerFileCreatedEvent) => {
         store.createFile(event.parentPath, event.name);
-        break;
+      }
+    );
 
-      case "CLIENT_EXPLORER_FILE_DELETED":
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_FILE_DELETED",
+      (event: ClientExplorerFileDeletedEvent) => {
         store.deleteNode(event.fileId);
-        break;
+      }
+    );
 
-      case "CLIENT_EXPLORER_FILE_RENAMED":
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_FILE_RENAMED",
+      (event: ClientExplorerFileRenamedEvent) => {
         store.renameNode(event.fileId, event.newName);
-        break;
+      }
+    );
 
-      case "CLIENT_EXPLORER_FILE_MOVED":
-        const fileMoveNode = store.getNodeById(event.fileId);
-        if (fileMoveNode) {
-          const newParentPath = event.newPath.substring(
-            0,
-            event.newPath.lastIndexOf("/")
-          );
-          store.moveNode(event.fileId, newParentPath || null);
-        }
-        break;
-
-      case "CLIENT_EXPLORER_DIRECTORY_CREATED":
-        store.createDirectory(event.parentPath, event.name);
-        break;
-
-      case "CLIENT_EXPLORER_DIRECTORY_DELETED":
-        store.deleteNode(event.directoryId);
-        break;
-
-      case "CLIENT_EXPLORER_DIRECTORY_RENAMED":
-        store.renameNode(event.directoryId, event.newName);
-        break;
-
-      case "CLIENT_EXPLORER_DIRECTORY_MOVED":
-        const dirMoveNode = store.getNodeById(event.directoryId);
-        if (dirMoveNode) {
-          const newParentPath = event.newPath.substring(
-            0,
-            event.newPath.lastIndexOf("/")
-          );
-          store.moveNode(event.directoryId, newParentPath || null);
-        }
-        break;
-
-      case "CLIENT_EXPLORER_NODE_SELECTED":
-        store.selectNode(event.nodeId);
-        break;
-
-      case "CLIENT_EXPLORER_DIRECTORY_EXPANDED":
-        store.expandDirectory(event.directoryId);
-        break;
-
-      case "CLIENT_EXPLORER_DIRECTORY_COLLAPSED":
-        store.collapseDirectory(event.directoryId);
-        break;
-
-      default:
-        this.logger.warn(
-          `Unhandled file explorer event type: ${(event as any).eventType}`
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_FILE_MOVED",
+      (event: ClientExplorerFileMovedEvent) => {
+        const newParentPath = event.newPath.substring(
+          0,
+          event.newPath.lastIndexOf("/")
         );
-    }
+        store.moveNode(event.fileId, newParentPath || null);
+      }
+    );
+
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_DIRECTORY_CREATED",
+      (event: ClientExplorerDirectoryCreatedEvent) => {
+        store.createDirectory(event.parentPath, event.name);
+      }
+    );
+
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_DIRECTORY_DELETED",
+      (event: ClientExplorerDirectoryDeletedEvent) => {
+        store.deleteNode(event.directoryId);
+      }
+    );
+
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_DIRECTORY_RENAMED",
+      (event: ClientExplorerDirectoryRenamedEvent) => {
+        store.renameNode(event.directoryId, event.newName);
+      }
+    );
+
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_DIRECTORY_MOVED",
+      (event: ClientExplorerDirectoryMovedEvent) => {
+        const newParentPath = event.newPath.substring(
+          0,
+          event.newPath.lastIndexOf("/")
+        );
+        store.moveNode(event.directoryId, newParentPath || null);
+      }
+    );
+
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_NODE_SELECTED",
+      (event: ClientExplorerNodeSelectedEvent) => {
+        store.selectNode(event.nodeId);
+      }
+    );
+
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_DIRECTORY_EXPANDED",
+      (event: ClientExplorerDirectoryExpandedEvent) => {
+        store.expandDirectory(event.directoryId);
+      }
+    );
+
+    this.eventBus.subscribe(
+      "CLIENT_EXPLORER_DIRECTORY_COLLAPSED",
+      (event: ClientExplorerDirectoryCollapsedEvent) => {
+        store.collapseDirectory(event.directoryId);
+      }
+    );
+
+    this.logger.debug("Registered event handlers for file explorer events");
   }
 
   // Public methods that emit events

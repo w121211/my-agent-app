@@ -14,13 +14,15 @@ import {
   WebSocketConfig,
 } from "./di-container";
 import { DI_TOKENS } from "./di-tokens";
-import { FileExplorerService } from "./file-explorer-service";
+import { FileExplorerService } from "../../features/file-explorer-di/file-explorer-service";
+import { EditorService } from "../../features/editor/editor-service";
 
 // Context to provide container services to React components
 type DIContextType = {
   getWebSocketClient: () => IWebSocketEventClient | null;
   getEventBus: () => IEventBus;
   getFileExplorerService: () => FileExplorerService;
+  getEditorService: () => EditorService;
 };
 
 const DIContext = createContext<DIContextType>({
@@ -30,6 +32,9 @@ const DIContext = createContext<DIContextType>({
   },
   getFileExplorerService: () => {
     throw new Error("FileExplorerService not initialized");
+  },
+  getEditorService: () => {
+    throw new Error("EditorService not initialized");
   },
 });
 
@@ -70,6 +75,10 @@ export function DIProvider({
       return () => {
         client.disconnect();
       };
+    } else {
+      console.warn(
+        "WebSocket configuration not provided, skipping initialization"
+      );
     }
   }, [websocketConfig]);
 
@@ -83,7 +92,6 @@ export function DIProvider({
           );
         } catch (error) {
           // WebSocket client is optional and may not be registered
-          // const logger = container.resolve<Logger<ILogObj>>(DI_TOKENS.LOGGER);
           console.debug("WebSocket client not available", error);
           return null;
         }
@@ -91,6 +99,8 @@ export function DIProvider({
       getEventBus: () => container.resolve<IEventBus>(DI_TOKENS.EVENT_BUS),
       getFileExplorerService: () =>
         container.resolve<FileExplorerService>(DI_TOKENS.FILE_EXPLORER_SERVICE),
+      getEditorService: () =>
+        container.resolve<EditorService>(DI_TOKENS.EDITOR_SERVICE),
     }),
     []
   );
@@ -115,5 +125,12 @@ export function useFileExplorerService(): FileExplorerService {
   const { getFileExplorerService } = useContext(DIContext);
   // Use React's useMemo to ensure we don't create a new reference on every render
   const service = React.useMemo(() => getFileExplorerService(), []);
+  return service;
+}
+
+export function useEditorService(): EditorService {
+  const { getEditorService } = useContext(DIContext);
+  // Use React's useMemo to ensure we don't create a new reference on every render
+  const service = React.useMemo(() => getEditorService(), []);
   return service;
 }
