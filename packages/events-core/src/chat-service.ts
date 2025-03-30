@@ -6,8 +6,7 @@ import {
   Chat,
   ChatStatus,
   EventType,
-  Message,
-  MessageMetadata,
+  ChatMessage,
   Role,
   ServerChatCreated,
   ServerMessageSavedToChatFile,
@@ -32,7 +31,7 @@ export class ChatService {
 
     // Register event handlers
     this.eventBus.subscribe<ClientStartNewChatCommand>(
-      ClientEventType.CLIENT_START_NEW_CHAT_COMMAND,
+      "CLIENT_START_NEW_CHAT_COMMAND",
       this.handleStartNewChatCommand.bind(this)
     );
 
@@ -63,7 +62,7 @@ export class ChatService {
       taskId: command.taskId,
       subtaskId: command.subtaskId,
       messages: [],
-      status: ChatStatus.ACTIVE,
+      status: "ACTIVE",
       createdAt: now,
       updatedAt: now,
       metadata: command.metadata || {},
@@ -74,7 +73,7 @@ export class ChatService {
 
     // Emit chat created event
     await this.eventBus.emit<ServerChatCreated>({
-      eventType: ServerEventType.SERVER_CHAT_CREATED,
+      eventType: "SERVER_CHAT_CREATED",
       taskId: command.taskId,
       subtaskId: command.subtaskId,
       chatId,
@@ -87,9 +86,9 @@ export class ChatService {
       command.taskId,
       command.subtaskId
     );
-    const message: Message = {
+    const message: ChatMessage = {
       id: this.generateMessageId(),
-      role: Role.USER,
+      role: "USER",
       content: prompt,
       timestamp: new Date(),
       metadata: {
@@ -107,7 +106,7 @@ export class ChatService {
    */
   private async onMessageReceived(
     chat: Chat,
-    message: Message,
+    message: ChatMessage,
     correlationId?: string
   ): Promise<void> {
     // Add message to chat using repository
@@ -115,7 +114,7 @@ export class ChatService {
 
     // Emit event for message saved
     await this.eventBus.emit<ServerMessageSavedToChatFile>({
-      eventType: ServerEventType.SERVER_MESSAGE_SAVED_TO_CHAT_FILE,
+      eventType: "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
       chatId: chat.id,
       messageId: message.id,
       filePath: chat.id, // Using chat_id as reference since file path is managed by repo
@@ -124,10 +123,10 @@ export class ChatService {
     });
 
     // Process user message if needed
-    if (message.role === Role.USER) {
+    if (message.role === "USER") {
       if (message.content.includes("APPROVE")) {
         await this.eventBus.emit<ClientApproveWork>({
-          eventType: ClientEventType.CLIENT_APPROVE_WORK,
+          eventType: "CLIENT_APPROVE_WORK",
           chatId: chat.id,
           timestamp: new Date(),
           correlationId,
@@ -178,14 +177,14 @@ export class ChatService {
    */
   private async generateAgentResponse(
     chat: Chat,
-    userMessage: Message
-  ): Promise<Message> {
+    userMessage: ChatMessage
+  ): Promise<ChatMessage> {
     // TODO: Implement AI agent response generation
     this.logger.debug(`Generating agent response for chat ${chat.id}`);
 
     return {
       id: this.generateMessageId(),
-      role: Role.ASSISTANT,
+      role: "ASSISTANT",
       content: "Agent response placeholder",
       timestamp: new Date(),
       metadata: {

@@ -35,17 +35,17 @@ export class TaskService {
 
     // Register event handlers
     this.eventBus.subscribe<ClientCreateTaskCommand>(
-      ClientEventType.CLIENT_CREATE_TASK_COMMAND,
+      "CLIENT_CREATE_TASK_COMMAND",
       this.handleCreateTaskCommand.bind(this)
     );
 
     this.eventBus.subscribe<ClientStartTaskCommand>(
-      ClientEventType.CLIENT_START_TASK_COMMAND,
+      "CLIENT_START_TASK_COMMAND",
       this.handleStartTaskCommand.bind(this)
     );
 
     this.eventBus.subscribe<ServerNextSubtaskTriggered>(
-      ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+      "SERVER_NEXT_SUBTASK_TRIGGERED",
       this.onNextSubtaskTriggered.bind(this)
     );
   }
@@ -68,7 +68,7 @@ export class TaskService {
       id: taskId,
       seqNumber: 0, // Will be set when saved
       title: command.taskName,
-      status: TaskStatus.CREATED,
+      status: "CREATED",
       subtasks: [
         {
           id: planningSubtaskId,
@@ -76,9 +76,9 @@ export class TaskService {
           seqNumber: 0,
           title: "Planning",
           description: "Initial planning phase",
-          status: SubtaskStatus.PENDING,
+          status: "PENDING",
           team: {
-            agent: Role.ASSISTANT,
+            agent: "ASSISTANT",
             human: undefined,
           },
           inputType: "string",
@@ -90,10 +90,10 @@ export class TaskService {
           seqNumber: 1,
           title: "Setup",
           description: "Setup initial configuration",
-          status: SubtaskStatus.PENDING,
+          status: "PENDING",
           team: {
-            agent: Role.FUNCTION_EXECUTOR,
-            human: Role.USER,
+            agent: "FUNCTION_EXECUTOR",
+            human: "USER",
           },
           inputType: "json",
           outputType: "json",
@@ -110,7 +110,7 @@ export class TaskService {
 
     // Publish TaskFolderCreated event
     await this.eventBus.emit<ServerTaskFolderCreated>({
-      eventType: ServerEventType.SERVER_TASK_FOLDER_CREATED,
+      eventType: "SERVER_TASK_FOLDER_CREATED",
       taskId,
       folderPath,
       timestamp: new Date(),
@@ -122,7 +122,7 @@ export class TaskService {
 
     // Publish TaskCreated event
     await this.eventBus.emit<ServerTaskCreated>({
-      eventType: ServerEventType.SERVER_TASK_CREATED,
+      eventType: "SERVER_TASK_CREATED",
       taskId,
       taskName: command.taskName,
       config: command.taskConfig,
@@ -132,7 +132,7 @@ export class TaskService {
 
     // Auto-start the task
     await this.eventBus.emit<ClientStartTaskCommand>({
-      eventType: ClientEventType.CLIENT_START_TASK_COMMAND,
+      eventType: "CLIENT_START_TASK_COMMAND",
       taskId,
       timestamp: new Date(),
       correlationId: command.correlationId,
@@ -153,7 +153,7 @@ export class TaskService {
 
     // Emit task loaded event
     await this.eventBus.emit<ServerTaskLoaded>({
-      eventType: ServerEventType.SERVER_TASK_LOADED,
+      eventType: "SERVER_TASK_LOADED",
       taskId: command.taskId,
       taskState: task,
       timestamp: new Date(),
@@ -166,7 +166,7 @@ export class TaskService {
 
       if (firstSubtask) {
         await this.eventBus.emit<ClientStartSubtaskCommand>({
-          eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+          eventType: "CLIENT_START_SUBTASK_COMMAND",
           taskId: task.id,
           subtaskId: firstSubtask.id,
           timestamp: new Date(),
@@ -196,7 +196,7 @@ export class TaskService {
       throw new Error(`Subtask ${event.currentSubtaskId} not found`);
     }
 
-    if (currentSubtask.status !== SubtaskStatus.COMPLETED) {
+    if (currentSubtask.status !== "COMPLETED") {
       throw new Error(
         `Current subtask ${event.currentSubtaskId} not completed`
       );
@@ -210,7 +210,7 @@ export class TaskService {
     if (nextSubtask) {
       // Start next subtask
       await this.eventBus.emit<ClientStartSubtaskCommand>({
-        eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+        eventType: "CLIENT_START_SUBTASK_COMMAND",
         taskId: task.id,
         subtaskId: nextSubtask.id,
         timestamp: new Date(),
@@ -218,7 +218,7 @@ export class TaskService {
       });
     } else {
       // Complete task if no more subtasks
-      task.status = TaskStatus.COMPLETED;
+      task.status = "COMPLETED";
       task.updatedAt = new Date();
       await this.taskRepo.save(task);
     }

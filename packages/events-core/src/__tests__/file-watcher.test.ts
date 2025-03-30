@@ -64,6 +64,50 @@ describe("FileWatcher", () => {
     fileWatcher = new FileWatcher(mockEventBus, workspacePath);
   });
 
+  test("constructor initializes with default options", () => {
+    // Access the private field in FileWatcher for testing purposes
+    const options = (fileWatcher as any).chokidarOptions;
+
+    // Assert default options are set
+    expect(options).toMatchObject({
+      persistent: true,
+      ignored: expect.arrayContaining([
+        /(^|[\/\\])\../,
+        "**/*.tmp",
+        "**/*.log",
+        "**/node_modules/**",
+      ]),
+      ignoreInitial: false,
+      awaitWriteFinish: true,
+    });
+  });
+
+  test("constructor merges user options with defaults", () => {
+    // Arrange
+    const customOptions = {
+      ignored: ["**/*.csv"],
+      ignoreInitial: true,
+    };
+
+    // Act
+    const customWatcher = new FileWatcher(
+      mockEventBus,
+      workspacePath,
+      customOptions
+    );
+
+    // Access the private field in FileWatcher for testing purposes
+    const options = (customWatcher as any).chokidarOptions;
+
+    // Assert options are properly merged
+    expect(options).toMatchObject({
+      persistent: true, // From default
+      ignored: ["**/*.csv"], // From custom options (overriding default)
+      ignoreInitial: true, // From custom options (overriding default)
+      awaitWriteFinish: true, // From default
+    });
+  });
+
   test("startWatching initializes the file watcher", () => {
     // Act
     fileWatcher.startWatching();
@@ -119,7 +163,7 @@ describe("FileWatcher", () => {
     // Assert
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: ServerEventType.SERVER_FILE_SYSTEM,
+        eventType: "SERVER_FILE_SYSTEM",
         data: expect.objectContaining({
           eventType: "add",
           srcPath: "test.json",
@@ -142,7 +186,7 @@ describe("FileWatcher", () => {
     // Assert
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: ServerEventType.SERVER_FILE_SYSTEM,
+        eventType: "SERVER_FILE_SYSTEM",
         data: expect.objectContaining({
           eventType: "addDir",
           srcPath: "test-dir",
@@ -151,41 +195,30 @@ describe("FileWatcher", () => {
       })
     );
   });
-
-  test("reconfigureWatcher stops and restarts with new settings", async () => {
-    // Arrange
-    fileWatcher.startWatching();
-    const chokidar = require("chokidar");
-    chokidar.watch.mockClear();
-    const newPath = "/test/new-workspace";
-    const newOptions = { ignoreInitial: true };
-
-    // Act
-    await fileWatcher.reconfigureWatcher(newPath, newOptions);
-
-    // Assert
-    expect(chokidar.watch).toHaveBeenCalledWith(
-      newPath,
-      expect.objectContaining(newOptions)
-    );
-  });
 });
 
 describe("createFileWatcher", () => {
-  test("creates a FileWatcher instance with default options", () => {
+  test("creates and starts a FileWatcher instance", () => {
     // Arrange
     const mockEventBus = new EventBus({ environment: "server" });
     const workspacePath = "/test/workspace";
+
+    // Spy on FileWatcher's startWatching method
+    const startWatchingSpy = jest.spyOn(FileWatcher.prototype, "startWatching");
 
     // Act
     const fileWatcher = createFileWatcher(mockEventBus, workspacePath);
 
     // Assert
     expect(fileWatcher).toBeInstanceOf(FileWatcher);
+    expect(startWatchingSpy).toHaveBeenCalled();
     expect(fileWatcher.isActive()).toBe(true);
+
+    // Clean up
+    startWatchingSpy.mockRestore();
   });
 
-  test("creates a FileWatcher with custom options", () => {
+  test("passes custom options to the FileWatcher constructor", () => {
     // Arrange
     const mockEventBus = new EventBus({ environment: "server" });
     const workspacePath = "/test/workspace";
@@ -194,7 +227,7 @@ describe("createFileWatcher", () => {
       ignoreInitial: true,
     };
 
-    // Get the original watch method
+    // Get the chokidar module
     const chokidar = require("chokidar");
 
     // Act

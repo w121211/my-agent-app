@@ -4,25 +4,25 @@ exports[`Task Creation and Initialization Flow should correctly execute task cre
 {
   "t00-test-task": {
     "history": {
-      "task_20250311_135310.json": {
+      "task_20250330_080513.json": {
         "config": {
           "testKey": "testValue",
         },
-        "createdAt": "2025-03-11T13:53:10.724Z",
-        "currentSubtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-        "folderPath": "/var/folders/zy/qjvdjrrd5jv27gh71zh0pz480000gn/T/event-flow-test-ocw6HJ/t00-test-task",
-        "id": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+        "createdAt": "2025-03-30T08:05:13.415Z",
+        "currentSubtaskId": "dddc748e-07bc-4c7c-a146-081b1a450527",
+        "folderPath": "/var/folders/zy/qjvdjrrd5jv27gh71zh0pz480000gn/T/event-flow-test-Ttzfwf/t00-test-task",
+        "id": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
         "seqNumber": 0,
         "status": "CREATED",
         "subtasks": [
           {
             "description": "Initial planning phase",
-            "id": "4f2dbda4-4944-4057-8be3-5259399996ff",
+            "id": "dddc748e-07bc-4c7c-a146-081b1a450527",
             "inputType": "string",
             "outputType": "json",
             "seqNumber": 0,
             "status": "IN_PROGRESS",
-            "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+            "taskId": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
             "team": {
               "agent": "ASSISTANT",
             },
@@ -30,12 +30,12 @@ exports[`Task Creation and Initialization Flow should correctly execute task cre
           },
           {
             "description": "Setup initial configuration",
-            "id": "974822ca-d986-4de6-82ae-a6a14904ce06",
+            "id": "d8c21d12-751b-4f9f-bd2e-4904ea89eb4a",
             "inputType": "json",
             "outputType": "json",
             "seqNumber": 1,
             "status": "PENDING",
-            "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+            "taskId": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
             "team": {
               "agent": "FUNCTION_EXECUTOR",
               "human": "USER",
@@ -44,41 +44,41 @@ exports[`Task Creation and Initialization Flow should correctly execute task cre
           },
         ],
         "title": "Test Task",
-        "updatedAt": "2025-03-11T13:53:10.724Z",
+        "updatedAt": "2025-03-30T08:05:13.415Z",
       },
     },
     "s00-planning": {
-      "c01-20250311_135310.chat.json": {
-        "createdAt": "2025-03-11T13:53:10.734Z",
-        "id": "chat_1741701190_cb8cdcfd",
+      "c01-20250330_080513.chat.json": {
+        "createdAt": "2025-03-30T08:05:13.426Z",
+        "id": "chat_1743321913_c732239b",
         "messages": [
           {
             "content": "Initial prompt placeholder",
-            "id": "msg_1741701190_6f595bd5",
+            "id": "msg_1743321913_ea8c803c",
             "metadata": {
               "isPrompt": true,
-              "subtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-              "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+              "subtaskId": "dddc748e-07bc-4c7c-a146-081b1a450527",
+              "taskId": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
             },
             "role": "USER",
-            "timestamp": "2025-03-11T13:53:10.737Z",
+            "timestamp": "2025-03-30T08:05:13.431Z",
           },
           {
             "content": "Agent response placeholder",
-            "id": "msg_1741701190_3875900a",
+            "id": "msg_1743321913_e59966db",
             "metadata": {
-              "subtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-              "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+              "subtaskId": "dddc748e-07bc-4c7c-a146-081b1a450527",
+              "taskId": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
             },
             "role": "ASSISTANT",
-            "timestamp": "2025-03-11T13:53:10.740Z",
+            "timestamp": "2025-03-30T08:05:13.436Z",
           },
         ],
         "metadata": {},
         "status": "ACTIVE",
-        "subtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-        "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
-        "updatedAt": "2025-03-11T13:53:10.740Z",
+        "subtaskId": "dddc748e-07bc-4c7c-a146-081b1a450527",
+        "taskId": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
+        "updatedAt": "2025-03-30T08:05:13.436Z",
       },
     },
     "s01-setup": {},
@@ -86,21 +86,21 @@ exports[`Task Creation and Initialization Flow should correctly execute task cre
       "config": {
         "testKey": "testValue",
       },
-      "createdAt": "2025-03-11T13:53:10.724Z",
-      "currentSubtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-      "folderPath": "/var/folders/zy/qjvdjrrd5jv27gh71zh0pz480000gn/T/event-flow-test-ocw6HJ/t00-test-task",
-      "id": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+      "createdAt": "2025-03-30T08:05:13.415Z",
+      "currentSubtaskId": "dddc748e-07bc-4c7c-a146-081b1a450527",
+      "folderPath": "/var/folders/zy/qjvdjrrd5jv27gh71zh0pz480000gn/T/event-flow-test-Ttzfwf/t00-test-task",
+      "id": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
       "seqNumber": 0,
       "status": "CREATED",
       "subtasks": [
         {
           "description": "Initial planning phase",
-          "id": "4f2dbda4-4944-4057-8be3-5259399996ff",
+          "id": "dddc748e-07bc-4c7c-a146-081b1a450527",
           "inputType": "string",
           "outputType": "json",
           "seqNumber": 0,
           "status": "IN_PROGRESS",
-          "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+          "taskId": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
           "team": {
             "agent": "ASSISTANT",
           },
@@ -108,12 +108,12 @@ exports[`Task Creation and Initialization Flow should correctly execute task cre
         },
         {
           "description": "Setup initial configuration",
-          "id": "974822ca-d986-4de6-82ae-a6a14904ce06",
+          "id": "d8c21d12-751b-4f9f-bd2e-4904ea89eb4a",
           "inputType": "json",
           "outputType": "json",
           "seqNumber": 1,
           "status": "PENDING",
-          "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+          "taskId": "07c700ac-1d78-4eae-acb8-c084ae3fc87b",
           "team": {
             "agent": "FUNCTION_EXECUTOR",
             "human": "USER",
@@ -122,7 +122,7 @@ exports[`Task Creation and Initialization Flow should correctly execute task cre
         },
       ],
       "title": "Test Task",
-      "updatedAt": "2025-03-11T13:53:10.724Z",
+      "updatedAt": "2025-03-30T08:05:13.415Z",
     },
   },
 }
@@ -131,48 +131,48 @@ exports[`Task Creation and Initialization Flow should correctly execute task cre
 exports[`Task Creation and Initialization Flow should correctly execute task creation and initialization flow: Event Flow 1`] = `
 [
   {
-    "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+    "taskId": "TASK_ID",
     "timestamp": "TIMESTAMP",
     "type": "SERVER_TASK_FOLDER_CREATED",
   },
   {
-    "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+    "taskId": "TASK_ID",
     "timestamp": "TIMESTAMP",
     "type": "SERVER_TASK_CREATED",
   },
   {
-    "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+    "taskId": "TASK_ID",
     "timestamp": "TIMESTAMP",
     "type": "SERVER_TASK_LOADED",
   },
   {
-    "chatId": "chat_1741701190_cb8cdcfd",
-    "subtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-    "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+    "chatId": "CHAT_ID",
+    "subtaskId": "SUBTASK_ID",
+    "taskId": "TASK_ID",
     "timestamp": "TIMESTAMP",
     "type": "SERVER_CHAT_CREATED",
   },
   {
-    "chatId": "chat_1741701190_cb8cdcfd",
+    "chatId": "CHAT_ID",
     "taskId": undefined,
     "timestamp": "TIMESTAMP",
     "type": "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
   },
   {
-    "chatId": "chat_1741701190_cb8cdcfd",
+    "chatId": "CHAT_ID",
     "taskId": undefined,
     "timestamp": "TIMESTAMP",
     "type": "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
   },
   {
-    "subtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-    "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+    "subtaskId": "SUBTASK_ID",
+    "taskId": "TASK_ID",
     "timestamp": "TIMESTAMP",
     "type": "SERVER_SUBTASK_UPDATED",
   },
   {
-    "subtaskId": "4f2dbda4-4944-4057-8be3-5259399996ff",
-    "taskId": "d567bbad-42a7-4f72-8363-a0422f4f83da",
+    "subtaskId": "SUBTASK_ID",
+    "taskId": "TASK_ID",
     "timestamp": "TIMESTAMP",
     "type": "SERVER_SUBTASK_STARTED",
   },

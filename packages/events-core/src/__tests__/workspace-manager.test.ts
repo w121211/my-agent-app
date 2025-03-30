@@ -26,7 +26,7 @@ describe("WorkspaceManager", () => {
     id: "task-123",
     seqNumber: 1,
     title: "Test Task",
-    status: TaskStatus.CREATED,
+    status: "CREATED",
     subtasks: [
       {
         id: "subtask-1",
@@ -34,9 +34,9 @@ describe("WorkspaceManager", () => {
         seqNumber: 0,
         title: "Planning",
         description: "Initial planning",
-        status: SubtaskStatus.PENDING,
+        status: "PENDING",
         team: {
-          agent: Role.ASSISTANT,
+          agent: "ASSISTANT",
         },
         inputType: "string",
         outputType: "json",
@@ -47,10 +47,10 @@ describe("WorkspaceManager", () => {
         seqNumber: 1,
         title: "Setup",
         description: "Setup environment",
-        status: SubtaskStatus.PENDING,
+        status: "PENDING",
         team: {
-          agent: Role.FUNCTION_EXECUTOR,
-          human: Role.USER,
+          agent: "FUNCTION_EXECUTOR",
+          human: "USER",
         },
         inputType: "json",
         outputType: "json",
@@ -69,12 +69,12 @@ describe("WorkspaceManager", () => {
     messages: [
       {
         id: "msg-1",
-        role: Role.USER,
+        role: "USER",
         content: "Hello, this is a test message",
         timestamp: new Date("2024-02-25T00:00:00Z"),
       },
     ],
-    status: ChatStatus.ACTIVE,
+    status: "ACTIVE",
     createdAt: new Date("2024-02-25T00:00:00Z"),
     updatedAt: new Date("2024-02-25T00:00:00Z"),
   };

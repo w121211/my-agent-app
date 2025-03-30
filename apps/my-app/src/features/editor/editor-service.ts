@@ -21,8 +21,28 @@ import {
   ServerTestEvent,
   ChatMetadata,
 } from "@repo/events-core/event-types";
-import { useEditorStore, ItemType, FolderItem } from "./editor-store";
+import {
+  useEditorStore,
+  TreeNodeItemType,
+  hasChildrenNodeItems,
+  isChatTreeNodeItem,
+  isTaskTreeNodeItem,
+  isSubtaskTreeNodeItem,
+  ChatTreeNodeItem,
+} from "./editor-store";
 import { DI_TOKENS } from "../../lib/di/di-tokens";
+import {
+  UIPanelToggleEvent,
+  UIItemSelectEvent,
+  UIFolderToggleEvent,
+  UILayoutChangeEvent,
+  UIChatMessageSubmitEvent,
+  UICreateTaskEvent,
+  UICreateSubtaskEvent,
+  UICreateChatEvent,
+  UIPromptSubmitEvent,
+} from "./ui-types";
+import { UIPanelType, UILayoutType, UIUserStatus } from "./ui-types";
 
 @injectable()
 export class EditorService {
@@ -34,6 +54,7 @@ export class EditorService {
   ) {
     this.logger = logger || new Logger<ILogObj>({ name: "EditorService" });
     this.registerEventHandlers();
+    this.registerUIEventHandlers();
 
     this.logger.debug("EditorService initialized");
   }
@@ -80,7 +101,7 @@ export class EditorService {
         if (subtaskItem) {
           store.setSelectedItem(subtaskItem);
           if (
-            subtaskItem.type === "folder" &&
+            hasChildrenNodeItems(subtaskItem) &&
             !store.isExpanded(subtaskItem.id)
           ) {
             store.toggleFolder(subtaskItem.id);
@@ -120,7 +141,7 @@ export class EditorService {
       "SERVER_CHAT_CREATED",
       (event: ServerChatCreated) => {
         const subtaskItem = this.findItemById(event.subtaskId);
-        if (subtaskItem && subtaskItem.type === "folder") {
+        if (subtaskItem && hasChildrenNodeItems(subtaskItem)) {
           store.createNewChat(subtaskItem.id);
         }
         this.logger.debug(`Chat created: ${event.chatId}`);
@@ -161,7 +182,7 @@ export class EditorService {
       "SERVER_MESSAGE_RECEIVED",
       (event: ServerMessageReceived) => {
         const chatItem = this.findItemById(event.chatId);
-        if (chatItem && chatItem.type === "chat") {
+        if (chatItem && isChatTreeNodeItem(chatItem)) {
           store.sendMessage(chatItem.id, event.message.content);
         }
         this.logger.debug(`Message received for chat: ${event.chatId}`);
@@ -187,18 +208,125 @@ export class EditorService {
     this.logger.debug("Registered event handlers for editor events");
   }
 
+  private registerUIEventHandlers(): void {
+    const store = useEditorStore.getState();
+
+    // UI Panel Toggle
+    this.eventBus.subscribe<UIPanelToggleEvent>("UI_PANEL_TOGGLE", (event) => {
+      store.setPanelVisibility(
+        event.panelType as keyof UIPanelVisibility,
+        event.isVisible
+      );
+      this.logger.debug(`Panel ${event.panelType} toggled: ${event.isVisible}`);
+    });
+
+    // UI Item Select
+    this.eventBus.subscribe<UIItemSelectEvent>("UI_ITEM_SELECT", (event) => {
+      const item = this.findItemById(event.itemId);
+      if (item) {
+        store.setSelectedItem(item);
+        this.logger.debug(`Item selected: ${event.itemId}`);
+      } else {
+        this.logger.warn(`Item not found for selection: ${event.itemId}`);
+      }
+    });
+
+    // UI Folder Toggle
+    this.eventBus.subscribe<UIFolderToggleEvent>(
+      "UI_FOLDER_TOGGLE",
+      (event) => {
+        store.toggleFolder(event.folderId);
+        this.logger.debug(`Folder toggled: ${event.folderId}`);
+      }
+    );
+
+    // UI Layout Change
+    this.eventBus.subscribe<UILayoutChangeEvent>(
+      "UI_LAYOUT_CHANGE",
+      (event) => {
+        store.setLayout(event.layout);
+        this.logger.debug(`Layout changed to: ${event.layout}`);
+      }
+    );
+
+    // UI Chat Message Submit
+    this.eventBus.subscribe<UIChatMessageSubmitEvent>(
+      "UI_CHAT_MESSAGE_SUBMIT",
+      (event) => {
+        this.clientSubmitMessage(event.chatId, event.content);
+        this.logger.debug(`Chat message submitted for chat: ${event.chatId}`);
+      }
+    );
+
+    // UI Create Task
+    this.eventBus.subscribe<UICreateTaskEvent>("UI_CREATE_TASK", (event) => {
+      this.clientCreateTask(event.taskName, {});
+      this.logger.debug(`Create task requested: ${event.taskName}`);
+    });
+
+    // UI Create Subtask
+    this.eventBus.subscribe<UICreateSubtaskEvent>(
+      "UI_CREATE_SUBTASK",
+      (event) => {
+        // Currently no direct client command for subtask creation
+        this.logger.debug(
+          `Create subtask requested: ${event.subtaskName} for task ${event.taskId}`
+        );
+      }
+    );
+
+    // UI Create Chat
+    this.eventBus.subscribe<UICreateChatEvent>("UI_CREATE_CHAT", (event) => {
+      const item = this.findItemById(event.parentId);
+      if (item) {
+        if (hasChildrenNodeItems(item)) {
+          if (isTaskTreeNodeItem(item)) {
+            this.clientStartNewChat(item.id, item.id);
+          } else if (isSubtaskTreeNodeItem(item)) {
+            this.clientStartNewChat(item.data.taskId, item.id);
+          }
+          this.logger.debug(
+            `Create chat requested for parent: ${event.parentId}`
+          );
+        } else {
+          this.logger.warn(
+            `Parent does not support children: ${event.parentId}`
+          );
+        }
+      } else {
+        this.logger.warn(`Parent not found for new chat: ${event.parentId}`);
+      }
+    });
+
+    // UI Prompt Submit
+    this.eventBus.subscribe<UIPromptSubmitEvent>(
+      "UI_PROMPT_SUBMIT",
+      (event) => {
+        if (event.promptType === "task") {
+          this.clientCreateTask(event.content, {});
+        } else if (event.promptType === "chat") {
+          // Handle chat creation with initial prompt
+          // Would need context for which task/subtask this belongs to
+          this.logger.debug(`Prompt submitted for new chat: ${event.content}`);
+        }
+      }
+    );
+
+    this.logger.debug("Registered UI event handlers");
+  }
+
   // Helper method to find an item by ID in the editor store
-  private findItemById(id: string): ItemType | null {
+  private findItemById(id: string): TreeNodeItemType | null {
     const root = useEditorStore.getState().data;
 
     const findItemRecursive = (
-      item: ItemType,
+      item: TreeNodeItemType,
       targetId: string
-    ): ItemType | null => {
+    ): TreeNodeItemType | null => {
       if (item.id === targetId) return item;
 
-      if ((item as FolderItem).children) {
-        for (const child of (item as FolderItem).children!) {
+      if (hasChildrenNodeItems(item)) {
+        for (const child of item.children) {
           const found = findItemRecursive(child, targetId);
           if (found) return found;
         }
@@ -208,6 +336,17 @@ export class EditorService {
     };
 
     return findItemRecursive(root, id);
+  }
+
+  // Helper method to create new chat and get the created item back
+  private createChat(parentId: string): ChatTreeNodeItem | null {
+    const store = useEditorStore.getState();
+    try {
+      return store.createNewChat(parentId);
+    } catch (error) {
+      this.logger.error(`Failed to create chat in ${parentId}: ${error}`);
+      return null;
+    }
   }
 
   // Public methods to emit client events - renamed to better reflect client event emission
@@ -273,6 +412,15 @@ export class EditorService {
       metadata,
     };
     this.eventBus.emit(event);
+
+    // This is an immediate local action to improve UI responsiveness
+    // The server event will eventually ensure data consistency
+    if (subtaskId) {
+      const subtaskItem = this.findItemById(subtaskId);
+      if (subtaskItem && hasChildrenNodeItems(subtaskItem)) {
+        this.createChat(subtaskItem.id);
+      }
+    }
   }
 
   public clientSubmitInitialPrompt(chatId: string, prompt: string): void {
@@ -293,6 +441,14 @@ export class EditorService {
       content,
     };
     this.eventBus.emit(event);
+
+    // Local state update for immediate UI feedback
+    // The actual server response will come later
+    try {
+      useEditorStore.getState().sendMessage(chatId, content);
+    } catch (error) {
+      this.logger.error(`Failed to send message locally: ${error}`);
+    }
   }
 
   public clientApproveWork(chatId: string, approvedWork?: string): void {
@@ -312,5 +468,120 @@ export class EditorService {
       message,
     };
     this.eventBus.emit(event);
+  }
+
+  // UI event emitters
+  public uiTogglePanel(panelType: UIPanelType, isVisible: boolean): void {
+    const event: UIPanelToggleEvent = {
+      eventType: "UI_PANEL_TOGGLE",
+      timestamp: new Date(),
+      panelType,
+      isVisible,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiSelectItem(itemId: string): void {
+    const event: UIItemSelectEvent = {
+      eventType: "UI_ITEM_SELECT",
+      timestamp: new Date(),
+      itemId,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiToggleFolder(folderId: string): void {
+    const isExpanded = !useEditorStore.getState().isExpanded(folderId);
+    const event: UIFolderToggleEvent = {
+      eventType: "UI_FOLDER_TOGGLE",
+      timestamp: new Date(),
+      folderId,
+      isExpanded,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiChangeLayout(layout: UILayoutType): void {
+    const event: UILayoutChangeEvent = {
+      eventType: "UI_LAYOUT_CHANGE",
+      timestamp: new Date(),
+      layout,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiSubmitChatMessage(chatId: string, content: string): void {
+    const event: UIChatMessageSubmitEvent = {
+      eventType: "UI_CHAT_MESSAGE_SUBMIT",
+      timestamp: new Date(),
+      chatId,
+      content,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiCreateTask(taskName: string): void {
+    const event: UICreateTaskEvent = {
+      eventType: "UI_CREATE_TASK",
+      timestamp: new Date(),
+      taskName,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiCreateSubtask(taskId: string, subtaskName: string): void {
+    const event: UICreateSubtaskEvent = {
+      eventType: "UI_CREATE_SUBTASK",
+      timestamp: new Date(),
+      taskId,
+      subtaskName,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiCreateChat(parentId: string): void {
+    const event: UICreateChatEvent = {
+      eventType: "UI_CREATE_CHAT",
+      timestamp: new Date(),
+      parentId,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiSubmitPrompt(promptType: "chat" | "task", content: string): void {
+    const event: UIPromptSubmitEvent = {
+      eventType: "UI_PROMPT_SUBMIT",
+      timestamp: new Date(),
+      promptType,
+      content,
+    };
+    this.eventBus.emit(event);
+  }
+
+  // Utility methods for UI components
+  public togglePanelVisibility(panel: UIPanelType): void {
+    const panelVisibility = useEditorStore.getState().panelVisibility;
+    const isCurrentlyVisible =
+      panelVisibility[panel as keyof UIPanelVisibility];
+    this.uiTogglePanel(panel, !isCurrentlyVisible);
+  }
+
+  public toggleLayout(): void {
+    const currentLayout = useEditorStore.getState().layout;
+    const newLayout =
+      currentLayout === "two-column" ? "three-column" : "two-column";
+    this.uiChangeLayout(newLayout);
+  }
+
+  public openPromptModal(type: "chat" | "task"): void {
+    useEditorStore.getState().setPromptModal(true, type);
+  }
+
+  public closePromptModal(): void {
+    useEditorStore.getState().setPromptModal(false, "task");
+  }
+
+  public updateUserStatus(userId: string, status: UIUserStatus): void {
+    useEditorStore.getState().updateUserStatus(userId, status);
   }
 }

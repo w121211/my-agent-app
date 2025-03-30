@@ -1,3 +1,375 @@
+
+
+
+
+
+
+Editor store, service 是用於前端的，若將這兩個 files 一起放在 events-core package 會比較好嗎？
+請分析＆做出你的選擇，不用code
+
+
+請將 editor page 導入 DI
+
+- Typescript, React, Zustand, Next.js
+- Env：browser
+- Follow typescript best practices
+-  不用標 React.FC，讓 typescript 自動推導 type
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請將 editor service 也加入 DI
+
+針對 DI，我現在有多個 services，所以我是都透過 container 來註冊這些 services 嗎？
+請分析，不用code
+
+
+這是我目前的 mono repo
+若把 my-app/src/features/editor 中的 editor-service、editor-store 獨立成一個 mono repo ，你覺得如何？
+請分析＆做選擇
+
+
+
+
+
+
+請寫 editor service 的 Jest test
+
+請寫 editor service 的 集成測試，測試實際運作
+- 不要 mock
+
+- Typescript, Jest
+- Test env：browser
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請參考事件流的設計，針對 editor store 寫一個editor service
+- 當 editor service 從 event bus 收到後端 event 後，會做相應的對應
+- 忽略 file explorer service 中定義的事件，那是測試用
+
+事件定義為：
+/**
+ * Events originating from clients
+ */
+export const ClientEventType = [
+  // Client commands
+  "CLIENT_CREATE_TASK_COMMAND",
+  "CLIENT_START_TASK_COMMAND",
+  "CLIENT_START_SUBTASK_COMMAND",
+  "CLIENT_COMPLETE_SUBTASK_COMMAND",
+  "CLIENT_START_NEW_CHAT_COMMAND",
+  "CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND",
+  "CLIENT_SUBMIT_MESSAGE_COMMAND",
+
+  // Client events
+  "CLIENT_APPROVE_WORK",
+  "CLIENT_TEST_EVENT",
+] as const;
+
+export type ClientEventType = (typeof ClientEventType)[number];
+
+/**
+ * Events originating from the server
+ *
+ * TODO: Rename to ServerEventKind?
+ */
+export const ServerEventType = [
+  // Task related
+  "SERVER_TASK_CREATED",
+  "SERVER_TASK_FOLDER_CREATED",
+  "SERVER_TASK_INITIALIZED",
+  "SERVER_TASK_LOADED",
+
+  // Subtask related
+  "SERVER_SUBTASK_STARTED",
+  "SERVER_SUBTASK_COMPLETED",
+  "SERVER_SUBTASK_UPDATED",
+  "SERVER_NEXT_SUBTASK_TRIGGERED",
+
+  // Chat related
+  "SERVER_CHAT_CREATED",
+  "SERVER_CHAT_FILE_CREATED",
+  "SERVER_CHAT_UPDATED",
+  "SERVER_AGENT_PROCESSED_MESSAGE",
+  "SERVER_AGENT_RESPONSE_GENERATED",
+  "SERVER_MESSAGE_RECEIVED",
+  "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
+
+  // System related
+  "SERVER_FILE_SYSTEM",
+  "SERVER_TEST_EVENT",
+] as const;
+
+
+
+
+請改寫 EditorUI
+- 增加 websocket
+
+
+請參考 page.tsx & 新的 MVP UI設計，寫一個前端 page
+- 用 Zustand 做 mock data
+
+
+
+
+
+
+請修改 page.tsx
+- chat 要能實際送出
+
+請參考UI設計，寫完整版＆mvp版的 svg
+
+請增修 ui 設計
+- 當點擊[新任務]時，會在中間欄顯示 新任務的創建視窗，類似 chat ，透過與 ai 互動式創建任務
+
+
+
+若 workspace 的 file 有所變動、例如new file、file update、new folder、rename, …
+要如何同步給前端？
+
+最簡單的方式是不是直接把更新的 workspace 給前端？
+
+
+
+請改成不用 context menu，直接讓每個 FileExplorerNode 有一個 menu (類似 notion 的 file explorer）
+
+
+
+點 new file, new folder 後不會出現新的 file, folder
+
+ContextMenu 似乎有點問題
+例如左鍵點 new file -> 不會印出 debug: handleCreateFile
+
+
+我發現他不會
+
+
+
+        fileExplorerService.createFile(parentPath, newItemName);
+
+為什麼不直接用 eventBus.emit(...) ？
+請分析＆做出你的選擇，不用code
+
+
+
+event bus, servcices 這類沒有必要與 react 綁定，可以獨立出來，我是應該要改成 DI ，還是利用像是 zustand 之類的 state store 會比較適合？
+請分析＆做出你的選擇，不用 code
+
+event bus, servcices 這類沒有必要與 react 綁定，可以獨立出來，請改成用 DI 方式
+- 用 InversifyJS
+- Event bus、websocket client 都是來自外部package，所以不要改動
+
+- Typescript, React, Zustand
+- Env：browser
+- Follow typescript best practices
+-  不用標 React.FC，讓 typescript 自動推導 type
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+InversifyJS
+
+export const useFileExplorerService = (): FileExplorerService => {
+  const eventBus = useEventBus();
+
+我不喜歡這種寫法，不夠 explicit，不 modularize
+有哪些其他的主流做法？
+
+
+
+
+
+請按照更新的 file-explorer-types，更新 file-explorer-service
+
+
+請修改 event types
+- 把 enum 改成用 string
+- 需要考慮如何應對
+
+// Add to client events
+    Object.values(ClientEventType).forEach((type) => {
+      unsubscribers.push(this.subscribe(type, handler));
+    });
+
+請分析，不用code
+
+若把 event types 改成用 zod 你覺得適合嗎？
+
+請修改 event types，將前端的 file explorer event 加進去
+-  file explorer event 是屬於 client event
+
+
+
+export interface BaseEvent {
+  eventType: EventType;
+  timestamp: Date;
+  correlationId?: string;
+}
+目前的 eventType: EventType; 被限縮在 EventType enum 中，若要擴充就必須修改 enum，不靈活，有哪些方法？
+不用code
+
+在現代 ts 實務中， enum 跟 string 哪個更為主流？
+
+
+
+
+
+當前這些 file explorer 都是 user 對 ui 的操作，屬於前端範疇
+要怎樣在 event types 的基礎上增加 file explorer types？
+請給幾個做法，不用code
+
+但方法三要怎樣保持一個 event union <- event bus 會需要
+或者其實應該是修改 event bus 讓他更有彈性？
+
+export interface IEventBus {
+  emit<T extends EventUnion>(event: T): Promise<void>;
+  subscribe<T extends EventUnion>(
+    eventType: EventType,
+    handler: EventHandler<T>
+  ): () => void;
+  subscribeToAllClientEvents(
+    handler: EventHandler<ClientEventUnion>
+  ): () => void;
+  subscribeToAllServerEvents(
+    handler: EventHandler<ServerEventUnion>
+  ): () => void;
+  unsubscribe<T extends EventUnion>(
+    eventType: EventType,
+    handler: EventHandler<T>
+  ): void;
+  unsubscribeAll(eventType: EventType): void;
+  hasHandlers(eventType: EventType): boolean;
+  getHandlerCount(eventType: EventType): number;
+  clear(): void;
+}
+
+如果把它改成 <T extends BaseEvent> 是不是可行？
+
+這種情況下，EventUnion還有需要嗎？
+
+
+
+請寫一個 file explorer component，類似 vs code 的 file explorer
+- 用 event bus、事件驅動系統
+- 用 Zustand
+- 先不需要考慮後端、websocket
+
+現在正在開發前端的 file explorer
+請寫一個測試用的 explorer component，給 dummy 資料，寫一些簡單的 file 事件，用於測試事件系統與 component 的整合
+
+
+
+現在正在開發前端的 file explorer，用於瀏覽使用者的 workspace folder（後端）
+目前缺乏初始 workspace 的內容，要如何取得資料？
+請分析，不用code
+
+參考 FileExplorer，加上 Zustand
+
+
+
+
+請參考 basic server 寫一個用於監控使用者 workspace ＆ 傳輸事件的 server
+- 用 file watcher
+
+
+請寫一個前端 component：explorer （類似 vs code explorer），用於瀏覽使用者的 workspace folder
+- 後端有file watcher （chokidar）監控 workspace folder
+- 所有的資料夾變動都透過事件傳輸
+- 用 useEventBus 取得 event bus
+- 先考慮最基本的功能就好
+
+
+
+- Typescript, React, Zustand
+- Env：browser
+- Follow typescript best practices
+-  不用標 React.FC，讓 typescript 自動推導 type
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+實務上react會用 DI pattern嗎？還是其實不主流？
+
+前端 react 下要實現 singleton 除了用 context  外還有哪些方法？
+
+Zustand 背後是不是其實也是用了 context？
+
+
+
+
+
+logger 應該要用注入，還是每個 class 自己有一個獨立的？
+
+現在開發中，注入 logger vs logger factory 哪個比較主流？
+
+
+
+
+請在 websocket-client-provider 創建一個 event bus & 增加一個 useEventBus
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript
+- Env：browser
+- Follow typescript best practices
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+若在 websocket-client-provider 中同時 init 一個 event bus，用 useWebSocketEventClient 時同時會給 event client & event bus，你覺得這樣的設計如何？
+請分析，不用寫code
+
+
+
+請寫一個 demo script 跑一個 event server
+- 這個 server 是用來測試外部的 event client，會傳送 client test event
+- 需要持續跑
+
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript、環境：node
+- Follow typescript best practices
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+請基於新的 relay & event package，寫一個 WebSocketTestPanel
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript. Follow typescript best practices
+- Next.js
+- Env: browser
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+
 我在開發一個 next.js 前後端 app
 - 用 typescript
 - 事件驅動系統

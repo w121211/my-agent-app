@@ -4,8 +4,6 @@ import {
   createServerEventBus,
 } from "../event-bus.js";
 import {
-  ClientEventType,
-  ServerEventType,
   ClientTestEvent,
   ClientApproveWork,
   ServerChatCreated,
@@ -42,7 +40,7 @@ describe("EventBus", () => {
     it("should invoke handler when an event is emitted", async () => {
       // Setup
       const mockHandler = jest.fn();
-      const eventType = ClientEventType.CLIENT_TEST_EVENT;
+      const eventType = "CLIENT_TEST_EVENT";
       const testEvent: ClientTestEvent = {
         eventType,
         timestamp: new Date(),
@@ -64,7 +62,7 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const eventType = ClientEventType.CLIENT_TEST_EVENT;
+      const eventType = "CLIENT_TEST_EVENT";
       const testEvent: ClientTestEvent = {
         eventType,
         timestamp: new Date(),
@@ -86,8 +84,8 @@ describe("EventBus", () => {
     it("should not invoke handlers for other event types", async () => {
       // Setup
       const mockHandler = jest.fn();
-      const subscribedType = ClientEventType.CLIENT_TEST_EVENT;
-      const differentType = ClientEventType.CLIENT_APPROVE_WORK;
+      const subscribedType = "CLIENT_TEST_EVENT";
+      const differentType = "CLIENT_APPROVE_WORK";
       const testEvent: ClientApproveWork = {
         eventType: differentType,
         timestamp: new Date(),
@@ -114,7 +112,7 @@ describe("EventBus", () => {
         result.push("async handler completed");
       };
 
-      const eventType = ClientEventType.CLIENT_TEST_EVENT;
+      const eventType = "CLIENT_TEST_EVENT";
       const testEvent: ClientTestEvent = {
         eventType,
         timestamp: new Date(),
@@ -137,7 +135,7 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const eventType = ClientEventType.CLIENT_TEST_EVENT;
+      const eventType = "CLIENT_TEST_EVENT";
       const testEvent: ClientTestEvent = {
         eventType,
         timestamp: new Date(),
@@ -162,7 +160,7 @@ describe("EventBus", () => {
     it("should do nothing when unsubscribing a non-existent handler", () => {
       // Setup
       const mockHandler = jest.fn();
-      const eventType = ClientEventType.CLIENT_TEST_EVENT;
+      const eventType = "CLIENT_TEST_EVENT";
 
       // Act & Assert (should not throw)
       expect(() => {
@@ -176,7 +174,7 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const eventType = ClientEventType.CLIENT_TEST_EVENT;
+      const eventType = "CLIENT_TEST_EVENT";
       const testEvent: ClientTestEvent = {
         eventType,
         timestamp: new Date(),
@@ -203,7 +201,7 @@ describe("EventBus", () => {
     it("should properly track if handlers exist", () => {
       // Setup
       const mockHandler = jest.fn();
-      const eventType = ClientEventType.CLIENT_TEST_EVENT;
+      const eventType = "CLIENT_TEST_EVENT";
 
       // Initially no handlers
       expect(eventBus.hasHandlers(eventType)).toBe(false);
@@ -236,8 +234,8 @@ describe("EventBus", () => {
       // Setup
       const mockClientHandler = jest.fn();
       const mockServerHandler = jest.fn();
-      const clientEventType = ClientEventType.CLIENT_TEST_EVENT;
-      const serverEventType = ServerEventType.SERVER_TEST_EVENT;
+      const clientEventType = "CLIENT_TEST_EVENT";
+      const serverEventType = "SERVER_TEST_EVENT";
 
       const clientEvent: ClientTestEvent = {
         eventType: clientEventType,
@@ -280,14 +278,14 @@ describe("EventBus", () => {
 
       // Create test events for different client event types
       const testEvent1: ClientTestEvent = {
-        eventType: ClientEventType.CLIENT_TEST_EVENT,
+        eventType: "CLIENT_TEST_EVENT",
         timestamp: new Date(),
         message: "Test 1",
       };
 
       // Need to create an appropriate event type for CLIENT_APPROVE_WORK
       const testEvent2: ClientApproveWork = {
-        eventType: ClientEventType.CLIENT_APPROVE_WORK,
+        eventType: "CLIENT_APPROVE_WORK",
         timestamp: new Date(),
         chatId: "test-chat-id",
         approvedWork: "approved work",
@@ -307,7 +305,7 @@ describe("EventBus", () => {
       // Setup
       const mockHandler = jest.fn();
       const testEvent: ClientTestEvent = {
-        eventType: ClientEventType.CLIENT_TEST_EVENT,
+        eventType: "CLIENT_TEST_EVENT",
         timestamp: new Date(),
         message: "Test message",
       };
@@ -336,13 +334,13 @@ describe("EventBus", () => {
 
       // Create test events for different server event types
       const testEvent1: ServerTestEvent = {
-        eventType: ServerEventType.SERVER_TEST_EVENT,
+        eventType: "SERVER_TEST_EVENT",
         timestamp: new Date(),
         message: "Test 1",
       };
 
       const testEvent2: ServerChatCreated = {
-        eventType: ServerEventType.SERVER_CHAT_CREATED,
+        eventType: "SERVER_CHAT_CREATED",
         timestamp: new Date(),
         chatId: "test-chat-id",
         taskId: "test-task-id",

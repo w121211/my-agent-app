@@ -32,14 +32,6 @@
   - server events -> websocket forward to all clients
   - on receive client events through websocket -> event bus emit
 
-- MVP 階段，不用過度設計，保持簡潔清楚
-- Typescript、環境：node
-- Follow typescript best practices
-- Logger 用 tslog
-- 避免用 as ，確保 type safe，follow typescript best practices
-- 不需要 try, catch，只需要throw error
-- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
-
 
 
 

@@ -98,19 +98,19 @@ export interface Task {
   updatedAt: Date;
 }
 
-export interface MessageMetadata {
+export interface ChatMessageMetadata {
   subtaskId?: string;
   taskId?: string;
   functionCalls?: Record<string, unknown>[];
   isPrompt?: boolean;
 }
 
-export interface Message {
+export interface ChatMessage {
   id: string;
   role: Role;
   content: string;
   timestamp: Date;
-  metadata?: MessageMetadata;
+  metadata?: ChatMessageMetadata;
 }
 
 export interface ChatMetadata {
@@ -123,7 +123,7 @@ export interface Chat {
   id: string;
   taskId: string;
   subtaskId: string;
-  messages: Message[];
+  messages: ChatMessage[];
   status: ChatStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -136,7 +136,7 @@ export interface ChatFile {
   createdAt: Date;
   updatedAt: Date;
   title?: string;
-  messages: Message[];
+  messages: ChatMessage[];
 }
 
 /**
@@ -304,13 +304,13 @@ export interface ServerAgentProcessedMessage extends BaseServerEvent {
 export interface ServerAgentResponseGenerated extends BaseServerEvent {
   eventType: "SERVER_AGENT_RESPONSE_GENERATED";
   chatId: string;
-  response: Message;
+  response: ChatMessage;
 }
 
 export interface ServerMessageReceived extends BaseServerEvent {
   eventType: "SERVER_MESSAGE_RECEIVED";
   chatId: string;
-  message: Message;
+  message: ChatMessage;
 }
 
 export interface ServerMessageSavedToChatFile extends BaseServerEvent {

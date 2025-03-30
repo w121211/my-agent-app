@@ -56,7 +56,7 @@ describe("TaskService", () => {
           id: taskId,
           seqNumber: 1,
           title: "Test Task",
-          status: TaskStatus.CREATED,
+          status: "CREATED",
           subtasks: [
             {
               id: "subtask-1",
@@ -64,7 +64,7 @@ describe("TaskService", () => {
               seqNumber: 0,
               title: "First Subtask",
               description: "First subtask description",
-              status: SubtaskStatus.PENDING,
+              status: "PENDING",
               team: { agent: "ASSISTANT" },
               inputType: "string",
               outputType: "json",
@@ -75,7 +75,7 @@ describe("TaskService", () => {
               seqNumber: 1,
               title: "Second Subtask",
               description: "Second subtask description",
-              status: SubtaskStatus.PENDING,
+              status: "PENDING",
               team: { agent: "FUNCTION_EXECUTOR", human: "USER" },
               inputType: "json",
               outputType: "json",
@@ -104,7 +104,7 @@ describe("TaskService", () => {
     it("should create a task, save it, and emit appropriate events", async () => {
       // Arrange
       const command: ClientCreateTaskCommand = {
-        eventType: ClientEventType.CLIENT_CREATE_TASK_COMMAND,
+        eventType: "CLIENT_CREATE_TASK_COMMAND",
         taskName: "New Test Task",
         taskConfig: { testKey: "testValue" },
         timestamp: new Date(),
@@ -122,20 +122,20 @@ describe("TaskService", () => {
       const taskArg = (taskRepo.save as jest.Mock).mock.calls[0][0] as Task;
       expect(taskArg.title).toBe(command.taskName);
       expect(taskArg.config).toEqual(command.taskConfig);
-      expect(taskArg.status).toBe(TaskStatus.CREATED);
+      expect(taskArg.status).toBe("CREATED");
       expect(taskArg.subtasks.length).toBe(2); // Default Planning and Setup subtasks
 
       // Check emitted events
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ServerEventType.SERVER_TASK_FOLDER_CREATED,
+          eventType: "SERVER_TASK_FOLDER_CREATED",
           correlationId: command.correlationId,
         })
       );
 
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ServerEventType.SERVER_TASK_CREATED,
+          eventType: "SERVER_TASK_CREATED",
           taskName: command.taskName,
           config: command.taskConfig,
           correlationId: command.correlationId,
@@ -144,7 +144,7 @@ describe("TaskService", () => {
 
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ClientEventType.CLIENT_START_TASK_COMMAND,
+          eventType: "CLIENT_START_TASK_COMMAND",
           correlationId: command.correlationId,
         })
       );
@@ -155,7 +155,7 @@ describe("TaskService", () => {
     it("should load task and start the first subtask", async () => {
       // Arrange
       const command: ClientStartTaskCommand = {
-        eventType: ClientEventType.CLIENT_START_TASK_COMMAND,
+        eventType: "CLIENT_START_TASK_COMMAND",
         taskId: "task-123",
         timestamp: new Date(),
         correlationId: "corr-456",
@@ -170,7 +170,7 @@ describe("TaskService", () => {
       // Check emitted events
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ServerEventType.SERVER_TASK_LOADED,
+          eventType: "SERVER_TASK_LOADED",
           taskId: command.taskId,
           correlationId: command.correlationId,
         })
@@ -178,7 +178,7 @@ describe("TaskService", () => {
 
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+          eventType: "CLIENT_START_SUBTASK_COMMAND",
           taskId: command.taskId,
           subtaskId: "subtask-1", // First subtask ID
           correlationId: command.correlationId,
@@ -189,7 +189,7 @@ describe("TaskService", () => {
     it("should throw error if task not found", async () => {
       // Arrange
       const command: ClientStartTaskCommand = {
-        eventType: ClientEventType.CLIENT_START_TASK_COMMAND,
+        eventType: "CLIENT_START_TASK_COMMAND",
         taskId: "non-existent-task",
         timestamp: new Date(),
       };
@@ -208,7 +208,7 @@ describe("TaskService", () => {
     it("should start the next subtask when current one is completed", async () => {
       // Arrange
       const event: ServerNextSubtaskTriggered = {
-        eventType: ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
         taskId: "task-123",
         currentSubtaskId: "subtask-1",
         timestamp: new Date(),
@@ -220,7 +220,7 @@ describe("TaskService", () => {
         id: "task-123",
         seqNumber: 1,
         title: "Test Task",
-        status: TaskStatus.IN_PROGRESS,
+        status: "IN_PROGRESS",
         subtasks: [
           {
             id: "subtask-1",
@@ -228,7 +228,7 @@ describe("TaskService", () => {
             seqNumber: 0,
             title: "First Subtask",
             description: "First subtask description",
-            status: SubtaskStatus.COMPLETED, // Already completed
+            status: "COMPLETED", // Already completed
             team: { agent: "ASSISTANT" },
             inputType: "string",
             outputType: "json",
@@ -239,7 +239,7 @@ describe("TaskService", () => {
             seqNumber: 1,
             title: "Second Subtask",
             description: "Second subtask description",
-            status: SubtaskStatus.PENDING,
+            status: "PENDING",
             team: { agent: "FUNCTION_EXECUTOR", human: "USER" },
             inputType: "json",
             outputType: "json",
@@ -257,7 +257,7 @@ describe("TaskService", () => {
       // Assert
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+          eventType: "CLIENT_START_SUBTASK_COMMAND",
           taskId: "task-123",
           subtaskId: "subtask-2", // Next subtask
           correlationId: event.correlationId,
@@ -268,7 +268,7 @@ describe("TaskService", () => {
     it("should complete the task if no more subtasks", async () => {
       // Arrange
       const event: ServerNextSubtaskTriggered = {
-        eventType: ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
         taskId: "task-123",
         currentSubtaskId: "subtask-2", // Last subtask
         timestamp: new Date(),
@@ -279,7 +279,7 @@ describe("TaskService", () => {
         id: "task-123",
         seqNumber: 1,
         title: "Test Task",
-        status: TaskStatus.IN_PROGRESS,
+        status: "IN_PROGRESS",
         subtasks: [
           {
             id: "subtask-1",
@@ -287,7 +287,7 @@ describe("TaskService", () => {
             seqNumber: 0,
             title: "First Subtask",
             description: "First subtask description",
-            status: SubtaskStatus.COMPLETED,
+            status: "COMPLETED",
             team: { agent: "ASSISTANT" },
             inputType: "string",
             outputType: "json",
@@ -298,7 +298,7 @@ describe("TaskService", () => {
             seqNumber: 1,
             title: "Second Subtask",
             description: "Second subtask description",
-            status: SubtaskStatus.COMPLETED, // Last subtask completed
+            status: "COMPLETED", // Last subtask completed
             team: { agent: "FUNCTION_EXECUTOR", human: "USER" },
             inputType: "json",
             outputType: "json",
@@ -320,13 +320,13 @@ describe("TaskService", () => {
 
       // Check task status was updated to COMPLETED
       const savedTask = (taskRepo.save as jest.Mock).mock.calls[0][0];
-      expect(savedTask.status).toBe(TaskStatus.COMPLETED);
+      expect(savedTask.status).toBe("COMPLETED");
     });
 
     it("should throw error if current subtask is not completed", async () => {
       // Arrange
       const event: ServerNextSubtaskTriggered = {
-        eventType: ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
         taskId: "task-123",
         currentSubtaskId: "subtask-1",
         timestamp: new Date(),
@@ -340,7 +340,7 @@ describe("TaskService", () => {
             id: "subtask-1",
             taskId: "task-123",
             seqNumber: 0,
-            status: SubtaskStatus.IN_PROGRESS, // Not completed
+            status: "IN_PROGRESS", // Not completed
           },
         ],
       });
@@ -362,17 +362,17 @@ describe("TaskService", () => {
 
       // Verify the service subscribed to the expected events
       expect(subscribeSpy).toHaveBeenCalledWith(
-        ClientEventType.CLIENT_CREATE_TASK_COMMAND,
+        "CLIENT_CREATE_TASK_COMMAND",
         expect.any(Function)
       );
 
       expect(subscribeSpy).toHaveBeenCalledWith(
-        ClientEventType.CLIENT_START_TASK_COMMAND,
+        "CLIENT_START_TASK_COMMAND",
         expect.any(Function)
       );
 
       expect(subscribeSpy).toHaveBeenCalledWith(
-        ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+        "SERVER_NEXT_SUBTASK_TRIGGERED",
         expect.any(Function)
       );
     });

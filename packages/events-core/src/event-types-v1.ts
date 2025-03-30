@@ -1,79 +1,72 @@
-export enum TaskStatus {
-  CREATED = "CREATED",
-  INITIALIZED = "INITIALIZED",
-  IN_PROGRESS = "IN_PROGRESS",
-  COMPLETED = "COMPLETED",
-}
+export type TaskStatus =
+  | "CREATED"
+  | "INITIALIZED"
+  | "IN_PROGRESS"
+  | "COMPLETED";
 
-export enum SubtaskStatus {
-  PENDING = "PENDING",
-  IN_PROGRESS = "IN_PROGRESS",
-  COMPLETED = "COMPLETED",
-}
+export type SubtaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED";
 
-export enum ChatStatus {
-  ACTIVE = "ACTIVE",
-  CLOSED = "CLOSED",
-}
+export type ChatStatus = "ACTIVE" | "CLOSED";
 
-export enum Role {
-  ASSISTANT = "ASSISTANT",
-  USER = "USER",
-  FUNCTION_EXECUTOR = "FUNCTION_EXECUTOR",
-}
+export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR";
 
 /**
  * Events originating from clients
  */
-export enum ClientEventType {
+export const ClientEventType = [
   // Client commands
-  CLIENT_CREATE_TASK_COMMAND = "CLIENT_CREATE_TASK_COMMAND",
-  CLIENT_START_TASK_COMMAND = "CLIENT_START_TASK_COMMAND",
-  CLIENT_START_SUBTASK_COMMAND = "CLIENT_START_SUBTASK_COMMAND",
-  CLIENT_COMPLETE_SUBTASK_COMMAND = "CLIENT_COMPLETE_SUBTASK_COMMAND",
-  CLIENT_START_NEW_CHAT_COMMAND = "CLIENT_START_NEW_CHAT_COMMAND",
-  CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND = "CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND",
-  CLIENT_SUBMIT_MESSAGE_COMMAND = "CLIENT_SUBMIT_MESSAGE_COMMAND",
+  "CLIENT_CREATE_TASK_COMMAND",
+  "CLIENT_START_TASK_COMMAND",
+  "CLIENT_START_SUBTASK_COMMAND",
+  "CLIENT_COMPLETE_SUBTASK_COMMAND",
+  "CLIENT_START_NEW_CHAT_COMMAND",
+  "CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND",
+  "CLIENT_SUBMIT_MESSAGE_COMMAND",
 
   // Client events
-  CLIENT_APPROVE_WORK = "CLIENT_APPROVE_WORK",
-  CLIENT_TEST_EVENT = "CLIENT_TEST_EVENT",
-}
+  "CLIENT_APPROVE_WORK",
+  "CLIENT_TEST_EVENT",
+] as const;
+
+export type ClientEventType = (typeof ClientEventType)[number];
 
 /**
  * Events originating from the server
  *
  * TODO: Rename to ServerEventKind?
  */
-export enum ServerEventType {
+export const ServerEventType = [
   // Task related
-  SERVER_TASK_CREATED = "SERVER_TASK_CREATED",
-  SERVER_TASK_FOLDER_CREATED = "SERVER_TASK_FOLDER_CREATED",
-  SERVER_TASK_INITIALIZED = "SERVER_TASK_INITIALIZED",
-  SERVER_TASK_LOADED = "SERVER_TASK_LOADED",
+  "SERVER_TASK_CREATED",
+  "SERVER_TASK_FOLDER_CREATED",
+  "SERVER_TASK_INITIALIZED",
+  "SERVER_TASK_LOADED",
 
   // Subtask related
-  SERVER_SUBTASK_STARTED = "SERVER_SUBTASK_STARTED",
-  SERVER_SUBTASK_COMPLETED = "SERVER_SUBTASK_COMPLETED",
-  SERVER_SUBTASK_UPDATED = "SERVER_SUBTASK_UPDATED",
-  SERVER_NEXT_SUBTASK_TRIGGERED = "SERVER_NEXT_SUBTASK_TRIGGERED",
+  "SERVER_SUBTASK_STARTED",
+  "SERVER_SUBTASK_COMPLETED",
+  "SERVER_SUBTASK_UPDATED",
+  "SERVER_NEXT_SUBTASK_TRIGGERED",
 
   // Chat related
-  SERVER_CHAT_CREATED = "SERVER_CHAT_CREATED",
-  SERVER_CHAT_FILE_CREATED = "SERVER_CHAT_FILE_CREATED",
-  SERVER_CHAT_UPDATED = "SERVER_CHAT_UPDATED",
-  SERVER_AGENT_PROCESSED_MESSAGE = "SERVER_AGENT_PROCESSED_MESSAGE",
-  SERVER_AGENT_RESPONSE_GENERATED = "SERVER_AGENT_RESPONSE_GENERATED",
-  SERVER_MESSAGE_RECEIVED = "SERVER_MESSAGE_RECEIVED",
-  SERVER_MESSAGE_SAVED_TO_CHAT_FILE = "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
+  "SERVER_CHAT_CREATED",
+  "SERVER_CHAT_FILE_CREATED",
+  "SERVER_CHAT_UPDATED",
+  "SERVER_AGENT_PROCESSED_MESSAGE",
+  "SERVER_AGENT_RESPONSE_GENERATED",
+  "SERVER_MESSAGE_RECEIVED",
+  "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
 
   // System related
-  SERVER_FILE_SYSTEM = "SERVER_FILE_SYSTEM",
-  SERVER_TEST_EVENT = "SERVER_TEST_EVENT",
-}
+  "SERVER_FILE_SYSTEM",
+  "SERVER_TEST_EVENT",
+] as const;
+
+export type ServerEventType = (typeof ServerEventType)[number];
 
 // Combine both event types for type definitions
-export type EventType = ClientEventType | ServerEventType;
+// TODO: 'string' is only included temporarily for temporary
+export type EventType = ClientEventType | ServerEventType | string;
 
 export interface TeamConfig {
   agent: Role;
@@ -172,24 +165,24 @@ export interface BaseServerEvent extends BaseEvent {
 // Client Command Events
 
 export interface ClientCreateTaskCommand extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_CREATE_TASK_COMMAND;
+  eventType: "CLIENT_CREATE_TASK_COMMAND";
   taskName: string;
   taskConfig: Record<string, unknown>;
 }
 
 export interface ClientStartTaskCommand extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_START_TASK_COMMAND;
+  eventType: "CLIENT_START_TASK_COMMAND";
   taskId: string;
 }
 
 export interface ClientStartSubtaskCommand extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND;
+  eventType: "CLIENT_START_SUBTASK_COMMAND";
   taskId: string;
   subtaskId: string;
 }
 
 export interface ClientCompleteSubtaskCommand extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_COMPLETE_SUBTASK_COMMAND;
+  eventType: "CLIENT_COMPLETE_SUBTASK_COMMAND";
   taskId: string;
   subtaskId: string;
   output: string;
@@ -197,20 +190,20 @@ export interface ClientCompleteSubtaskCommand extends BaseClientEvent {
 }
 
 export interface ClientStartNewChatCommand extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_START_NEW_CHAT_COMMAND;
+  eventType: "CLIENT_START_NEW_CHAT_COMMAND";
   taskId: string;
   subtaskId: string;
   metadata?: ChatMetadata;
 }
 
 export interface ClientSubmitInitialPromptCommand extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND;
+  eventType: "CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND";
   chatId: string;
   prompt: string;
 }
 
 export interface ClientSubmitMessageCommand extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_SUBMIT_MESSAGE_COMMAND;
+  eventType: "CLIENT_SUBMIT_MESSAGE_COMMAND";
   chatId: string;
   content: string;
 }
@@ -218,78 +211,78 @@ export interface ClientSubmitMessageCommand extends BaseClientEvent {
 // Client Events
 
 export interface ClientApproveWork extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_APPROVE_WORK;
+  eventType: "CLIENT_APPROVE_WORK";
   chatId: string;
   approvedWork?: string;
 }
 
 export interface ClientTestEvent extends BaseClientEvent {
-  eventType: ClientEventType.CLIENT_TEST_EVENT;
+  eventType: "CLIENT_TEST_EVENT";
   message: string;
 }
 
 // Server Events
 
 export interface ServerTaskCreated extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_TASK_CREATED;
+  eventType: "SERVER_TASK_CREATED";
   taskId: string;
   taskName: string;
   config: Record<string, unknown>;
 }
 
 export interface ServerTaskFolderCreated extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_TASK_FOLDER_CREATED;
+  eventType: "SERVER_TASK_FOLDER_CREATED";
   taskId: string;
   folderPath: string;
 }
 
 export interface ServerTaskInitialized extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_TASK_INITIALIZED;
+  eventType: "SERVER_TASK_INITIALIZED";
   taskId: string;
   initialState: Record<string, unknown>;
 }
 
 export interface ServerTaskLoaded extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_TASK_LOADED;
+  eventType: "SERVER_TASK_LOADED";
   taskId: string;
   taskState: Task;
 }
 
 export interface ServerSubtaskStarted extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_SUBTASK_STARTED;
+  eventType: "SERVER_SUBTASK_STARTED";
   taskId: string;
   subtaskId: string;
   input?: unknown;
 }
 
 export interface ServerSubtaskCompleted extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_SUBTASK_COMPLETED;
+  eventType: "SERVER_SUBTASK_COMPLETED";
   taskId: string;
   subtaskId: string;
 }
 
 export interface ServerSubtaskUpdated extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_SUBTASK_UPDATED;
+  eventType: "SERVER_SUBTASK_UPDATED";
   taskId: string;
   subtaskId: string;
   status: SubtaskStatus;
 }
 
 export interface ServerNextSubtaskTriggered extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED;
+  eventType: "SERVER_NEXT_SUBTASK_TRIGGERED";
   taskId: string;
   currentSubtaskId: string;
 }
 
 export interface ServerChatCreated extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_CHAT_CREATED;
+  eventType: "SERVER_CHAT_CREATED";
   taskId: string;
   subtaskId: string;
   chatId: string;
 }
 
 export interface ServerChatFileCreated extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_CHAT_FILE_CREATED;
+  eventType: "SERVER_CHAT_FILE_CREATED";
   taskId: string;
   subtaskId: string;
   chatId: string;
@@ -297,31 +290,31 @@ export interface ServerChatFileCreated extends BaseServerEvent {
 }
 
 export interface ServerChatUpdated extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_CHAT_UPDATED;
+  eventType: "SERVER_CHAT_UPDATED";
   chatId: string;
   lastMessageId: string;
 }
 
 export interface ServerAgentProcessedMessage extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_AGENT_PROCESSED_MESSAGE;
+  eventType: "SERVER_AGENT_PROCESSED_MESSAGE";
   chatId: string;
   messageId: string;
 }
 
 export interface ServerAgentResponseGenerated extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_AGENT_RESPONSE_GENERATED;
+  eventType: "SERVER_AGENT_RESPONSE_GENERATED";
   chatId: string;
   response: Message;
 }
 
 export interface ServerMessageReceived extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_MESSAGE_RECEIVED;
+  eventType: "SERVER_MESSAGE_RECEIVED";
   chatId: string;
   message: Message;
 }
 
 export interface ServerMessageSavedToChatFile extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_MESSAGE_SAVED_TO_CHAT_FILE;
+  eventType: "SERVER_MESSAGE_SAVED_TO_CHAT_FILE";
   chatId: string;
   messageId: string;
   filePath: string;
@@ -335,12 +328,12 @@ export interface FileSystemEventData {
 }
 
 export interface ServerFileSystem extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_FILE_SYSTEM;
+  eventType: "SERVER_FILE_SYSTEM";
   data: FileSystemEventData;
 }
 
 export interface ServerTestEvent extends BaseServerEvent {
-  eventType: ServerEventType.SERVER_TEST_EVENT;
+  eventType: "SERVER_TEST_EVENT";
   message: string;
 }
 
@@ -392,18 +385,14 @@ export function isEventType<T extends BaseEvent>(
  * Type guard to check if an event is a client event
  */
 export function isClientEvent(event: BaseEvent): event is BaseClientEvent {
-  return Object.values(ClientEventType).includes(
-    event.eventType as ClientEventType
-  );
+  return ClientEventType.includes(event.eventType as ClientEventType);
 }
 
 /**
  * Type guard to check if an event is a server event
  */
 export function isServerEvent(event: BaseEvent): event is BaseServerEvent {
-  return Object.values(ServerEventType).includes(
-    event.eventType as ServerEventType
-  );
+  return ServerEventType.includes(event.eventType as ServerEventType);
 }
 
 /**
@@ -430,44 +419,6 @@ export interface Repository<T extends EntityWithId> {
   save(entity: T): Promise<void>;
   remove(id: string): Promise<void>;
 }
-
-/**
- * Note:
- * The following event creation methods are commented out because they lack proper type guards.
- */
-/**
- * Creates an event with proper typing and validation
- */
-// export function createEvent<T extends EventUnion>(
-//   eventType: EventType,
-//   data: Omit<T, "eventType" | "timestamp"> & { timestamp?: Date }
-// ): T {
-//   return {
-//     eventType,
-//     timestamp: data.timestamp || new Date(),
-//     ...data,
-//   } as T;
-// }
-
-/**
- * Creates a client event with proper typing
- */
-// export function createClientEvent<T extends ClientEventUnion>(
-//   eventType: ClientEventType,
-//   data: Omit<T, "eventType" | "timestamp"> & { timestamp?: Date }
-// ): T {
-//   return createEvent(eventType, data as any) as T;
-// }
-
-/**
- * Creates a server event with proper typing
- */
-// export function createServerEvent<T extends ServerEventUnion>(
-//   eventType: ServerEventType,
-//   data: Omit<T, "eventType" | "timestamp"> & { timestamp?: Date }
-// ): T {
-//   return createEvent(eventType, data as any) as T;
-// }
 
 export class RepositoryError extends Error {
   constructor(message: string) {

@@ -3,7 +3,7 @@ import {
   Chat,
   Task,
   Subtask,
-  Message,
+  ChatMessage,
   RepositoryError,
   EntityNotFoundError,
   ConcurrencyError,
@@ -202,7 +202,7 @@ export class ChatRepository extends BaseRepository<Chat> {
   /**
    * Adds a message to a chat and persists the changes
    */
-  async addMessage(chatId: string, message: Message): Promise<void> {
+  async addMessage(chatId: string, message: ChatMessage): Promise<void> {
     const chat = await this.findById(chatId);
     if (!chat) {
       throw new EntityNotFoundError(`Chat ${chatId} not found`);

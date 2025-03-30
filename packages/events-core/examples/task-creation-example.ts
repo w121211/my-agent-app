@@ -8,7 +8,7 @@
  */
 
 import path from "node:path";
-import { Logger } from "tslog";
+import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 
 // Import necessary components from the event system
@@ -24,7 +24,7 @@ import {
 } from "../src/event-types.js";
 
 // Set up logger
-const logger = new Logger({ name: "TaskCreationExample" });
+const logger: Logger<ILogObj> = new Logger({ name: "TaskCreationExample" });
 
 async function runTaskCreationExample(): Promise<void> {
   // Create a temporary workspace directory for this example
@@ -49,14 +49,12 @@ async function runTaskCreationExample(): Promise<void> {
   // Subscribe to all events for demonstration purposes
   eventBus.subscribeToAllClientEvents((event) => {
     logger.info(`CLIENT EVENT: ${event.eventType}`, {
-      timestamp: event.timestamp,
       ...event,
     });
   });
 
   eventBus.subscribeToAllServerEvents((event) => {
     logger.info(`SERVER EVENT: ${event.eventType}`, {
-      timestamp: event.timestamp,
       ...event,
     });
   });
@@ -66,7 +64,7 @@ async function runTaskCreationExample(): Promise<void> {
 
   // 1. Create a task creation command
   const createTaskCommand: ClientCreateTaskCommand = {
-    eventType: ClientEventType.CLIENT_CREATE_TASK_COMMAND,
+    eventType: "CLIENT_CREATE_TASK_COMMAND",
     taskName: "Example Task",
     taskConfig: {
       description: "This is an example task created for demonstration purposes",

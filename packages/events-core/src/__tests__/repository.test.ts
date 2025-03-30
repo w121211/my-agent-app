@@ -4,7 +4,7 @@ import {
   Task,
   Chat,
   Subtask,
-  Message,
+  ChatMessage,
   Role,
   TaskStatus,
   SubtaskStatus,
@@ -38,7 +38,7 @@ describe("TaskRepository", () => {
     id: "task-123",
     seqNumber: 1,
     title: "Test Task",
-    status: TaskStatus.CREATED,
+    status: "CREATED",
     subtasks: [],
     folderPath: "/test/path",
     config: {},
@@ -52,8 +52,8 @@ describe("TaskRepository", () => {
     seqNumber: 1,
     title: "Test Subtask",
     description: "Test Description",
-    status: SubtaskStatus.PENDING,
-    team: { agent: Role.ASSISTANT },
+    status: "PENDING",
+    team: { agent: "ASSISTANT" },
     inputType: "string",
     outputType: "string",
   };
@@ -124,10 +124,10 @@ describe("TaskRepository", () => {
     await taskRepo.save(taskWithSubtask);
 
     // Update subtask
-    const updatedSubtask = {
+    const updatedSubtask: Subtask = {
       ...mockSubtask,
       title: "Updated Subtask",
-      status: SubtaskStatus.IN_PROGRESS,
+      status: "IN_PROGRESS",
     };
 
     await taskRepo.saveSubtask(updatedSubtask);
@@ -149,8 +149,8 @@ describe("TaskRepository", () => {
       seqNumber: 2,
       title: "New Subtask",
       description: "New Description",
-      status: SubtaskStatus.PENDING,
-      team: { agent: Role.ASSISTANT },
+      status: "PENDING",
+      team: { agent: "ASSISTANT" },
       inputType: "string",
       outputType: "string",
     };
@@ -209,14 +209,14 @@ describe("ChatRepository", () => {
     taskId: "task-123",
     subtaskId: "subtask-123",
     messages: [],
-    status: ChatStatus.ACTIVE,
+    status: "ACTIVE",
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
-  const mockMessage: Message = {
+  const mockMessage: ChatMessage = {
     id: "message-123",
-    role: Role.USER,
+    role: "USER",
     content: "Test message content",
     timestamp: new Date(),
     metadata: {

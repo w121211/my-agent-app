@@ -52,10 +52,10 @@ describe("SubtaskService", () => {
     seqNumber: 1,
     title: "Test Subtask",
     description: "Test description",
-    status: SubtaskStatus.PENDING,
+    status: "PENDING",
     team: {
-      agent: Role.ASSISTANT,
-      human: Role.USER,
+      agent: "ASSISTANT",
+      human: "USER",
     },
     inputType: "string",
     outputType: "string",
@@ -64,7 +64,7 @@ describe("SubtaskService", () => {
     id: taskId,
     seqNumber: 1,
     title: "Test Task",
-    status: TaskStatus.CREATED,
+    status: "CREATED",
     subtasks: [sampleSubtask],
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -83,22 +83,22 @@ describe("SubtaskService", () => {
 
     // Verify event subscriptions
     expect(mockEventBus.subscribe).toHaveBeenCalledWith(
-      ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+      "CLIENT_START_SUBTASK_COMMAND",
       expect.any(Function)
     );
     expect(mockEventBus.subscribe).toHaveBeenCalledWith(
-      ClientEventType.CLIENT_COMPLETE_SUBTASK_COMMAND,
+      "CLIENT_COMPLETE_SUBTASK_COMMAND",
       expect.any(Function)
     );
     expect(mockEventBus.subscribe).toHaveBeenCalledWith(
-      ServerEventType.SERVER_SUBTASK_UPDATED,
+      "SERVER_SUBTASK_UPDATED",
       expect.any(Function)
     );
   });
 
   test("should start a subtask and update its status", async () => {
     const command: ClientStartSubtaskCommand = {
-      eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+      eventType: "CLIENT_START_SUBTASK_COMMAND",
       taskId,
       subtaskId,
       timestamp: new Date(),
@@ -112,18 +112,18 @@ describe("SubtaskService", () => {
     // Verify events were emitted
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: ClientEventType.CLIENT_START_NEW_CHAT_COMMAND,
+        eventType: "CLIENT_START_NEW_CHAT_COMMAND",
       })
     );
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: ServerEventType.SERVER_SUBTASK_UPDATED,
-        status: SubtaskStatus.IN_PROGRESS,
+        eventType: "SERVER_SUBTASK_UPDATED",
+        status: "IN_PROGRESS",
       })
     );
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: ServerEventType.SERVER_SUBTASK_STARTED,
+        eventType: "SERVER_SUBTASK_STARTED",
       })
     );
   });
@@ -142,7 +142,7 @@ describe("SubtaskService", () => {
     ]);
 
     const command: ClientStartSubtaskCommand = {
-      eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+      eventType: "CLIENT_START_SUBTASK_COMMAND",
       taskId,
       subtaskId,
       timestamp: new Date(),
@@ -160,7 +160,7 @@ describe("SubtaskService", () => {
 
   test("should complete a subtask and wait for approval", async () => {
     const command: ClientCompleteSubtaskCommand = {
-      eventType: ClientEventType.CLIENT_COMPLETE_SUBTASK_COMMAND,
+      eventType: "CLIENT_COMPLETE_SUBTASK_COMMAND",
       taskId,
       subtaskId,
       output: "Test output",
@@ -172,21 +172,21 @@ describe("SubtaskService", () => {
 
     expect(mockTaskRepo.saveSubtask).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: SubtaskStatus.COMPLETED,
+        status: "COMPLETED",
       })
     );
 
     // Should NOT trigger next subtask
     expect(mockEventBus.emit).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
       })
     );
   });
 
   test("should complete a subtask and trigger next without approval", async () => {
     const command: ClientCompleteSubtaskCommand = {
-      eventType: ClientEventType.CLIENT_COMPLETE_SUBTASK_COMMAND,
+      eventType: "CLIENT_COMPLETE_SUBTASK_COMMAND",
       taskId,
       subtaskId,
       output: "Test output",
@@ -199,7 +199,7 @@ describe("SubtaskService", () => {
     // Should trigger next subtask
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
         taskId,
         currentSubtaskId: subtaskId,
       })
@@ -208,10 +208,10 @@ describe("SubtaskService", () => {
 
   test("should update subtask status in repository", async () => {
     const event: ServerSubtaskUpdated = {
-      eventType: ServerEventType.SERVER_SUBTASK_UPDATED,
+      eventType: "SERVER_SUBTASK_UPDATED",
       taskId,
       subtaskId,
-      status: SubtaskStatus.IN_PROGRESS,
+      status: "IN_PROGRESS",
       timestamp: new Date(),
     };
 
@@ -220,7 +220,7 @@ describe("SubtaskService", () => {
     expect(mockTaskRepo.saveSubtask).toHaveBeenCalledWith(
       expect.objectContaining({
         id: subtaskId,
-        status: SubtaskStatus.IN_PROGRESS,
+        status: "IN_PROGRESS",
       })
     );
   });
@@ -238,7 +238,7 @@ describe("SubtaskService", () => {
     ]);
 
     const command: ClientStartSubtaskCommand = {
-      eventType: ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+      eventType: "CLIENT_START_SUBTASK_COMMAND",
       taskId,
       subtaskId,
       timestamp: new Date(),

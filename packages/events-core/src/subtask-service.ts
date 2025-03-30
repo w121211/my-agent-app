@@ -29,17 +29,17 @@ export class SubtaskService {
 
     // Register event handlers
     this.eventBus.subscribe<ClientStartSubtaskCommand>(
-      ClientEventType.CLIENT_START_SUBTASK_COMMAND,
+      "CLIENT_START_SUBTASK_COMMAND",
       this.handleStartSubtaskCommand.bind(this)
     );
 
     this.eventBus.subscribe<ClientCompleteSubtaskCommand>(
-      ClientEventType.CLIENT_COMPLETE_SUBTASK_COMMAND,
+      "CLIENT_COMPLETE_SUBTASK_COMMAND",
       this.handleCompleteSubtaskCommand.bind(this)
     );
 
     this.eventBus.subscribe<ServerSubtaskUpdated>(
-      ServerEventType.SERVER_SUBTASK_UPDATED,
+      "SERVER_SUBTASK_UPDATED",
       this.onSubtaskUpdated.bind(this)
     );
   }
@@ -65,13 +65,13 @@ export class SubtaskService {
     }
 
     // Update task and subtask status
-    subtask.status = SubtaskStatus.IN_PROGRESS;
+    subtask.status = "IN_PROGRESS";
     task.currentSubtaskId = subtask.id;
     await this.taskRepo.save(task);
 
     // Start new chat
     await this.eventBus.emit<ClientStartNewChatCommand>({
-      eventType: ClientEventType.CLIENT_START_NEW_CHAT_COMMAND,
+      eventType: "CLIENT_START_NEW_CHAT_COMMAND",
       taskId: command.taskId,
       subtaskId: command.subtaskId,
       timestamp: new Date(),
@@ -80,17 +80,17 @@ export class SubtaskService {
 
     // Emit status update event
     await this.eventBus.emit<ServerSubtaskUpdated>({
-      eventType: ServerEventType.SERVER_SUBTASK_UPDATED,
+      eventType: "SERVER_SUBTASK_UPDATED",
       taskId: command.taskId,
       subtaskId: command.subtaskId,
-      status: SubtaskStatus.IN_PROGRESS,
+      status: "IN_PROGRESS",
       timestamp: new Date(),
       correlationId: command.correlationId,
     });
 
     // Emit started event
     await this.eventBus.emit<ServerSubtaskStarted>({
-      eventType: ServerEventType.SERVER_SUBTASK_STARTED,
+      eventType: "SERVER_SUBTASK_STARTED",
       taskId: command.taskId,
       subtaskId: command.subtaskId,
       input: undefined, // Input handling will be implemented later
@@ -112,21 +112,21 @@ export class SubtaskService {
     );
 
     // Update subtask status
-    subtask.status = SubtaskStatus.COMPLETED;
+    subtask.status = "COMPLETED";
     await this.taskRepo.saveSubtask(subtask);
 
     // Emit completion events
     await this.eventBus.emit<ServerSubtaskUpdated>({
-      eventType: ServerEventType.SERVER_SUBTASK_UPDATED,
+      eventType: "SERVER_SUBTASK_UPDATED",
       taskId: command.taskId,
       subtaskId: command.subtaskId,
-      status: SubtaskStatus.COMPLETED,
+      status: "COMPLETED",
       timestamp: new Date(),
       correlationId: command.correlationId,
     });
 
     await this.eventBus.emit<ServerSubtaskCompleted>({
-      eventType: ServerEventType.SERVER_SUBTASK_COMPLETED,
+      eventType: "SERVER_SUBTASK_COMPLETED",
       taskId: command.taskId,
       subtaskId: command.subtaskId,
       timestamp: new Date(),
@@ -136,7 +136,7 @@ export class SubtaskService {
     // If no approval required, trigger next subtask
     if (!command.requiresApproval) {
       await this.eventBus.emit<ServerNextSubtaskTriggered>({
-        eventType: ServerEventType.SERVER_NEXT_SUBTASK_TRIGGERED,
+        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
         taskId: command.taskId,
         currentSubtaskId: command.subtaskId,
         timestamp: new Date(),

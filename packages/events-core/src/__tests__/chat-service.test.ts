@@ -2,13 +2,9 @@ import { EventBus } from "../event-bus.js";
 import { ChatService } from "../chat-service.js";
 import { ChatRepository } from "../repositories.js";
 import {
-  ClientEventType,
   ClientStartNewChatCommand,
   Chat,
-  ChatStatus,
-  Message,
-  Role,
-  ServerEventType,
+  ChatMessage,
 } from "../event-types.js";
 import { IWorkspaceManager } from "../workspace-manager.js"; // Import workspace manager interface
 
@@ -60,7 +56,7 @@ describe("ChatService", () => {
     it("should create a new chat and emit chat created event", async () => {
       // Arrange
       const command: ClientStartNewChatCommand = {
-        eventType: ClientEventType.CLIENT_START_NEW_CHAT_COMMAND,
+        eventType: "CLIENT_START_NEW_CHAT_COMMAND",
         taskId: "task-123",
         subtaskId: "subtask-456",
         timestamp: new Date(),
@@ -81,13 +77,13 @@ describe("ChatService", () => {
         .calls[0][0] as Chat;
       expect(chatArg.taskId).toBe(command.taskId);
       expect(chatArg.subtaskId).toBe(command.subtaskId);
-      expect(chatArg.status).toBe(ChatStatus.ACTIVE);
+      expect(chatArg.status).toBe("ACTIVE");
       expect(chatArg.metadata).toEqual(command.metadata);
 
       // Verify SERVER_CHAT_CREATED event was emitted
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ServerEventType.SERVER_CHAT_CREATED,
+          eventType: "SERVER_CHAT_CREATED",
           taskId: command.taskId,
           subtaskId: command.subtaskId,
           correlationId: command.correlationId,
@@ -101,7 +97,7 @@ describe("ChatService", () => {
     it("should process messages with APPROVE keyword", async () => {
       // Arrange
       const command: ClientStartNewChatCommand = {
-        eventType: ClientEventType.CLIENT_START_NEW_CHAT_COMMAND,
+        eventType: "CLIENT_START_NEW_CHAT_COMMAND",
         taskId: "task-123",
         subtaskId: "subtask-456",
         timestamp: new Date(),
@@ -109,11 +105,11 @@ describe("ChatService", () => {
 
       // Mock the addMessage to simulate adding a message with APPROVE
       (chatRepo.addMessage as jest.Mock).mockImplementationOnce(
-        async (chatId: string, message: Message) => {
+        async (chatId: string, message: ChatMessage) => {
           // Trigger the private onMessageReceived method by simulating a USER message with APPROVE
-          const approveMessage: Message = {
+          const approveMessage: ChatMessage = {
             id: "msg-approve",
-            role: Role.USER,
+            role: "USER",
             content: "I APPROVE this work",
             timestamp: new Date(),
           };
@@ -134,7 +130,7 @@ describe("ChatService", () => {
       // Verify CLIENT_APPROVE_WORK event was emitted
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: ClientEventType.CLIENT_APPROVE_WORK,
+          eventType: "CLIENT_APPROVE_WORK",
         })
       );
     });
@@ -142,7 +138,7 @@ describe("ChatService", () => {
     it("should generate agent responses to user messages", async () => {
       // Arrange
       const command: ClientStartNewChatCommand = {
-        eventType: ClientEventType.CLIENT_START_NEW_CHAT_COMMAND,
+        eventType: "CLIENT_START_NEW_CHAT_COMMAND",
         taskId: "task-123",
         subtaskId: "subtask-456",
         timestamp: new Date(),
@@ -157,17 +153,17 @@ describe("ChatService", () => {
 
       // Get the messages that were added
       const messages = (chatRepo.addMessage as jest.Mock).mock.calls.map(
-        (call) => call[1] as Message
+        (call) => call[1] as ChatMessage
       );
 
       // Ensure we have at least 2 messages
       expect(messages.length).toBeGreaterThanOrEqual(2);
 
       // First should be USER message (initial prompt)
-      expect(messages[0]?.role).toBe(Role.USER);
+      expect(messages[0]?.role).toBe("USER");
 
       // Second should be ASSISTANT message (agent response)
-      expect(messages[1]?.role).toBe(Role.ASSISTANT);
+      expect(messages[1]?.role).toBe("ASSISTANT");
     });
   });
 
@@ -181,7 +177,7 @@ describe("ChatService", () => {
 
       // Verify the service subscribed to the expected events
       expect(subscribeSpy).toHaveBeenCalledWith(
-        ClientEventType.CLIENT_START_NEW_CHAT_COMMAND,
+        "CLIENT_START_NEW_CHAT_COMMAND",
         expect.any(Function)
       );
     });

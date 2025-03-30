@@ -64,7 +64,7 @@ describe("Task Creation and Initialization Flow", () => {
 
     // Create a task command
     const createTaskCommand: ClientCreateTaskCommand = {
-      eventType: ClientEventType.CLIENT_CREATE_TASK_COMMAND,
+      eventType: "CLIENT_CREATE_TASK_COMMAND",
       taskName: "Test Task",
       taskConfig: { testKey: "testValue" },
       timestamp: new Date(),
@@ -79,12 +79,12 @@ describe("Task Creation and Initialization Flow", () => {
 
     // Verify the event flow sequence
     const expectedEventFlow = [
-      ServerEventType.SERVER_TASK_FOLDER_CREATED,
-      ServerEventType.SERVER_TASK_CREATED,
-      ServerEventType.SERVER_TASK_LOADED,
-      ServerEventType.SERVER_CHAT_CREATED,
-      ServerEventType.SERVER_SUBTASK_UPDATED,
-      ServerEventType.SERVER_SUBTASK_STARTED,
+      "SERVER_TASK_FOLDER_CREATED",
+      "SERVER_TASK_CREATED",
+      "SERVER_TASK_LOADED",
+      "SERVER_CHAT_CREATED",
+      "SERVER_SUBTASK_UPDATED",
+      "SERVER_SUBTASK_STARTED",
     ];
 
     // Extract just the event types in the order they occurred
@@ -96,9 +96,9 @@ describe("Task Creation and Initialization Flow", () => {
     // Create snapshot of events in order (just type and relevant data)
     const eventFlowSnapshot = capturedEvents.map((event) => ({
       type: event.eventType,
-      taskId: event.taskId,
-      ...(event.subtaskId && { subtaskId: event.subtaskId }),
-      ...(event.chatId && { chatId: event.chatId }),
+      taskId: event.taskId ? "TASK_ID" : undefined,
+      ...(event.subtaskId && { subtaskId: "SUBTASK_ID" }),
+      ...(event.chatId && { chatId: "CHAT_ID" }),
       timestamp: "TIMESTAMP", // Replace with constant for snapshot
     }));
 

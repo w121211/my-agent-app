@@ -19,6 +19,22 @@ export class FileWatcher {
   private watcher: FSWatcher | null = null;
   private isWatching = false;
 
+  /**
+   * Default chokidar options for file watching
+   * These defaults will be used unless overridden by user-provided options
+   */
+  private static readonly DEFAULT_OPTIONS: ChokidarOptions = {
+    persistent: true,
+    ignored: [
+      /(^|[\/\\])\../, // Ignore dot files/folders
+      "**/*.tmp", // Ignore temp files
+      "**/*.log", // Ignore log files
+      "**/node_modules/**", // Ignore node_modules
+    ],
+    ignoreInitial: false, // Report existing files on startup
+    awaitWriteFinish: true, // Wait for writes to complete
+  };
+
   constructor(
     eventBus: IEventBus,
     workspacePath: string,
@@ -27,7 +43,12 @@ export class FileWatcher {
     this.logger = new Logger({ name: "FileWatcher" });
     this.eventBus = eventBus;
     this.workspacePath = workspacePath;
-    this.chokidarOptions = chokidarOptions;
+
+    // Merge the provided options with defaults
+    this.chokidarOptions = {
+      ...FileWatcher.DEFAULT_OPTIONS,
+      ...chokidarOptions,
+    };
   }
 
   /**
@@ -41,18 +62,8 @@ export class FileWatcher {
 
     this.logger.info(`Starting file watcher on ${this.workspacePath}`);
 
-    // Set default options if not provided
-    const options: ChokidarOptions = {
-      persistent: true,
-      ignored: [
-        /(^|[\/\\])\../, // Ignore dot files
-        "**/*.tmp", // Ignore temp files
-        "node_modules/**", // Ignore node_modules
-      ],
-      ...this.chokidarOptions,
-    };
-
-    this.watcher = chokidar.watch(this.workspacePath, options);
+    // Use the already merged options
+    this.watcher = chokidar.watch(this.workspacePath, this.chokidarOptions);
 
     // Set up event handlers
     this.watcher
@@ -88,32 +99,6 @@ export class FileWatcher {
   }
 
   /**
-   * Reconfigure the file watcher with new options
-   */
-  public async reconfigureWatcher(
-    newPath?: string,
-    newOptions?: ChokidarOptions
-  ): Promise<void> {
-    this.logger.info("Reconfiguring file watcher");
-
-    // Stop current watcher
-    await this.stopWatching();
-
-    // Update the workspacePath if provided
-    if (newPath) {
-      (this as any).workspacePath = newPath;
-    }
-
-    // Update watch options if provided
-    if (newOptions) {
-      Object.assign(this.chokidarOptions, newOptions);
-    }
-
-    // Restart with new configuration
-    this.startWatching();
-  }
-
-  /**
    * Handle file system events and emit to the event bus
    */
   private handleFileEvent(
@@ -138,7 +123,7 @@ export class FileWatcher {
     // Emit event through the event bus
     this.eventBus
       .emit<ServerFileSystem>({
-        eventType: ServerEventType.SERVER_FILE_SYSTEM,
+        eventType: "SERVER_FILE_SYSTEM",
         timestamp: new Date(),
         data: fileSystemEventData,
       })
@@ -164,28 +149,13 @@ export function createFileWatcher(
   options: ChokidarOptions = {}
 ): FileWatcher {
   const logger = new Logger({ name: "FileWatcherFactory" });
-
   logger.info(`Creating file watcher for workspace: ${workspacePath}`);
 
-  // Set up default watch options
-  const chokidarOptions: ChokidarOptions = {
-    // Default ignored patterns
-    ignored: [
-      /(^|[\/\\])\../, // Ignore dot files/folders
-      "**/*.tmp", // Ignore temp files
-      "**/*.log", // Ignore log files
-      "**/node_modules/**", // Ignore node_modules
-    ],
-    // Default behavior settings
-    ignoreInitial: false, // Report existing files on startup
-    awaitWriteFinish: true, // Wait for writes to complete
-    persistent: true, // Keep watching until explicitly stopped
+  // Create watcher with default options (already defined in FileWatcher)
+  const watcher = new FileWatcher(eventBus, workspacePath, options);
 
-    // Override with user-provided options
-    ...options,
-  };
-
-  const watcher = new FileWatcher(eventBus, workspacePath, chokidarOptions);
+  // Start watching immediately
+  watcher.startWatching();
 
   return watcher;
 }
