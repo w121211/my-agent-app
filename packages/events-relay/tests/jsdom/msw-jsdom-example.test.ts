@@ -1,3 +1,7 @@
+// ```
+// $ pnpm jest --selectProjects=msw-jsdom-tests
+// ```
+
 import { server } from "./mocks/node.js";
 
 beforeAll(() => {

@@ -5,10 +5,11 @@
   },
   "include": [
     "src",
-    "examples"
+    "examples",
+    "tests"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
   ]
 }

@@ -2,13 +2,13 @@ import {
   EventBus,
   createClientEventBus,
   createServerEventBus,
-} from "../event-bus.js";
+} from "../src/event-bus.js";
 import {
-  ClientTestEvent,
-  ClientApproveWork,
-  ServerChatCreated,
-  ServerTestEvent,
-} from "../event-types.js";
+  ClientRunTestEvent,
+  ClientApproveWorkEvent,
+  ServerChatCreatedEvent,
+  ServerSystemTestExecutedEvent,
+} from "../src/event-types.js";
 
 // Mock logger to prevent unnecessary logs during testing
 jest.mock("tslog", () => {
@@ -40,15 +40,15 @@ describe("EventBus", () => {
     it("should invoke handler when an event is emitted", async () => {
       // Setup
       const mockHandler = jest.fn();
-      const eventType = "CLIENT_TEST_EVENT";
-      const testEvent: ClientTestEvent = {
-        eventType,
+      const kind = "ClientRunTest";
+      const testEvent: ClientRunTestEvent = {
+        kind,
         timestamp: new Date(),
         message: "Test message",
       };
 
       // Subscribe
-      eventBus.subscribe(eventType, mockHandler);
+      eventBus.subscribe(kind, mockHandler);
 
       // Act
       await eventBus.emit(testEvent);
@@ -62,16 +62,16 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const eventType = "CLIENT_TEST_EVENT";
-      const testEvent: ClientTestEvent = {
-        eventType,
+      const kind = "ClientRunTest";
+      const testEvent: ClientRunTestEvent = {
+        kind,
         timestamp: new Date(),
         message: "Test message",
       };
 
       // Subscribe both handlers
-      eventBus.subscribe(eventType, mockHandler1);
-      eventBus.subscribe(eventType, mockHandler2);
+      eventBus.subscribe(kind, mockHandler1);
+      eventBus.subscribe(kind, mockHandler2);
 
       // Act
       await eventBus.emit(testEvent);
@@ -84,10 +84,10 @@ describe("EventBus", () => {
     it("should not invoke handlers for other event types", async () => {
       // Setup
       const mockHandler = jest.fn();
-      const subscribedType = "CLIENT_TEST_EVENT";
-      const differentType = "CLIENT_APPROVE_WORK";
-      const testEvent: ClientApproveWork = {
-        eventType: differentType,
+      const subscribedType = "ClientRunTest";
+      const differentType = "ClientApproveWork";
+      const testEvent: ClientApproveWorkEvent = {
+        kind: differentType,
         timestamp: new Date(),
         chatId: "test-chat-id",
         approvedWork: "approved work",
@@ -112,15 +112,15 @@ describe("EventBus", () => {
         result.push("async handler completed");
       };
 
-      const eventType = "CLIENT_TEST_EVENT";
-      const testEvent: ClientTestEvent = {
-        eventType,
+      const kind = "ClientRunTest";
+      const testEvent: ClientRunTestEvent = {
+        kind,
         timestamp: new Date(),
         message: "Test message",
       };
 
       // Subscribe
-      eventBus.subscribe(eventType, asyncHandler);
+      eventBus.subscribe(kind, asyncHandler);
 
       // Act
       await eventBus.emit(testEvent);
@@ -135,19 +135,19 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const eventType = "CLIENT_TEST_EVENT";
-      const testEvent: ClientTestEvent = {
-        eventType,
+      const kind = "ClientRunTest";
+      const testEvent: ClientRunTestEvent = {
+        kind,
         timestamp: new Date(),
         message: "Test message",
       };
 
       // Subscribe both handlers
-      eventBus.subscribe(eventType, mockHandler1);
-      eventBus.subscribe(eventType, mockHandler2);
+      eventBus.subscribe(kind, mockHandler1);
+      eventBus.subscribe(kind, mockHandler2);
 
       // Unsubscribe one handler
-      eventBus.unsubscribe(eventType, mockHandler1);
+      eventBus.unsubscribe(kind, mockHandler1);
 
       // Act
       await eventBus.emit(testEvent);
@@ -160,11 +160,11 @@ describe("EventBus", () => {
     it("should do nothing when unsubscribing a non-existent handler", () => {
       // Setup
       const mockHandler = jest.fn();
-      const eventType = "CLIENT_TEST_EVENT";
+      const kind = "ClientRunTest";
 
       // Act & Assert (should not throw)
       expect(() => {
-        eventBus.unsubscribe(eventType, mockHandler);
+        eventBus.unsubscribe(kind, mockHandler);
       }).not.toThrow();
     });
   });
@@ -174,19 +174,19 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const eventType = "CLIENT_TEST_EVENT";
-      const testEvent: ClientTestEvent = {
-        eventType,
+      const kind = "ClientRunTest";
+      const testEvent: ClientRunTestEvent = {
+        kind,
         timestamp: new Date(),
         message: "Test message",
       };
 
       // Subscribe both handlers
-      eventBus.subscribe(eventType, mockHandler1);
-      eventBus.subscribe(eventType, mockHandler2);
+      eventBus.subscribe(kind, mockHandler1);
+      eventBus.subscribe(kind, mockHandler2);
 
       // Unsubscribe all handlers for this event type
-      eventBus.unsubscribeAll(eventType);
+      eventBus.unsubscribeAll(kind);
 
       // Act
       await eventBus.emit(testEvent);
@@ -201,31 +201,31 @@ describe("EventBus", () => {
     it("should properly track if handlers exist", () => {
       // Setup
       const mockHandler = jest.fn();
-      const eventType = "CLIENT_TEST_EVENT";
+      const kind = "ClientRunTest";
 
       // Initially no handlers
-      expect(eventBus.hasHandlers(eventType)).toBe(false);
-      expect(eventBus.getHandlerCount(eventType)).toBe(0);
+      expect(eventBus.hasHandlers(kind)).toBe(false);
+      expect(eventBus.getHandlerCount(kind)).toBe(0);
 
       // Add handler
-      eventBus.subscribe(eventType, mockHandler);
-      expect(eventBus.hasHandlers(eventType)).toBe(true);
-      expect(eventBus.getHandlerCount(eventType)).toBe(1);
+      eventBus.subscribe(kind, mockHandler);
+      expect(eventBus.hasHandlers(kind)).toBe(true);
+      expect(eventBus.getHandlerCount(kind)).toBe(1);
 
       // Add another handler
       const mockHandler2 = jest.fn();
-      eventBus.subscribe(eventType, mockHandler2);
-      expect(eventBus.getHandlerCount(eventType)).toBe(2);
+      eventBus.subscribe(kind, mockHandler2);
+      expect(eventBus.getHandlerCount(kind)).toBe(2);
 
       // Remove one handler
-      eventBus.unsubscribe(eventType, mockHandler);
-      expect(eventBus.hasHandlers(eventType)).toBe(true);
-      expect(eventBus.getHandlerCount(eventType)).toBe(1);
+      eventBus.unsubscribe(kind, mockHandler);
+      expect(eventBus.hasHandlers(kind)).toBe(true);
+      expect(eventBus.getHandlerCount(kind)).toBe(1);
 
       // Remove all handlers
-      eventBus.unsubscribeAll(eventType);
-      expect(eventBus.hasHandlers(eventType)).toBe(false);
-      expect(eventBus.getHandlerCount(eventType)).toBe(0);
+      eventBus.unsubscribeAll(kind);
+      expect(eventBus.hasHandlers(kind)).toBe(false);
+      expect(eventBus.getHandlerCount(kind)).toBe(0);
     });
   });
 
@@ -234,24 +234,24 @@ describe("EventBus", () => {
       // Setup
       const mockClientHandler = jest.fn();
       const mockServerHandler = jest.fn();
-      const clientEventType = "CLIENT_TEST_EVENT";
-      const serverEventType = "SERVER_TEST_EVENT";
+      const clientKind = "ClientRunTest";
+      const serverKind = "ServerSystemTestExecuted";
 
-      const clientEvent: ClientTestEvent = {
-        eventType: clientEventType,
+      const clientEvent: ClientRunTestEvent = {
+        kind: clientKind,
         timestamp: new Date(),
         message: "Client test",
       };
 
-      const serverEvent: ServerTestEvent = {
-        eventType: serverEventType,
+      const serverEvent: ServerSystemTestExecutedEvent = {
+        kind: serverKind,
         timestamp: new Date(),
         message: "Server test",
       };
 
       // Subscribe handlers
-      eventBus.subscribe(clientEventType, mockClientHandler);
-      eventBus.subscribe(serverEventType, mockServerHandler);
+      eventBus.subscribe(clientKind, mockClientHandler);
+      eventBus.subscribe(serverKind, mockServerHandler);
 
       // Clear all handlers
       eventBus.clear();
@@ -263,8 +263,8 @@ describe("EventBus", () => {
       // Assert
       expect(mockClientHandler).not.toHaveBeenCalled();
       expect(mockServerHandler).not.toHaveBeenCalled();
-      expect(eventBus.hasHandlers(clientEventType)).toBe(false);
-      expect(eventBus.hasHandlers(serverEventType)).toBe(false);
+      expect(eventBus.hasHandlers(clientKind)).toBe(false);
+      expect(eventBus.hasHandlers(serverKind)).toBe(false);
     });
   });
 
@@ -277,15 +277,14 @@ describe("EventBus", () => {
       eventBus.subscribeToAllClientEvents(mockHandler);
 
       // Create test events for different client event types
-      const testEvent1: ClientTestEvent = {
-        eventType: "CLIENT_TEST_EVENT",
+      const testEvent1: ClientRunTestEvent = {
+        kind: "ClientRunTest",
         timestamp: new Date(),
         message: "Test 1",
       };
 
-      // Need to create an appropriate event type for CLIENT_APPROVE_WORK
-      const testEvent2: ClientApproveWork = {
-        eventType: "CLIENT_APPROVE_WORK",
+      const testEvent2: ClientApproveWorkEvent = {
+        kind: "ClientApproveWork",
         timestamp: new Date(),
         chatId: "test-chat-id",
         approvedWork: "approved work",
@@ -304,8 +303,8 @@ describe("EventBus", () => {
     it("should return a function that unsubscribes from all client events", async () => {
       // Setup
       const mockHandler = jest.fn();
-      const testEvent: ClientTestEvent = {
-        eventType: "CLIENT_TEST_EVENT",
+      const testEvent: ClientRunTestEvent = {
+        kind: "ClientRunTest",
         timestamp: new Date(),
         message: "Test message",
       };
@@ -333,14 +332,14 @@ describe("EventBus", () => {
       eventBus.subscribeToAllServerEvents(mockHandler);
 
       // Create test events for different server event types
-      const testEvent1: ServerTestEvent = {
-        eventType: "SERVER_TEST_EVENT",
+      const testEvent1: ServerSystemTestExecutedEvent = {
+        kind: "ServerSystemTestExecuted",
         timestamp: new Date(),
         message: "Test 1",
       };
 
-      const testEvent2: ServerChatCreated = {
-        eventType: "SERVER_CHAT_CREATED",
+      const testEvent2: ServerChatCreatedEvent = {
+        kind: "ServerChatCreated",
         timestamp: new Date(),
         chatId: "test-chat-id",
         taskId: "test-task-id",

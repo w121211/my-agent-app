@@ -1,6 +1,6 @@
-import { IEventBus } from "../event-bus.js";
-import { TaskRepository } from "../repositories.js";
-import { SubtaskService } from "../subtask-service.js";
+import { IEventBus } from "../src/event-bus.js";
+import { TaskRepository } from "../src/repositories.js";
+import { SubtaskService } from "../src/subtask-service.js";
 import {
   ClientEventType,
   ClientStartSubtaskCommand,
@@ -12,7 +12,7 @@ import {
   Task,
   TaskStatus,
   Role,
-} from "../event-types.js";
+} from "../src/event-types.js";
 
 // Type for accessing private methods during testing
 type PrivateSubtaskService = {

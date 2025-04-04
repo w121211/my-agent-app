@@ -1,6 +1,6 @@
-import { EventBus } from "../event-bus.js";
-import { TaskService } from "../task-service.js";
-import { TaskRepository } from "../repositories.js";
+import { EventBus } from "../src/event-bus.js";
+import { TaskService } from "../src/task-service.js";
+import { TaskRepository } from "../src/repositories.js";
 import {
   ClientEventType,
   ClientCreateTaskCommand,
@@ -11,8 +11,8 @@ import {
   Task,
   TaskStatus,
   SubtaskStatus,
-} from "../event-types.js";
-import { IWorkspaceManager } from "../workspace-manager.js";
+} from "../src/event-types.js";
+import { IWorkspaceManager } from "../src/workspace-manager.js";
 
 // Mock dependencies
 jest.mock("../repositories");

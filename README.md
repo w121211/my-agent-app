@@ -112,8 +112,10 @@ pnpm tsx packages/events-relay/examples/basic-server.ts
 
 # 用到的庫、技術、架構
 
-事件驅動 pattern
+事件驅動
 https://ithelp.ithome.com.tw/articles/10289860
+
+借鑑 CQRS -> 事件命名
 
 Monorepo
 

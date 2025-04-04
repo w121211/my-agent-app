@@ -3,17 +3,17 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { v4 as uuidv4 } from "uuid";
 
-import { createServerEventBus } from "../event-bus.js";
-import { WorkspaceManager } from "../workspace-manager.js";
-import { ChatRepository, TaskRepository } from "../repositories.js";
-import { TaskService } from "../task-service.js";
-import { SubtaskService } from "../subtask-service.js";
-import { ChatService } from "../chat-service.js";
+import { createServerEventBus } from "../src/event-bus.js";
+import { WorkspaceManager } from "../src/workspace-manager.js";
+import { ChatRepository, TaskRepository } from "../src/repositories.js";
+import { TaskService } from "../src/task-service.js";
+import { SubtaskService } from "../src/subtask-service.js";
+import { ChatService } from "../src/chat-service.js";
 import {
   ClientCreateTaskCommand,
   ClientEventType,
   ServerEventType,
-} from "../event-types.js";
+} from "../src/event-types.js";
 
 // File: task-creation-flow.test.ts
 describe("Task Creation and Initialization Flow", () => {

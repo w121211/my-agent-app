@@ -1,12 +1,12 @@
-import { EventBus } from "../event-bus.js";
-import { ChatService } from "../chat-service.js";
-import { ChatRepository } from "../repositories.js";
+import { EventBus } from "../src/event-bus.js";
+import { ChatService } from "../src/chat-service.js";
+import { ChatRepository } from "../src/repositories.js";
 import {
-  ClientStartNewChatCommand,
+  ClientStartNewChatEvent,
   Chat,
   ChatMessage,
-} from "../event-types.js";
-import { IWorkspaceManager } from "../workspace-manager.js"; // Import workspace manager interface
+} from "../src/event-types.js";
+import { IWorkspaceManager } from "../src/workspace-manager.js"; // Import workspace manager interface
 
 // Mock dependencies
 jest.mock("../repositories.js");
@@ -55,8 +55,8 @@ describe("ChatService", () => {
   describe("handleStartNewChatCommand", () => {
     it("should create a new chat and emit chat created event", async () => {
       // Arrange
-      const command: ClientStartNewChatCommand = {
-        eventType: "CLIENT_START_NEW_CHAT_COMMAND",
+      const command: ClientStartNewChatEvent = {
+        kind: "ClientStartNewChat",
         taskId: "task-123",
         subtaskId: "subtask-456",
         timestamp: new Date(),
@@ -83,7 +83,7 @@ describe("ChatService", () => {
       // Verify SERVER_CHAT_CREATED event was emitted
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: "SERVER_CHAT_CREATED",
+          kind: "ServerChatCreated",
           taskId: command.taskId,
           subtaskId: command.subtaskId,
           correlationId: command.correlationId,
@@ -96,8 +96,8 @@ describe("ChatService", () => {
 
     it("should process messages with APPROVE keyword", async () => {
       // Arrange
-      const command: ClientStartNewChatCommand = {
-        eventType: "CLIENT_START_NEW_CHAT_COMMAND",
+      const command: ClientStartNewChatEvent = {
+        kind: "ClientStartNewChat",
         taskId: "task-123",
         subtaskId: "subtask-456",
         timestamp: new Date(),
@@ -130,15 +130,15 @@ describe("ChatService", () => {
       // Verify CLIENT_APPROVE_WORK event was emitted
       expect(emitSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          eventType: "CLIENT_APPROVE_WORK",
+          kind: "ClientApproveWork",
         })
       );
     });
 
     it("should generate agent responses to user messages", async () => {
       // Arrange
-      const command: ClientStartNewChatCommand = {
-        eventType: "CLIENT_START_NEW_CHAT_COMMAND",
+      const command: ClientStartNewChatEvent = {
+        kind: "ClientStartNewChat",
         taskId: "task-123",
         subtaskId: "subtask-456",
         timestamp: new Date(),
@@ -177,7 +177,7 @@ describe("ChatService", () => {
 
       // Verify the service subscribed to the expected events
       expect(subscribeSpy).toHaveBeenCalledWith(
-        "CLIENT_START_NEW_CHAT_COMMAND",
+        "ClientStartNewChat",
         expect.any(Function)
       );
     });

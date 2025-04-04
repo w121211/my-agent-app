@@ -4,16 +4,11 @@ import { IEventBus } from "./event-bus.js";
 import { ChatRepository } from "./repositories.js";
 import {
   Chat,
-  ChatStatus,
-  EventType,
   ChatMessage,
-  Role,
-  ServerChatCreated,
-  ServerMessageSavedToChatFile,
-  ClientApproveWork,
-  ClientStartNewChatCommand,
-  ServerEventType,
-  ClientEventType,
+  ServerChatCreatedEvent,
+  ServerMessageSavedToChatFileEvent,
+  ClientApproveWorkEvent,
+  ClientStartNewChatEvent,
 } from "./event-types.js";
 
 /**
@@ -30,8 +25,8 @@ export class ChatService {
     this.chatRepo = chatRepo;
 
     // Register event handlers
-    this.eventBus.subscribe<ClientStartNewChatCommand>(
-      "CLIENT_START_NEW_CHAT_COMMAND",
+    this.eventBus.subscribe<ClientStartNewChatEvent>(
+      "ClientStartNewChat",
       this.handleStartNewChatCommand.bind(this)
     );
 
@@ -51,7 +46,7 @@ export class ChatService {
    * Handles starting a new chat based on a command
    */
   private async handleStartNewChatCommand(
-    command: ClientStartNewChatCommand
+    command: ClientStartNewChatEvent
   ): Promise<void> {
     const chatId = this.generateChatId();
     const now = new Date();
@@ -72,8 +67,8 @@ export class ChatService {
     const chatFilePath = await this.chatRepo.createChat(chat);
 
     // Emit chat created event
-    await this.eventBus.emit<ServerChatCreated>({
-      eventType: "SERVER_CHAT_CREATED",
+    await this.eventBus.emit<ServerChatCreatedEvent>({
+      kind: "ServerChatCreated",
       taskId: command.taskId,
       subtaskId: command.subtaskId,
       chatId,
@@ -113,8 +108,8 @@ export class ChatService {
     await this.chatRepo.addMessage(chat.id, message);
 
     // Emit event for message saved
-    await this.eventBus.emit<ServerMessageSavedToChatFile>({
-      eventType: "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
+    await this.eventBus.emit<ServerMessageSavedToChatFileEvent>({
+      kind: "ServerMessageSavedToChatFile",
       chatId: chat.id,
       messageId: message.id,
       filePath: chat.id, // Using chat_id as reference since file path is managed by repo
@@ -125,8 +120,8 @@ export class ChatService {
     // Process user message if needed
     if (message.role === "USER") {
       if (message.content.includes("APPROVE")) {
-        await this.eventBus.emit<ClientApproveWork>({
-          eventType: "CLIENT_APPROVE_WORK",
+        await this.eventBus.emit<ClientApproveWorkEvent>({
+          kind: "ClientApproveWork",
           chatId: chat.id,
           timestamp: new Date(),
           correlationId,

@@ -5,12 +5,12 @@ import {
   EventUnion,
   isClientEvent,
   isServerEvent,
+  ServerEventUnion,
 } from "@repo/events-core/event-types";
 import {
-  RelayMessageType,
-  ClientEventMessage,
-  ServerEventMessage,
-  ErrorMessage,
+  ClientEventRelayMessage,
+  ServerEventRelayMessage,
+  ErrorRelayMessage,
   isMessageType,
   RelayMessage,
 } from "./relay-types.js";
@@ -144,13 +144,13 @@ export class WebSocketEventServer {
   /**
    * Broadcasts a server event to all connected clients
    */
-  private async broadcastServerEvent(event: EventUnion): Promise<void> {
+  private async broadcastServerEvent(event: ServerEventUnion): Promise<void> {
     if (this.clients.size === 0) {
       return;
     }
 
-    const message: ServerEventMessage = {
-      type: RelayMessageType.SERVER_EVENT,
+    const message: ServerEventRelayMessage = {
+      kind: "SERVER_EVENT",
       event,
     };
 
@@ -163,7 +163,7 @@ export class WebSocketEventServer {
     });
 
     this.logger.debug(
-      `Broadcasted ${event.eventType} to ${this.clients.size} clients`
+      `Broadcasted ${event.kind} to ${this.clients.size} clients`
     );
   }
 
@@ -183,17 +183,12 @@ export class WebSocketEventServer {
       return;
     }
 
-    if (
-      isMessageType<ClientEventMessage>(message, RelayMessageType.CLIENT_EVENT)
-    ) {
+    if (isMessageType<ClientEventRelayMessage>(message, "CLIENT_EVENT")) {
       const clientEvent = message.event;
 
       if (isClientEvent(clientEvent)) {
         this.eventBus.emit(clientEvent).catch((error) => {
-          this.logger.error(
-            `Error emitting event ${clientEvent.eventType}:`,
-            error
-          );
+          this.logger.error(`Error emitting event ${clientEvent.kind}:`, error);
           this.sendError(
             ws,
             "EVENT_ERROR",
@@ -207,7 +202,7 @@ export class WebSocketEventServer {
       this.sendError(
         ws,
         "UNKNOWN_MESSAGE_TYPE",
-        `Unknown message type: ${message.type}`
+        `Unknown message kind: ${message.kind}`
       );
     }
   }
@@ -220,8 +215,8 @@ export class WebSocketEventServer {
       return;
     }
 
-    const errorMessage: ErrorMessage = {
-      type: RelayMessageType.ERROR,
+    const errorMessage: ErrorRelayMessage = {
+      kind: "ERROR",
       code,
       message,
     };

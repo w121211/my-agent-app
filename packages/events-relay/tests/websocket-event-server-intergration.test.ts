@@ -1,22 +1,17 @@
 import WebSocket from "ws";
-import { createServerEventBus } from "@repo/events-core/event-bus";
-import {
-  ClientEventType,
-  ClientTestEvent,
-  ServerEventType,
-} from "@repo/events-core/types";
-import { RelayMessageType } from "../relay-types.js";
+import { createServerEventBus, EventBus } from "@repo/events-core/event-bus";
+import { ClientRunTestEvent } from "@repo/events-core/event-types";
 import {
   WebSocketEventServer,
   createWebSocketEventServer,
-} from "../websocket-event-server.js";
+} from "../src/websocket-event-server.js";
 
 // Use a dedicated port for testing
 const TEST_PORT = 8899;
 
 describe("WebSocketEventServer Integration Tests", () => {
   let server: WebSocketEventServer;
-  let eventBus: any;
+  let eventBus: EventBus;
   let client: WebSocket;
 
   beforeEach((done) => {
@@ -43,15 +38,15 @@ describe("WebSocketEventServer Integration Tests", () => {
     client.on("message", (data) => {
       const message = JSON.parse(data.toString());
 
-      expect(message.type).toBe(RelayMessageType.SERVER_EVENT);
-      expect(message.event.eventType).toBe(ServerEventType.SERVER_TEST_EVENT);
+      expect(message.kind).toBe("SERVER_EVENT");
+      expect(message.event.kind).toBe("ServerSystemTestExecuted");
 
       done();
     });
 
     // Emit a server event on the event bus
     eventBus.emit({
-      eventType: ServerEventType.SERVER_TEST_EVENT,
+      kind: "ServerSystemTestExecuted",
       timestamp: new Date(),
       message: "Test message",
     });
@@ -59,22 +54,19 @@ describe("WebSocketEventServer Integration Tests", () => {
 
   test("server should process client events and forward to event bus", (done) => {
     // Subscribe to client event on the event bus
-    eventBus.subscribe(
-      ClientEventType.CLIENT_TEST_EVENT,
-      (event: ClientTestEvent) => {
-        expect(event.eventType).toBe(ClientEventType.CLIENT_TEST_EVENT);
-        expect(event.message).toBe("Test from client");
+    eventBus.subscribe("ClientRunTest", (event: ClientRunTestEvent) => {
+      expect(event.kind).toBe("ClientRunTest");
+      expect(event.message).toBe("Test from client");
 
-        done();
-      }
-    );
+      done();
+    });
 
     // Send a client event from WebSocket client
     client.send(
       JSON.stringify({
-        type: RelayMessageType.CLIENT_EVENT,
+        kind: "CLIENT_EVENT",
         event: {
-          eventType: ClientEventType.CLIENT_TEST_EVENT,
+          kind: "ClientRunTest",
           timestamp: new Date(),
           message: "Test from client",
         },
@@ -86,7 +78,7 @@ describe("WebSocketEventServer Integration Tests", () => {
     client.on("message", (data) => {
       const message = JSON.parse(data.toString());
 
-      expect(message.type).toBe(RelayMessageType.ERROR);
+      expect(message.kind).toBe("ERROR");
       expect(message.code).toBe("PARSE_ERROR");
 
       done();
@@ -118,7 +110,7 @@ describe("WebSocketEventServer Integration Tests", () => {
 
       // Emit event after both clients are connected
       eventBus.emit({
-        eventType: ServerEventType.SERVER_TEST_EVENT,
+        kind: "ServerSystemTestExecuted",
         timestamp: new Date(),
         message: "Broadcast test",
       });

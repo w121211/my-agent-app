@@ -1,17 +1,19 @@
-// $pnpm tsx file-watcher-demo.ts
+// ```
+// $ pnpm tsx file-watcher-demo.ts
+// ```
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { Logger } from "tslog";
 import { createServerEventBus } from "../src/event-bus.js";
 import { createFileWatcher } from "../src/file-watcher.js";
-import { ServerEventType, ServerFileSystem } from "../src/event-types.js";
+import { ServerFileWatcherEvent } from "../src/event-types.js";
 
 // Create a logger for the demo
 const logger = new Logger({ name: "FileWatcherDemo" });
 
 // Define the workspace path for demo files
-const demoWorkspacePath = path.join(process.cwd(), "demo-workspace");
+const demoWorkspacePath = path.join(process.cwd(), "workspace");
 
 // Create initial folder structure for the demo
 async function setupWorkspace(): Promise<void> {
@@ -62,7 +64,7 @@ async function demonstrateFileOperations(): Promise<void> {
   const chatData = {
     id: "chat-456",
     taskId: "task-123",
-    messages: [],
+    messages: [] as Array<{ id: string; content: string; timestamp: string }>,
   };
 
   await fs.writeFile(
@@ -109,11 +111,11 @@ async function runDemo(): Promise<void> {
   const eventBus = createServerEventBus();
 
   // Subscribe to file system events
-  const unsubscribe = eventBus.subscribe<ServerFileSystem>(
-    ServerEventType.SERVER_FILE_SYSTEM,
+  const unsubscribe = eventBus.subscribe<ServerFileWatcherEvent>(
+    "ServerFileWatcherEvent",
     (event) => {
       logger.info(
-        `File event: ${event.data.eventType} | ${event.data.isDirectory ? "Directory" : "File"} | ${event.data.srcPath}`
+        `File event: ${event.data.chokidarEvent} | ${event.data.isDirectory ? "Directory" : "File"} | ${event.data.srcPath}`
       );
     }
   );

@@ -1,45 +1,47 @@
 import {
-  BaseClientEvent,
-  BaseServerEvent,
+  ClientEventUnion,
+  ServerEventUnion,
 } from "@repo/events-core/event-types";
 
 /**
  * Message types for bidirectional event relay
  */
-export enum RelayMessageType {
-  CLIENT_EVENT = "client_event", // Client to server events
-  SERVER_EVENT = "server_event", // Server to client events
-  ERROR = "error", // Error messages
-}
+export const RelayMessageKind = [
+  "CLIENT_EVENT", // Client to server events
+  "SERVER_EVENT", // Server to client events
+  "ERROR", // Error messages
+] as const;
+
+export type RelayMessageKind = (typeof RelayMessageKind)[number];
 
 /**
  * Base interface for all relay messages
  */
 export interface BaseRelayMessage {
-  type: RelayMessageType;
+  kind: RelayMessageKind;
 }
 
 /**
  * Message containing an event from client to server
  */
-export interface ClientEventMessage extends BaseRelayMessage {
-  type: RelayMessageType.CLIENT_EVENT;
-  event: BaseClientEvent;
+export interface ClientEventRelayMessage extends BaseRelayMessage {
+  kind: "CLIENT_EVENT";
+  event: ClientEventUnion;
 }
 
 /**
  * Message containing an event from server to client
  */
-export interface ServerEventMessage extends BaseRelayMessage {
-  type: RelayMessageType.SERVER_EVENT;
-  event: BaseServerEvent;
+export interface ServerEventRelayMessage extends BaseRelayMessage {
+  kind: "SERVER_EVENT";
+  event: ServerEventUnion;
 }
 
 /**
  * Error message
  */
-export interface ErrorMessage extends BaseRelayMessage {
-  type: RelayMessageType.ERROR;
+export interface ErrorRelayMessage extends BaseRelayMessage {
+  kind: "ERROR";
   code: string;
   message: string;
 }
@@ -48,16 +50,16 @@ export interface ErrorMessage extends BaseRelayMessage {
  * Union type of all possible relay messages
  */
 export type RelayMessage =
-  | ClientEventMessage
-  | ServerEventMessage
-  | ErrorMessage;
+  | ClientEventRelayMessage
+  | ServerEventRelayMessage
+  | ErrorRelayMessage;
 
 /**
- * Type guard to check if a message is of a specific type
+ * Type guard to check if a message is of a specific kind
  */
 export function isMessageType<T extends RelayMessage>(
   message: RelayMessage,
-  type: RelayMessageType
+  kind: RelayMessageKind
 ): message is T {
-  return message.type === type;
+  return message.kind === kind;
 }

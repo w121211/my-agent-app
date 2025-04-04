@@ -13,60 +13,108 @@ export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR";
 /**
  * Events originating from clients
  */
-export const ClientEventType = [
+export const ClientEventKind = [
   // Client commands
-  "CLIENT_CREATE_TASK_COMMAND",
-  "CLIENT_START_TASK_COMMAND",
-  "CLIENT_START_SUBTASK_COMMAND",
-  "CLIENT_COMPLETE_SUBTASK_COMMAND",
-  "CLIENT_START_NEW_CHAT_COMMAND",
-  "CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND",
-  "CLIENT_SUBMIT_MESSAGE_COMMAND",
+  "ClientCreateTask",
+  "ClientStartTask",
+  "ClientStopTask",
+  "ClientStartSubtask",
+  "ClientCompleteSubtask",
+  "ClientStopSubtask",
+  "ClientCloneSubtask",
+  "ClientStartNewChat",
+  "ClientSubmitInitialPrompt",
+  "ClientSubmitMessage",
+  "ClientCloneChat",
+  "ClientBranchChat",
+  "ClientApproveWork",
+  "ClientRunTest",
 
-  // Client events
-  "CLIENT_APPROVE_WORK",
-  "CLIENT_TEST_EVENT",
+  // Client state updates
+  "ClientFileTreeUpdated",
+  "ClientDirectoryAdded",
+  "ClientFileAdded",
+  "ClientEditorReloadRequested",
+  "ClientEditorUpdated",
+  "ClientFileChangeIgnored",
+  "ClientChatUpdated",
+  "ClientTaskUpdated",
+  "ClientUIStateUpdated",
 ] as const;
 
-export type ClientEventType = (typeof ClientEventType)[number];
+export type ClientEventKind = (typeof ClientEventKind)[number];
 
 /**
  * Events originating from the server
- *
- * TODO: Rename to ServerEventKind?
  */
-export const ServerEventType = [
+export const ServerEventKind = [
   // Task related
-  "SERVER_TASK_CREATED",
-  "SERVER_TASK_FOLDER_CREATED",
-  "SERVER_TASK_INITIALIZED",
-  "SERVER_TASK_LOADED",
+  "ServerTaskCreated",
+  "ServerTaskFolderCreated",
+  "ServerTaskInitialized",
+  "ServerTaskLoaded",
 
   // Subtask related
-  "SERVER_SUBTASK_STARTED",
-  "SERVER_SUBTASK_COMPLETED",
-  "SERVER_SUBTASK_UPDATED",
-  "SERVER_NEXT_SUBTASK_TRIGGERED",
+  "ServerSubtaskStarted",
+  "ServerSubtaskCompleted",
+  "ServerSubtaskUpdated",
+  "ServerNextSubtaskTriggered",
 
   // Chat related
-  "SERVER_CHAT_CREATED",
-  "SERVER_CHAT_FILE_CREATED",
-  "SERVER_CHAT_UPDATED",
-  "SERVER_AGENT_PROCESSED_MESSAGE",
-  "SERVER_AGENT_RESPONSE_GENERATED",
-  "SERVER_MESSAGE_RECEIVED",
-  "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
+  "ServerChatCreated",
+  "ServerChatFileCreated",
+  "ServerChatContentUpdated",
+  "ServerAgentProcessedMessage",
+  "ServerAgentResponseGenerated",
+  "ServerMessageReceived",
+  "ServerMessageSavedToChatFile",
 
   // System related
-  "SERVER_FILE_SYSTEM",
-  "SERVER_TEST_EVENT",
+  "ServerFileWatcherEvent",
+  "ServerSystemTestExecuted",
 ] as const;
 
-export type ServerEventType = (typeof ServerEventType)[number];
+export type ServerEventKind = (typeof ServerEventKind)[number];
 
-// Combine both event types for type definitions
-// TODO: 'string' is only included temporarily for temporary
-export type EventType = ClientEventType | ServerEventType | string;
+/**
+ * Events originating from UI interactions
+ */
+export const UIEventKind = [
+  // User interaction events
+  "UINewTaskButtonClicked",
+  "UIFolderNodeClicked",
+  "UIFileNodeClicked",
+  "UIStartTaskButtonClicked",
+  "UIStopTaskButtonClicked",
+  "UICloneSubtaskButtonClicked",
+  "UINewChatButtonClicked",
+  "UICloneChatButtonClicked",
+  "UIBranchChatButtonClicked",
+  "UISendMessageButtonClicked",
+  "UIApproveWorkButtonClicked",
+
+  // UI state events
+  "UIFileNodeSelected",
+  "UIFolderNodeExpansionToggled",
+  "UIFileOpened",
+  "UITaskInputModalShown",
+  "UITaskInputSubmitted",
+  "UIChatInputModalShown",
+  "UIChatInputSubmitted",
+  "UIChatFileOpened",
+  "UIErrorNotificationShown",
+] as const;
+
+export type UIEventKind = (typeof UIEventKind)[number];
+
+// Combine all event types for type definitions
+// TODO:The string union type is included temporarily for development convenience
+// when working with custom or dynamic event types that haven't been fully typed yet
+export type EventKind =
+  | ClientEventKind
+  | ServerEventKind
+  | UIEventKind
+  | string;
 
 export interface TeamConfig {
   agent: Role;
@@ -143,7 +191,7 @@ export interface ChatFile {
  * Base interface for all events
  */
 export interface BaseEvent {
-  eventType: EventType;
+  kind: EventKind;
   timestamp: Date;
   correlationId?: string;
 }
@@ -152,254 +200,514 @@ export interface BaseEvent {
  * Base interface for client-originated events
  */
 export interface BaseClientEvent extends BaseEvent {
-  eventType: ClientEventType;
+  kind: ClientEventKind;
 }
 
 /**
  * Base interface for server-originated events
  */
 export interface BaseServerEvent extends BaseEvent {
-  eventType: ServerEventType;
+  kind: ServerEventKind;
+}
+
+/**
+ * Base interface for UI-originated events
+ */
+export interface BaseUIEvent extends BaseEvent {
+  kind: UIEventKind;
 }
 
 // Client Command Events
 
-export interface ClientCreateTaskCommand extends BaseClientEvent {
-  eventType: "CLIENT_CREATE_TASK_COMMAND";
+export interface ClientCreateTaskEvent extends BaseClientEvent {
+  kind: "ClientCreateTask";
   taskName: string;
   taskConfig: Record<string, unknown>;
 }
 
-export interface ClientStartTaskCommand extends BaseClientEvent {
-  eventType: "CLIENT_START_TASK_COMMAND";
+export interface ClientStartTaskEvent extends BaseClientEvent {
+  kind: "ClientStartTask";
   taskId: string;
 }
 
-export interface ClientStartSubtaskCommand extends BaseClientEvent {
-  eventType: "CLIENT_START_SUBTASK_COMMAND";
+export interface ClientStopTaskEvent extends BaseClientEvent {
+  kind: "ClientStopTask";
+  taskId: string;
+}
+
+export interface ClientStartSubtaskEvent extends BaseClientEvent {
+  kind: "ClientStartSubtask";
   taskId: string;
   subtaskId: string;
 }
 
-export interface ClientCompleteSubtaskCommand extends BaseClientEvent {
-  eventType: "CLIENT_COMPLETE_SUBTASK_COMMAND";
+export interface ClientCompleteSubtaskEvent extends BaseClientEvent {
+  kind: "ClientCompleteSubtask";
   taskId: string;
   subtaskId: string;
   output: string;
   requiresApproval: boolean;
 }
 
-export interface ClientStartNewChatCommand extends BaseClientEvent {
-  eventType: "CLIENT_START_NEW_CHAT_COMMAND";
+export interface ClientStopSubtaskEvent extends BaseClientEvent {
+  kind: "ClientStopSubtask";
+  taskId: string;
+  subtaskId: string;
+}
+
+export interface ClientCloneSubtaskEvent extends BaseClientEvent {
+  kind: "ClientCloneSubtask";
+  taskId: string;
+  subtaskId: string;
+}
+
+export interface ClientStartNewChatEvent extends BaseClientEvent {
+  kind: "ClientStartNewChat";
   taskId: string;
   subtaskId: string;
   metadata?: ChatMetadata;
 }
 
-export interface ClientSubmitInitialPromptCommand extends BaseClientEvent {
-  eventType: "CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND";
+export interface ClientSubmitInitialPromptEvent extends BaseClientEvent {
+  kind: "ClientSubmitInitialPrompt";
   chatId: string;
   prompt: string;
 }
 
-export interface ClientSubmitMessageCommand extends BaseClientEvent {
-  eventType: "CLIENT_SUBMIT_MESSAGE_COMMAND";
+export interface ClientSubmitMessageEvent extends BaseClientEvent {
+  kind: "ClientSubmitMessage";
   chatId: string;
   content: string;
 }
 
-// Client Events
+export interface ClientCloneChatEvent extends BaseClientEvent {
+  kind: "ClientCloneChat";
+  chatId: string;
+}
 
-export interface ClientApproveWork extends BaseClientEvent {
-  eventType: "CLIENT_APPROVE_WORK";
+export interface ClientBranchChatEvent extends BaseClientEvent {
+  kind: "ClientBranchChat";
+  chatId: string;
+  messageId: string;
+}
+
+export interface ClientApproveWorkEvent extends BaseClientEvent {
+  kind: "ClientApproveWork";
   chatId: string;
   approvedWork?: string;
 }
 
-export interface ClientTestEvent extends BaseClientEvent {
-  eventType: "CLIENT_TEST_EVENT";
+export interface ClientRunTestEvent extends BaseClientEvent {
+  kind: "ClientRunTest";
   message: string;
+}
+
+// Client State Update Events
+
+export interface ClientFileTreeUpdatedEvent extends BaseClientEvent {
+  kind: "ClientFileTreeUpdated";
+  tree: unknown;
+}
+
+export interface ClientDirectoryAddedEvent extends BaseClientEvent {
+  kind: "ClientDirectoryAdded";
+  path: string;
+}
+
+export interface ClientFileAddedEvent extends BaseClientEvent {
+  kind: "ClientFileAdded";
+  path: string;
+  content: string;
+}
+
+export interface ClientEditorReloadRequestedEvent extends BaseClientEvent {
+  kind: "ClientEditorReloadRequested";
+  filePath: string;
+}
+
+export interface ClientEditorUpdatedEvent extends BaseClientEvent {
+  kind: "ClientEditorUpdated";
+  filePath: string;
+  content: string;
+}
+
+export interface ClientFileChangeIgnoredEvent extends BaseClientEvent {
+  kind: "ClientFileChangeIgnored";
+  filePath: string;
+}
+
+export interface ClientChatUpdatedEvent extends BaseClientEvent {
+  kind: "ClientChatUpdated";
+  chat: Chat;
+}
+
+export interface ClientTaskUpdatedEvent extends BaseClientEvent {
+  kind: "ClientTaskUpdated";
+  task: Task;
+}
+
+export interface ClientUIStateUpdatedEvent extends BaseClientEvent {
+  kind: "ClientUIStateUpdated";
+  state: Record<string, unknown>;
+}
+
+// UI Events
+
+// User Interaction Events
+export interface UINewTaskButtonClickedEvent extends BaseUIEvent {
+  kind: "UINewTaskButtonClicked";
+}
+
+export interface UIFolderNodeClickedEvent extends BaseUIEvent {
+  kind: "UIFolderNodeClicked";
+  path: string;
+}
+
+export interface UIFileNodeClickedEvent extends BaseUIEvent {
+  kind: "UIFileNodeClicked";
+  path: string;
+}
+
+export interface UIStartTaskButtonClickedEvent extends BaseUIEvent {
+  kind: "UIStartTaskButtonClicked";
+  taskId: string;
+}
+
+export interface UIStopTaskButtonClickedEvent extends BaseUIEvent {
+  kind: "UIStopTaskButtonClicked";
+  taskId: string;
+}
+
+export interface UICloneSubtaskButtonClickedEvent extends BaseUIEvent {
+  kind: "UICloneSubtaskButtonClicked";
+  taskId: string;
+  subtaskId: string;
+}
+
+export interface UINewChatButtonClickedEvent extends BaseUIEvent {
+  kind: "UINewChatButtonClicked";
+  taskId: string;
+  subtaskId: string;
+}
+
+export interface UICloneChatButtonClickedEvent extends BaseUIEvent {
+  kind: "UICloneChatButtonClicked";
+  chatId: string;
+}
+
+export interface UIBranchChatButtonClickedEvent extends BaseUIEvent {
+  kind: "UIBranchChatButtonClicked";
+  chatId: string;
+  messageId: string;
+}
+
+export interface UISendMessageButtonClickedEvent extends BaseUIEvent {
+  kind: "UISendMessageButtonClicked";
+  chatId: string;
+  content: string;
+}
+
+export interface UIApproveWorkButtonClickedEvent extends BaseUIEvent {
+  kind: "UIApproveWorkButtonClicked";
+  chatId: string;
+}
+
+// UI State Events
+export interface UIFileNodeSelectedEvent extends BaseUIEvent {
+  kind: "UIFileNodeSelected";
+  path: string;
+}
+
+export interface UIFolderNodeExpansionToggledEvent extends BaseUIEvent {
+  kind: "UIFolderNodeExpansionToggled";
+  path: string;
+  expanded: boolean;
+}
+
+export interface UIFileOpenedEvent extends BaseUIEvent {
+  kind: "UIFileOpened";
+  path: string;
+}
+
+export interface UITaskInputModalShownEvent extends BaseUIEvent {
+  kind: "UITaskInputModalShown";
+  taskId: string;
+}
+
+export interface UITaskInputSubmittedEvent extends BaseUIEvent {
+  kind: "UITaskInputSubmitted";
+  taskId: string;
+  input: unknown;
+}
+
+export interface UIChatInputModalShownEvent extends BaseUIEvent {
+  kind: "UIChatInputModalShown";
+  chatId: string;
+}
+
+export interface UIChatInputSubmittedEvent extends BaseUIEvent {
+  kind: "UIChatInputSubmitted";
+  chatId: string;
+  input: unknown;
+}
+
+export interface UIChatFileOpenedEvent extends BaseUIEvent {
+  kind: "UIChatFileOpened";
+  chatId: string;
+}
+
+export interface UIErrorNotificationShownEvent extends BaseUIEvent {
+  kind: "UIErrorNotificationShown";
+  message: string;
+  error?: Error;
 }
 
 // Server Events
 
-export interface ServerTaskCreated extends BaseServerEvent {
-  eventType: "SERVER_TASK_CREATED";
+export interface ServerTaskCreatedEvent extends BaseServerEvent {
+  kind: "ServerTaskCreated";
   taskId: string;
   taskName: string;
   config: Record<string, unknown>;
 }
 
-export interface ServerTaskFolderCreated extends BaseServerEvent {
-  eventType: "SERVER_TASK_FOLDER_CREATED";
+export interface ServerTaskFolderCreatedEvent extends BaseServerEvent {
+  kind: "ServerTaskFolderCreated";
   taskId: string;
   folderPath: string;
 }
 
-export interface ServerTaskInitialized extends BaseServerEvent {
-  eventType: "SERVER_TASK_INITIALIZED";
+export interface ServerTaskInitializedEvent extends BaseServerEvent {
+  kind: "ServerTaskInitialized";
   taskId: string;
   initialState: Record<string, unknown>;
 }
 
-export interface ServerTaskLoaded extends BaseServerEvent {
-  eventType: "SERVER_TASK_LOADED";
+export interface ServerTaskLoadedEvent extends BaseServerEvent {
+  kind: "ServerTaskLoaded";
   taskId: string;
   taskState: Task;
 }
 
-export interface ServerSubtaskStarted extends BaseServerEvent {
-  eventType: "SERVER_SUBTASK_STARTED";
+export interface ServerSubtaskStartedEvent extends BaseServerEvent {
+  kind: "ServerSubtaskStarted";
   taskId: string;
   subtaskId: string;
   input?: unknown;
 }
 
-export interface ServerSubtaskCompleted extends BaseServerEvent {
-  eventType: "SERVER_SUBTASK_COMPLETED";
+export interface ServerSubtaskCompletedEvent extends BaseServerEvent {
+  kind: "ServerSubtaskCompleted";
   taskId: string;
   subtaskId: string;
 }
 
-export interface ServerSubtaskUpdated extends BaseServerEvent {
-  eventType: "SERVER_SUBTASK_UPDATED";
+export interface ServerSubtaskUpdatedEvent extends BaseServerEvent {
+  kind: "ServerSubtaskUpdated";
   taskId: string;
   subtaskId: string;
   status: SubtaskStatus;
 }
 
-export interface ServerNextSubtaskTriggered extends BaseServerEvent {
-  eventType: "SERVER_NEXT_SUBTASK_TRIGGERED";
+export interface ServerNextSubtaskTriggeredEvent extends BaseServerEvent {
+  kind: "ServerNextSubtaskTriggered";
   taskId: string;
   currentSubtaskId: string;
 }
 
-export interface ServerChatCreated extends BaseServerEvent {
-  eventType: "SERVER_CHAT_CREATED";
+export interface ServerChatCreatedEvent extends BaseServerEvent {
+  kind: "ServerChatCreated";
   taskId: string;
   subtaskId: string;
   chatId: string;
 }
 
-export interface ServerChatFileCreated extends BaseServerEvent {
-  eventType: "SERVER_CHAT_FILE_CREATED";
+export interface ServerChatFileCreatedEvent extends BaseServerEvent {
+  kind: "ServerChatFileCreated";
   taskId: string;
   subtaskId: string;
   chatId: string;
   filePath: string;
 }
 
-export interface ServerChatUpdated extends BaseServerEvent {
-  eventType: "SERVER_CHAT_UPDATED";
+export interface ServerChatContentUpdatedEvent extends BaseServerEvent {
+  kind: "ServerChatContentUpdated";
   chatId: string;
   lastMessageId: string;
 }
 
-export interface ServerAgentProcessedMessage extends BaseServerEvent {
-  eventType: "SERVER_AGENT_PROCESSED_MESSAGE";
+export interface ServerAgentProcessedMessageEvent extends BaseServerEvent {
+  kind: "ServerAgentProcessedMessage";
   chatId: string;
   messageId: string;
 }
 
-export interface ServerAgentResponseGenerated extends BaseServerEvent {
-  eventType: "SERVER_AGENT_RESPONSE_GENERATED";
+export interface ServerAgentResponseGeneratedEvent extends BaseServerEvent {
+  kind: "ServerAgentResponseGenerated";
   chatId: string;
   response: ChatMessage;
 }
 
-export interface ServerMessageReceived extends BaseServerEvent {
-  eventType: "SERVER_MESSAGE_RECEIVED";
+export interface ServerMessageReceivedEvent extends BaseServerEvent {
+  kind: "ServerMessageReceived";
   chatId: string;
   message: ChatMessage;
 }
 
-export interface ServerMessageSavedToChatFile extends BaseServerEvent {
-  eventType: "SERVER_MESSAGE_SAVED_TO_CHAT_FILE";
+export interface ServerMessageSavedToChatFileEvent extends BaseServerEvent {
+  kind: "ServerMessageSavedToChatFile";
   chatId: string;
   messageId: string;
   filePath: string;
 }
 
-export interface FileSystemEventData {
-  eventType: string;
+export interface FileWatcherEventData {
+  chokidarEvent:
+    | "add"
+    | "addDir"
+    | "change"
+    | "unlink"
+    | "unlinkDir"
+    | "ready"
+    | "error";
   srcPath: string;
   isDirectory: boolean;
-  destPath?: string;
+  error?: Error; // For error events
 }
 
-export interface ServerFileSystem extends BaseServerEvent {
-  eventType: "SERVER_FILE_SYSTEM";
-  data: FileSystemEventData;
+export interface ServerFileWatcherEvent extends BaseServerEvent {
+  kind: "ServerFileWatcherEvent";
+  data: FileWatcherEventData;
 }
 
-export interface ServerTestEvent extends BaseServerEvent {
-  eventType: "SERVER_TEST_EVENT";
+export interface ServerSystemTestExecutedEvent extends BaseServerEvent {
+  kind: "ServerSystemTestExecuted";
   message: string;
 }
 
 // Union types for events
+export type UIEventUnion =
+  | UINewTaskButtonClickedEvent
+  | UIFolderNodeClickedEvent
+  | UIFileNodeClickedEvent
+  | UIStartTaskButtonClickedEvent
+  | UIStopTaskButtonClickedEvent
+  | UICloneSubtaskButtonClickedEvent
+  | UINewChatButtonClickedEvent
+  | UICloneChatButtonClickedEvent
+  | UIBranchChatButtonClickedEvent
+  | UISendMessageButtonClickedEvent
+  | UIApproveWorkButtonClickedEvent
+  | UIFileNodeSelectedEvent
+  | UIFolderNodeExpansionToggledEvent
+  | UIFileOpenedEvent
+  | UITaskInputModalShownEvent
+  | UITaskInputSubmittedEvent
+  | UIChatInputModalShownEvent
+  | UIChatInputSubmittedEvent
+  | UIChatFileOpenedEvent
+  | UIErrorNotificationShownEvent;
+
 export type ClientEventUnion =
-  | ClientCreateTaskCommand
-  | ClientStartTaskCommand
-  | ClientStartSubtaskCommand
-  | ClientCompleteSubtaskCommand
-  | ClientStartNewChatCommand
-  | ClientSubmitInitialPromptCommand
-  | ClientSubmitMessageCommand
-  | ClientApproveWork
-  | ClientTestEvent;
+  | ClientCreateTaskEvent
+  | ClientStartTaskEvent
+  | ClientStopTaskEvent
+  | ClientStartSubtaskEvent
+  | ClientCompleteSubtaskEvent
+  | ClientStopSubtaskEvent
+  | ClientCloneSubtaskEvent
+  | ClientStartNewChatEvent
+  | ClientSubmitInitialPromptEvent
+  | ClientSubmitMessageEvent
+  | ClientCloneChatEvent
+  | ClientBranchChatEvent
+  | ClientApproveWorkEvent
+  | ClientRunTestEvent
+  | ClientFileTreeUpdatedEvent
+  | ClientDirectoryAddedEvent
+  | ClientFileAddedEvent
+  | ClientEditorReloadRequestedEvent
+  | ClientEditorUpdatedEvent
+  | ClientFileChangeIgnoredEvent
+  | ClientChatUpdatedEvent
+  | ClientTaskUpdatedEvent
+  | ClientUIStateUpdatedEvent;
 
 export type ServerEventUnion =
-  | ServerTaskCreated
-  | ServerTaskFolderCreated
-  | ServerTaskInitialized
-  | ServerTaskLoaded
-  | ServerSubtaskStarted
-  | ServerSubtaskCompleted
-  | ServerSubtaskUpdated
-  | ServerNextSubtaskTriggered
-  | ServerChatCreated
-  | ServerChatFileCreated
-  | ServerChatUpdated
-  | ServerAgentProcessedMessage
-  | ServerAgentResponseGenerated
-  | ServerMessageReceived
-  | ServerMessageSavedToChatFile
-  | ServerFileSystem
-  | ServerTestEvent;
+  | ServerTaskCreatedEvent
+  | ServerTaskFolderCreatedEvent
+  | ServerTaskInitializedEvent
+  | ServerTaskLoadedEvent
+  | ServerSubtaskStartedEvent
+  | ServerSubtaskCompletedEvent
+  | ServerSubtaskUpdatedEvent
+  | ServerNextSubtaskTriggeredEvent
+  | ServerChatCreatedEvent
+  | ServerChatFileCreatedEvent
+  | ServerChatContentUpdatedEvent
+  | ServerAgentProcessedMessageEvent
+  | ServerAgentResponseGeneratedEvent
+  | ServerMessageReceivedEvent
+  | ServerMessageSavedToChatFileEvent
+  | ServerFileWatcherEvent
+  | ServerSystemTestExecutedEvent;
 
 // Combined event union for backward compatibility
-export type EventUnion = ClientEventUnion | ServerEventUnion;
+export type EventUnion = UIEventUnion | ClientEventUnion | ServerEventUnion;
 
 /**
- * Type guard to check if an event is of a specific type
+ * Type guard to check if an event is of a specific kind
  */
-export function isEventType<T extends BaseEvent>(
+export function isEventKind<T extends BaseEvent>(
   event: BaseEvent,
-  type: EventType
+  kind: EventKind
 ): event is T {
-  return event.eventType === type;
+  return event.kind === kind;
+}
+
+/**
+ * Type guard to check if an event is a UI event
+ */
+export function isUIEvent(event: BaseEvent): event is UIEventUnion {
+  return UIEventKind.includes(event.kind as UIEventKind);
 }
 
 /**
  * Type guard to check if an event is a client event
  */
-export function isClientEvent(event: BaseEvent): event is BaseClientEvent {
-  return ClientEventType.includes(event.eventType as ClientEventType);
+export function isClientEvent(event: BaseEvent): event is ClientEventUnion {
+  return ClientEventKind.includes(event.kind as ClientEventKind);
 }
 
 /**
  * Type guard to check if an event is a server event
  */
-export function isServerEvent(event: BaseEvent): event is BaseServerEvent {
-  return ServerEventType.includes(event.eventType as ServerEventType);
+export function isServerEvent(event: BaseEvent): event is ServerEventUnion {
+  return ServerEventKind.includes(event.kind as ServerEventKind);
 }
 
 /**
  * Type guard to check if an event is a command
  */
 export function isCommandEvent(event: BaseEvent): boolean {
-  return event.eventType.toString().includes("_COMMAND");
+  const clientCommandEvents = [
+    "ClientCreateTask",
+    "ClientStartTask",
+    "ClientStopTask",
+    "ClientStartSubtask",
+    "ClientCompleteSubtask",
+    "ClientStopSubtask",
+    "ClientCloneSubtask",
+    "ClientStartNewChat",
+    "ClientSubmitInitialPrompt",
+    "ClientSubmitMessage",
+    "ClientCloneChat",
+    "ClientBranchChat",
+    "ClientApproveWork",
+    "ClientRunTest",
+  ];
+
+  return clientCommandEvents.includes(event.kind as string);
 }
 
 export type SyncEventHandler<T extends EventUnion> = (event: T) => void;

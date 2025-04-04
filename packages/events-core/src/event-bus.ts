@@ -1,9 +1,9 @@
 import { Logger, ILogObj } from "tslog";
 import {
-  EventType,
+  EventKind,
   EventUnion,
-  ClientEventType,
-  ServerEventType,
+  ClientEventKind,
+  ServerEventKind,
   BaseEvent,
 } from "./event-types.js";
 
@@ -18,7 +18,7 @@ export type EventHandler<T extends BaseEvent> = (
 export interface IEventBus {
   emit<T extends BaseEvent>(event: T): Promise<void>;
   subscribe<T extends BaseEvent>(
-    eventType: EventType,
+    eventKind: EventKind,
     handler: EventHandler<T>
   ): () => void;
   subscribeToAllClientEvents<T extends BaseEvent>(
@@ -28,12 +28,12 @@ export interface IEventBus {
     handler: EventHandler<T>
   ): () => void;
   unsubscribe<T extends BaseEvent>(
-    eventType: EventType,
+    eventKind: EventKind,
     handler: EventHandler<T>
   ): void;
-  unsubscribeAll(eventType: EventType): void;
-  hasHandlers(eventType: EventType): boolean;
-  getHandlerCount(eventType: EventType): number;
+  unsubscribeAll(eventKind: EventKind): void;
+  hasHandlers(eventKind: EventKind): boolean;
+  getHandlerCount(eventKind: EventKind): number;
   clear(): void;
 }
 
@@ -48,7 +48,7 @@ export interface EventBusOptions {
  * Enhanced event bus implementation that supports both client and server events
  */
 export class EventBus implements IEventBus {
-  private handlers: Map<EventType, Set<EventHandler<any>>> = new Map();
+  private handlers: Map<EventKind, Set<EventHandler<any>>> = new Map();
   private logger: Logger<ILogObj>;
   private environment: EventBusEnvironment;
 
@@ -63,19 +63,19 @@ export class EventBus implements IEventBus {
    * Returns an unsubscribe function for easy cleanup
    */
   public subscribe<T extends BaseEvent>(
-    eventType: EventType,
+    eventKind: EventKind,
     handler: EventHandler<T>
   ): () => void {
-    if (!this.handlers.has(eventType)) {
-      this.handlers.set(eventType, new Set());
+    if (!this.handlers.has(eventKind)) {
+      this.handlers.set(eventKind, new Set());
     }
 
-    const handlers = this.handlers.get(eventType)!;
+    const handlers = this.handlers.get(eventKind)!;
     handlers.add(handler);
 
-    this.logger.debug(`Subscribed handler to ${eventType}`);
+    this.logger.debug(`Subscribed handler to ${eventKind}`);
 
-    return () => this.unsubscribe(eventType, handler);
+    return () => this.unsubscribe(eventKind, handler);
   }
 
   /**
@@ -88,12 +88,12 @@ export class EventBus implements IEventBus {
     const unsubscribers: Array<() => void> = [];
 
     // Add to client events
-    Object.values(ClientEventType).forEach((type) => {
-      unsubscribers.push(this.subscribe(type, handler));
+    Object.values(ClientEventKind).forEach((kind) => {
+      unsubscribers.push(this.subscribe(kind, handler));
     });
 
     this.logger.debug(
-      `Subscribed handler to all client events (${Object.values(ClientEventType).length} events)`
+      `Subscribed handler to all client events (${Object.values(ClientEventKind).length} events)`
     );
 
     // Return a function that unsubscribes from all
@@ -110,12 +110,12 @@ export class EventBus implements IEventBus {
     const unsubscribers: Array<() => void> = [];
 
     // Add to server events
-    Object.values(ServerEventType).forEach((type) => {
-      unsubscribers.push(this.subscribe(type, handler));
+    Object.values(ServerEventKind).forEach((kind) => {
+      unsubscribers.push(this.subscribe(kind, handler));
     });
 
     this.logger.debug(
-      `Subscribed handler to all server events (${Object.values(ServerEventType).length} events)`
+      `Subscribed handler to all server events (${Object.values(ServerEventKind).length} events)`
     );
 
     // Return a function that unsubscribes from all
@@ -126,42 +126,42 @@ export class EventBus implements IEventBus {
    * Unsubscribe a specific handler from an event type
    */
   public unsubscribe<T extends BaseEvent>(
-    eventType: EventType,
+    eventKind: EventKind,
     handler: EventHandler<T>
   ): void {
-    if (!this.handlers.has(eventType)) {
+    if (!this.handlers.has(eventKind)) {
       return;
     }
 
-    const handlers = this.handlers.get(eventType)!;
+    const handlers = this.handlers.get(eventKind)!;
     handlers.delete(handler);
 
     if (handlers.size === 0) {
-      this.handlers.delete(eventType);
+      this.handlers.delete(eventKind);
     }
   }
 
   /**
    * Unsubscribe all handlers for a specific event type
    */
-  public unsubscribeAll(eventType: EventType): void {
-    this.handlers.delete(eventType);
+  public unsubscribeAll(eventKind: EventKind): void {
+    this.handlers.delete(eventKind);
   }
 
   /**
    * Emit an event to all subscribed handlers
    */
   public async emit<T extends BaseEvent>(event: T): Promise<void> {
-    const eventType = event.eventType;
-    const handlers = this.handlers.get(eventType);
+    const eventKind = event.kind;
+    const handlers = this.handlers.get(eventKind);
 
     this.logger.debug(
-      `Emitting ${eventType} to ${handlers?.size || 0} handlers`
+      `Emitting ${eventKind} to ${handlers?.size || 0} handlers`
     );
 
     if (!handlers || handlers.size === 0) {
       this.logger.warn(
-        `No handlers found for ${eventType} - event will not be processed`
+        `No handlers found for ${eventKind} - event will not be processed`
       );
       return;
     }
@@ -172,21 +172,22 @@ export class EventBus implements IEventBus {
 
     await Promise.all(promises);
 
-    this.logger.debug(`Emitted ${eventType} to ${handlers.size} handlers`);
+    this.logger.debug(`Emitted ${eventKind} to ${handlers.size} handlers`);
   }
 
   /**
-   * Check if handlers exist for an event type
+   * Check if handlers exist for an event kind
    */
-  public hasHandlers(eventType: EventType): boolean {
-    return !!this.handlers.get(eventType)?.size;
+  public hasHandlers(eventKind: EventKind): boolean {
+    return !!this.handlers.get(eventKind)?.size;
   }
 
   /**
-   * Get the number of handlers for an event type
+   * Get the number of handlers for an event kind
+   
    */
-  public getHandlerCount(eventType: EventType): number {
-    return this.handlers.get(eventType)?.size || 0;
+  public getHandlerCount(eventKind: EventKind): number {
+    return this.handlers.get(eventKind)?.size || 0;
   }
 
   /**

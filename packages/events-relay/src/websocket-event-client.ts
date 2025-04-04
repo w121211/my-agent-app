@@ -1,14 +1,13 @@
 import { ILogObj, Logger } from "tslog";
 import { IEventBus } from "@repo/events-core/event-bus";
 import {
-  BaseClientEvent,
+  ClientEventUnion,
   isClientEvent,
   isServerEvent,
 } from "@repo/events-core/event-types";
 import {
-  RelayMessageType,
-  ClientEventMessage,
-  ServerEventMessage,
+  ClientEventRelayMessage,
+  ServerEventRelayMessage,
   RelayMessage,
 } from "./relay-types.js";
 
@@ -57,6 +56,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
    */
   connect(): void {
     try {
+      this.logger.info("Connecting to WebSocket server:", this.url);
       this.ws = new WebSocket(this.url);
       this.setupEventListeners();
     } catch (error) {
@@ -74,7 +74,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
       this.ws = null;
     }
 
-    this.subscribeToClientEventsForForwarding();
+    this.unsubscribeFromClientEventsForwarding();
     this.isConnected = false;
   }
 
@@ -82,7 +82,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     if (!this.ws) return;
 
     this.ws.onopen = () => {
-      this.logger.info("WebSocket connected");
+      this.logger.info("WebSocket connected", this.url);
       this.reconnectAttempts = 0;
       this.isConnected = true;
 
@@ -91,8 +91,8 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     };
 
     this.ws.onclose = () => {
-      this.logger.info("WebSocket connection closed");
-      this.subscribeToClientEventsForForwarding();
+      this.logger.info("WebSocket connection closed", this.url);
+      this.unsubscribeFromClientEventsForwarding();
       this.isConnected = false;
       this.handleReconnect();
     };
@@ -114,7 +114,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     // Subscribe to all client events to forward to the server
     this.eventBusUnsubscriber = this.eventBus.subscribeToAllClientEvents(
       async (event) => {
-        this.logger.debug("Received client event:", event.eventType);
+        this.logger.debug("Received client event:", event.kind);
 
         // Only forward client events to the server
         if (isClientEvent(event)) {
@@ -161,7 +161,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
   /**
    * Sends a client event to the server
    */
-  private async sendClientEvent(event: BaseClientEvent): Promise<void> {
+  private async sendClientEvent(event: ClientEventUnion): Promise<void> {
     if (
       !this.ws ||
       this.ws.readyState !== WebSocket.OPEN ||
@@ -169,24 +169,21 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     ) {
       this.logger.warn(
         "WebSocket is not connected, cannot send event:",
-        event.eventType
+        event.kind
       );
       return;
     }
 
-    const message: ClientEventMessage = {
-      type: RelayMessageType.CLIENT_EVENT,
+    const message: ClientEventRelayMessage = {
+      kind: "CLIENT_EVENT",
       event: event,
     };
 
     try {
-      this.logger.debug("Sending event to server:", event.eventType);
+      this.logger.debug("Sending event to server:", event.kind);
       this.ws.send(JSON.stringify(message));
     } catch (error) {
-      this.logger.error(
-        `Error sending event ${event.eventType} to server:`,
-        error
-      );
+      this.logger.error(`Error sending event ${event.kind} to server:`, error);
     }
   }
 
@@ -197,10 +194,10 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     try {
       const data = JSON.parse(message.data) as RelayMessage;
 
-      switch (data.type) {
-        case RelayMessageType.SERVER_EVENT:
+      switch (data.kind) {
+        case "SERVER_EVENT":
           // Forward server events to client event bus
-          const serverEvent = (data as ServerEventMessage).event;
+          const serverEvent = (data as ServerEventRelayMessage).event;
 
           if (isServerEvent(serverEvent)) {
             this.eventBus.emit(serverEvent);
@@ -211,12 +208,12 @@ export class WebSocketEventClient implements IWebSocketEventClient {
           }
           break;
 
-        case RelayMessageType.ERROR:
+        case "ERROR":
           this.logger.error("Received error from server:", data);
           break;
 
         default:
-          this.logger.warn("Received unknown message type:", data.type);
+          this.logger.warn("Received unknown message type:", data.kind);
       }
     } catch (error) {
       this.logger.error("Error handling server message:", error);
@@ -252,7 +249,12 @@ export function getWebSocketEventClient(
   const protocol =
     options.protocol ||
     (window.location.protocol === "https:" ? "wss:" : "ws:");
-  const url = `${options.protocol}//${hostname}:${port}/ws`;
+
+  if (protocol !== "ws:" && protocol !== "wss:") {
+    throw new Error("Protocol must be either 'ws:' or 'wss:'");
+  }
+
+  const url = `${protocol}//${hostname}:${port}/ws`;
 
   webSocketEventClientInstance = new WebSocketEventClient(
     url,

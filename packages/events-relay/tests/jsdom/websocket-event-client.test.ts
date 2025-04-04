@@ -1,13 +1,29 @@
+// ```
+// $ pnpm jest --selectProjects=msw-jsdom-tests tests/jsdom/websocket-event-client.test.ts -t "should relay client events to server and receive responses"
+// ```
 import { ws } from "msw";
 import { setupServer } from "msw/node";
+import { Logger } from "tslog";
 import { createClientEventBus } from "@repo/events-core/event-bus";
-import { ClientEventType, ServerEventType } from "@repo/events-core/types";
+import {
+  ClientRunTestEvent,
+  ServerSystemTestExecutedEvent,
+} from "@repo/events-core/event-types";
 import {
   WebSocketEventClient,
   getWebSocketEventClient,
   resetWebSocketClient,
-} from "../../websocket-event-client.js";
-import { RelayMessageType } from "../../relay-types.js";
+} from "../../src/websocket-event-client.js";
+import {
+  ClientEventRelayMessage,
+  ErrorRelayMessage,
+  RelayMessageKind,
+  ServerEventRelayMessage,
+} from "../../src/relay-types.js";
+
+const logger = new Logger({
+  name: "WebSocketEventClient",
+});
 
 // Create a WebSocket connection handler
 const eventSocket = ws.link("ws://localhost:8000/ws");
@@ -15,57 +31,54 @@ const eventSocket = ws.link("ws://localhost:8000/ws");
 export const handlers = [
   // WebSocket handlers
   eventSocket.addEventListener("connection", ({ client }) => {
-    console.log("WebSocket connection established");
+    logger.info("WebSocket connection established");
 
     // When client sends a message
     client.addEventListener("message", (event) => {
       console.log("Received from client:", event.data);
 
       try {
-        const message = JSON.parse(event.data as string);
+        const message: ClientEventRelayMessage = JSON.parse(
+          event.data as string
+        );
 
-        if (message.type === RelayMessageType.CLIENT_EVENT) {
+        if (message.kind === "CLIENT_EVENT") {
           // Echo back the event as a SERVER_EVENT with modified type
-          const clientEvent = message.event;
-          const serverEvent = {
-            ...clientEvent,
-            eventType: ServerEventType.SERVER_TEST_EVENT,
+          const clientEvent = message.event as unknown as ClientRunTestEvent;
+          const serverEvent: ServerSystemTestExecutedEvent = {
+            kind: "ServerSystemTestExecuted",
             message: `Received: ${clientEvent.message || "no message"}`,
             timestamp: new Date(),
           };
-
+          const serverEventRelayMessage: ServerEventRelayMessage = {
+            kind: "SERVER_EVENT",
+            event: serverEvent,
+          };
           // Send the converted event back to client
-          client.send(
-            JSON.stringify({
-              type: RelayMessageType.SERVER_EVENT,
-              event: serverEvent,
-            })
-          );
+          client.send(JSON.stringify(serverEventRelayMessage));
         }
       } catch (error) {
         // Send an error message if not valid JSON
-        client.send(
-          JSON.stringify({
-            type: RelayMessageType.ERROR,
-            code: "INVALID_JSON",
-            message: "Invalid JSON received",
-          })
-        );
+        const errorMessage: ErrorRelayMessage = {
+          kind: "ERROR",
+          code: "INVALID_JSON",
+          message: "Invalid JSON received",
+        };
+        client.send(JSON.stringify(errorMessage));
       }
     });
 
     // Simulate a server-initiated event
     setTimeout(() => {
-      client.send(
-        JSON.stringify({
-          type: RelayMessageType.SERVER_EVENT,
-          event: {
-            eventType: ServerEventType.SERVER_TEST_EVENT,
-            message: "This is a server-initiated test event",
-            timestamp: new Date(),
-          },
-        })
-      );
+      const ServerEventRelayMessage: ServerEventRelayMessage = {
+        kind: "SERVER_EVENT",
+        event: {
+          kind: "ServerSystemTestExecuted",
+          message: "This is a server-initiated test event",
+          timestamp: new Date(),
+        },
+      };
+      client.send(JSON.stringify(ServerEventRelayMessage));
     }, 1000);
   }),
 ];
@@ -94,14 +107,11 @@ describe("WebSocketEventClient", () => {
       }, 2000);
 
       // Subscribe to any server event to verify connection
-      const unsubscribe = eventBus.subscribe(
-        ServerEventType.SERVER_TEST_EVENT,
-        () => {
-          clearTimeout(timeoutId); // Clear the timeout when event is received
-          unsubscribe();
-          resolve();
-        }
-      );
+      const unsubscribe = eventBus.subscribe("ServerSystemTestExecuted", () => {
+        clearTimeout(timeoutId); // Clear the timeout when event is received
+        unsubscribe();
+        resolve();
+      });
 
       client.connect();
     });
@@ -121,18 +131,20 @@ describe("WebSocketEventClient", () => {
 
     // Subscribe to server events
     const unsubscribe = eventBus.subscribe(
-      ServerEventType.SERVER_TEST_EVENT,
+      "ServerSystemTestExecuted",
       (event) => {
         receivedEvents.push(event);
       }
     );
 
     // Wait a bit for the connection to establish
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    console.log(eventBus.getHandlerCount("ClientRunTest"));
 
     // Emit a client event
     await eventBus.emit({
-      eventType: ClientEventType.CLIENT_TEST_EVENT,
+      kind: "ClientRunTest",
       message: "Hello server",
       timestamp: new Date(),
     });
@@ -157,9 +169,7 @@ describe("WebSocketEventClient", () => {
 
           clearInterval(checkInterval);
           clearTimeout(timeoutId);
-          expect(responseEvent.eventType).toBe(
-            ServerEventType.SERVER_TEST_EVENT
-          );
+          expect(responseEvent.kind).toBe("ServerSystemTestExecuted");
 
           // Cleanup
           unsubscribe();
@@ -180,8 +190,9 @@ describe("WebSocketEventClient", () => {
 
     // Subscribe to server events
     const unsubscribe = eventBus.subscribe(
-      ServerEventType.SERVER_TEST_EVENT,
+      "ServerSystemTestExecuted",
       (event) => {
+        console.log("Received server event:", event);
         receivedEvents.push(event);
       }
     );
@@ -196,7 +207,7 @@ describe("WebSocketEventClient", () => {
         );
 
         expect(serverEvent).toBeDefined();
-        expect(serverEvent.eventType).toBe(ServerEventType.SERVER_TEST_EVENT);
+        expect(serverEvent.kind).toBe("ServerSystemTestExecuted");
 
         // Cleanup
         unsubscribe();

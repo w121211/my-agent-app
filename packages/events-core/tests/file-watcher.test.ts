@@ -1,7 +1,6 @@
-import path from "path";
-import { EventBus } from "../event-bus.js";
-import { FileWatcher, createFileWatcher } from "../file-watcher.js";
-import { ServerEventType } from "../event-types.js";
+import path from "node:path";
+import { EventBus } from "../src/event-bus.js";
+import { FileWatcher, createFileWatcher } from "../src/file-watcher.js";
 
 interface MockWatcher {
   on: jest.Mock;
@@ -36,8 +35,9 @@ jest.mock("chokidar", () => {
   };
 });
 
+// TODO: Consider not mocking EventBus and instead using a test instance
 // Mock the EventBus
-jest.mock("../event-bus", () => {
+jest.mock("../src/event-bus", () => {
   return {
     EventBus: jest.fn().mockImplementation(() => ({
       emit: jest.fn().mockResolvedValue(undefined),
@@ -49,6 +49,7 @@ jest.mock("../event-bus", () => {
       hasHandlers: jest.fn().mockReturnValue(false),
       getHandlerCount: jest.fn().mockReturnValue(0),
       clear: jest.fn(),
+      getEnvironment: jest.fn().mockReturnValue("server"),
     })),
   };
 });
@@ -163,9 +164,10 @@ describe("FileWatcher", () => {
     // Assert
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: "SERVER_FILE_SYSTEM",
+        kind: "ServerFileWatcherEvent",
+        timestamp: expect.any(Date),
         data: expect.objectContaining({
-          eventType: "add",
+          chokidarEvent: "add",
           srcPath: "test.json",
           isDirectory: false,
         }),
@@ -186,11 +188,60 @@ describe("FileWatcher", () => {
     // Assert
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
-        eventType: "SERVER_FILE_SYSTEM",
+        kind: "ServerFileWatcherEvent",
+        timestamp: expect.any(Date),
         data: expect.objectContaining({
-          eventType: "addDir",
+          chokidarEvent: "addDir",
           srcPath: "test-dir",
           isDirectory: true,
+        }),
+      })
+    );
+  });
+
+  test("error events are emitted to the event bus", () => {
+    // Arrange
+    fileWatcher.startWatching();
+    const chokidar = require("chokidar");
+    const mockWatcher = chokidar.watch();
+    const testError = new Error("Test error");
+
+    // Act
+    mockWatcher.triggerEvent("error", testError);
+
+    // Assert
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "ServerFileWatcherEvent",
+        timestamp: expect.any(Date),
+        data: expect.objectContaining({
+          chokidarEvent: "error",
+          srcPath: "",
+          isDirectory: false,
+          error: testError,
+        }),
+      })
+    );
+  });
+
+  test("ready event is emitted to the event bus", () => {
+    // Arrange
+    fileWatcher.startWatching();
+    const chokidar = require("chokidar");
+    const mockWatcher = chokidar.watch();
+
+    // Act
+    mockWatcher.triggerEvent("ready");
+
+    // Assert
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "ServerFileWatcherEvent",
+        timestamp: expect.any(Date),
+        data: expect.objectContaining({
+          chokidarEvent: "ready",
+          srcPath: "",
+          isDirectory: false,
         }),
       })
     );

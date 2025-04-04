@@ -13,8 +13,8 @@ export default {
     {
       displayName: "node-tests",
       testEnvironment: "node",
-      testMatch: ["**/__tests__/**/*.test.ts"],
-      testPathIgnorePatterns: ["__tests__/jsdom"],
+      testMatch: ["<rootDir>/tests/**/*.test.ts"],
+      // testPathIgnorePatterns: ["tests/jsdom"],
 
       // These settings are repeated here because project configs don't inherit from the root config
       transform: {
@@ -34,8 +34,9 @@ export default {
       testMatch: [
         // "**/__tests__/**/websocket-event-client.test.ts",
         // "**/__tests__/jsdom/**/*.test.ts",
-        "**/__tests__/jsdom/websocket-event-client.test.ts",
-        // "**/__tests__/jsdom/msw-websocket-mock-example.test.ts",
+        // "<rootDir>/tests/jsdom/websocket-event-client.test.ts",
+        // "<rootDir>/tests/jsdom/msw-websocket-mock-example.test.ts",
+        "<rootDir>/tests/jsdom/msw-jsdom-example.test.ts",
       ],
 
       // These settings are repeated here because project configs don't inherit from the root config

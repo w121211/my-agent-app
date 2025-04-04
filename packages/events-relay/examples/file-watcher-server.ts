@@ -1,13 +1,12 @@
+// $ pnpm tsx examples/file-watcher-server.ts
 import path from "node:path";
 import { ILogObj, Logger } from "tslog";
 import { createServerEventBus, IEventBus } from "@repo/events-core/event-bus";
 import {
-  ServerEventType,
-  ClientEventType,
-  isEventType,
-  ServerTestEvent,
-  ClientTestEvent,
-  ServerFileSystem,
+  ClientRunTestEvent,
+  isEventKind,
+  ServerFileWatcherEvent,
+  ServerSystemTestExecutedEvent,
 } from "@repo/events-core/event-types";
 import { createFileWatcher, FileWatcher } from "@repo/events-core/file-watcher";
 import { createWebSocketEventServer } from "../src/websocket-event-server.js";
@@ -51,39 +50,31 @@ class WorkspaceWatcherServer {
 
   private setupEventHandlers(): void {
     // Handle client test events
-    this.eventBus.subscribe<ClientTestEvent>(
-      ClientEventType.CLIENT_TEST_EVENT,
-      (event) => {
-        if (
-          isEventType<ClientTestEvent>(event, ClientEventType.CLIENT_TEST_EVENT)
-        ) {
-          this.logger.info(`Received CLIENT_TEST_EVENT: ${event.message}`);
+    this.eventBus.subscribe<ClientRunTestEvent>("ClientRunTest", (event) => {
+      if (isEventKind<ClientRunTestEvent>(event, "ClientRunTest")) {
+        this.logger.info(`Received CLIENT_TEST_EVENT: ${event.message}`);
 
-          const serverTestEvent: ServerTestEvent = {
-            eventType: ServerEventType.SERVER_TEST_EVENT,
-            timestamp: new Date(),
-            message: `Server received: ${event.message}`,
-            correlationId: event.correlationId,
-          };
+        const serverTestEvent: ServerSystemTestExecutedEvent = {
+          kind: "ServerSystemTestExecuted",
+          timestamp: new Date(),
+          message: `Server received: ${event.message}`,
+          correlationId: event.correlationId,
+        };
 
-          this.eventBus.emit(serverTestEvent);
-        }
+        this.eventBus.emit(serverTestEvent);
       }
-    );
+    });
 
     // Log file system events
-    this.eventBus.subscribe<ServerFileSystem>(
-      ServerEventType.SERVER_FILE_SYSTEM,
+    this.eventBus.subscribe<ServerFileWatcherEvent>(
+      "ServerFileWatcherEvent",
       (event) => {
         if (
-          isEventType<ServerFileSystem>(
-            event,
-            ServerEventType.SERVER_FILE_SYSTEM
-          )
+          isEventKind<ServerFileWatcherEvent>(event, "ServerFileWatcherEvent")
         ) {
           const fsEvent = event.data;
           this.logger.debug(
-            `File system event: ${fsEvent.eventType} - ${fsEvent.srcPath}`
+            `File system event: ${fsEvent.chokidarEvent} - ${fsEvent.srcPath}`
           );
         }
       }
@@ -107,7 +98,8 @@ class WorkspaceWatcherServer {
 
 function runWorkspaceWatcherServer(): void {
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8000;
-  const WORKSPACE_PATH = process.env.WORKSPACE_PATH || process.cwd();
+  // const WORKSPACE_PATH = process.env.WORKSPACE_PATH || process.cwd();
+  const WORKSPACE_PATH = "workspace"; // Use a relative path for testing
 
   const logger: Logger<ILogObj> = new Logger({ name: "WorkspaceWatcher" });
 

@@ -1,5 +1,5 @@
-import { TaskRepository, ChatRepository } from "../repositories.js";
-import { IWorkspaceManager } from "../workspace-manager.js";
+import { TaskRepository, ChatRepository } from "../src/repositories.js";
+import { IWorkspaceManager } from "../src/workspace-manager.js";
 import {
   Task,
   Chat,
@@ -10,7 +10,7 @@ import {
   SubtaskStatus,
   ChatStatus,
   EntityNotFoundError,
-} from "../event-types.js";
+} from "../src/event-types.js";
 
 // Mock the workspace manager
 const mockWorkspaceManager: jest.Mocked<IWorkspaceManager> = {
