@@ -167,7 +167,7 @@ describe("FileWatcher", () => {
         kind: "ServerFileWatcherEvent",
         timestamp: expect.any(Date),
         data: expect.objectContaining({
-          chokidarEvent: "add",
+          fsEventKind: "add",
           srcPath: "test.json",
           isDirectory: false,
         }),
@@ -191,7 +191,7 @@ describe("FileWatcher", () => {
         kind: "ServerFileWatcherEvent",
         timestamp: expect.any(Date),
         data: expect.objectContaining({
-          chokidarEvent: "addDir",
+          fsEventKind: "addDir",
           srcPath: "test-dir",
           isDirectory: true,
         }),
@@ -215,7 +215,7 @@ describe("FileWatcher", () => {
         kind: "ServerFileWatcherEvent",
         timestamp: expect.any(Date),
         data: expect.objectContaining({
-          chokidarEvent: "error",
+          fsEventKind: "error",
           srcPath: "",
           isDirectory: false,
           error: testError,
@@ -239,7 +239,7 @@ describe("FileWatcher", () => {
         kind: "ServerFileWatcherEvent",
         timestamp: expect.any(Date),
         data: expect.objectContaining({
-          chokidarEvent: "ready",
+          fsEventKind: "ready",
           srcPath: "",
           isDirectory: false,
         }),

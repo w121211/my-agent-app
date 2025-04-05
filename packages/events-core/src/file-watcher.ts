@@ -2,7 +2,11 @@ import path from "node:path";
 import chokidar, { FSWatcher, ChokidarOptions } from "chokidar";
 import { Logger, ILogObj } from "tslog";
 import { IEventBus } from "./event-bus.js";
-import { ServerFileWatcherEvent, FileWatcherEventData } from "./event-types.js";
+import {
+  ServerFileWatcherEvent,
+  ChokidarFsEventData,
+  ChokidarFsEventKind,
+} from "./event-types.js";
 
 /**
  * Watches for file system changes in the workspace and emits events
@@ -61,27 +65,23 @@ export class FileWatcher {
 
     // Set up event handlers
     this.watcher
-      .on("add", (filePath) => this.handleFileEvent("add", filePath, false))
-      .on("change", (filePath) =>
-        this.handleFileEvent("change", filePath, false)
-      )
-      .on("unlink", (filePath) =>
-        this.handleFileEvent("unlink", filePath, false)
-      )
-      .on("addDir", (dirPath) => this.handleFileEvent("addDir", dirPath, true))
+      .on("add", (filePath) => this.handleFsEvent("add", filePath, false))
+      .on("change", (filePath) => this.handleFsEvent("change", filePath, false))
+      .on("unlink", (filePath) => this.handleFsEvent("unlink", filePath, false))
+      .on("addDir", (dirPath) => this.handleFsEvent("addDir", dirPath, true))
       .on("unlinkDir", (dirPath) =>
-        this.handleFileEvent("unlinkDir", dirPath, true)
+        this.handleFsEvent("unlinkDir", dirPath, true)
       )
       .on("error", (error) => {
         this.logger.error(`File watcher error: ${error}`);
         // Handle the unknown error by converting it to an Error object if needed
         const errorObj =
           error instanceof Error ? error : new Error(String(error));
-        this.handleFileEvent("error", "", false, errorObj);
+        this.handleFsEvent("error", "", false, errorObj);
       })
       .on("ready", () => {
         this.logger.info("Initial file scan complete");
-        this.handleFileEvent("ready", "", false);
+        this.handleFsEvent("ready", "", false);
       });
 
     this.isWatching = true;
@@ -104,8 +104,8 @@ export class FileWatcher {
   /**
    * Handle file system events and emit to the event bus
    */
-  private handleFileEvent(
-    eventType: FileWatcherEventData["chokidarEvent"],
+  private handleFsEvent(
+    fsEventKind: ChokidarFsEventKind,
     filePath: string,
     isDirectory: boolean,
     error?: Error
@@ -116,15 +116,15 @@ export class FileWatcher {
       : "";
 
     // Create file system event data
-    const fileWatcherEventData: FileWatcherEventData = {
-      chokidarEvent: eventType,
+    const fsEventData: ChokidarFsEventData = {
+      fsEventKind,
       srcPath: relativePath,
       isDirectory,
       error,
     };
 
     this.logger.debug(
-      `File event: ${eventType} - ${relativePath} (${isDirectory ? "directory" : "file"})`
+      `Chokidar fs event: ${fsEventKind} - ${relativePath} (${isDirectory ? "directory" : "file"})`
     );
 
     // Emit event through the event bus
@@ -132,7 +132,7 @@ export class FileWatcher {
       .emit<ServerFileWatcherEvent>({
         kind: "ServerFileWatcherEvent",
         timestamp: new Date(),
-        data: fileWatcherEventData,
+        data: fsEventData,
       })
       .catch((emitError) => {
         this.logger.error(`Error emitting file system event: ${emitError}`);

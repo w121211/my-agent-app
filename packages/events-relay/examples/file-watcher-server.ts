@@ -11,48 +11,43 @@ import {
 import { createFileWatcher, FileWatcher } from "@repo/events-core/file-watcher";
 import { createWebSocketEventServer } from "../src/websocket-event-server.js";
 
-interface WorkspaceWatcherConfig {
+interface FileWatcherConfig {
   port: number;
-  workspacePath: string;
+  watchPath: string;
   logger?: Logger<ILogObj>;
 }
 
-class WorkspaceWatcherServer {
+class FileWatcherServer {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
   private readonly fileWatcher: FileWatcher;
   private readonly wsEventServer: ReturnType<typeof createWebSocketEventServer>;
-  private readonly workspacePath: string;
+  private readonly watchPath: string;
   private readonly port: number;
 
-  constructor(config: WorkspaceWatcherConfig) {
-    this.logger =
-      config.logger || new Logger({ name: "WorkspaceWatcherServer" });
-    this.workspacePath = path.resolve(config.workspacePath);
+  constructor(config: FileWatcherConfig) {
+    this.logger = config.logger || new Logger({ name: "FileWatcherServer" });
+    this.watchPath = path.resolve(config.watchPath);
     this.port = config.port;
 
     this.eventBus = createServerEventBus({ logger: this.logger });
-
     this.wsEventServer = createWebSocketEventServer({
       port: this.port,
       eventBus: this.eventBus,
       logger: this.logger,
     });
-
-    this.fileWatcher = createFileWatcher(this.eventBus, this.workspacePath);
+    this.fileWatcher = createFileWatcher(this.eventBus, this.watchPath);
 
     this.setupEventHandlers();
 
-    this.logger.info(
-      `Workspace watcher initialized for: ${this.workspacePath}`
-    );
+    this.logger.info(`File watcher initialized for: ${this.watchPath}`);
   }
 
   private setupEventHandlers(): void {
     // Handle client test events
     this.eventBus.subscribe<ClientRunTestEvent>("ClientRunTest", (event) => {
       if (isEventKind<ClientRunTestEvent>(event, "ClientRunTest")) {
-        this.logger.info(`Received CLIENT_TEST_EVENT: ${event.message}`);
+        this.logger.info(`Received ClientRunTestEvent: ${event.message}`);
 
         const serverTestEvent: ServerSystemTestExecutedEvent = {
           kind: "ServerSystemTestExecuted",
@@ -74,7 +69,7 @@ class WorkspaceWatcherServer {
         ) {
           const fsEvent = event.data;
           this.logger.debug(
-            `File system event: ${fsEvent.chokidarEvent} - ${fsEvent.srcPath}`
+            `File system event: ${fsEvent.fsEventKind} - ${fsEvent.srcPath}`
           );
         }
       }
@@ -82,32 +77,32 @@ class WorkspaceWatcherServer {
   }
 
   public start(): void {
-    this.logger.info(`Starting workspace watcher server on port ${this.port}`);
+    this.logger.info(`Starting file watcher server on port ${this.port}`);
     this.wsEventServer.start();
     this.fileWatcher.startWatching();
-    this.logger.info("Workspace watcher server is running");
+    this.logger.info("File watcher server is running");
   }
 
   public stop(): void {
-    this.logger.info("Shutting down workspace watcher server");
+    this.logger.info("Shutting down file watcher server");
     this.fileWatcher.stopWatching();
     this.wsEventServer.stop();
-    this.logger.info("Workspace watcher server stopped");
+    this.logger.info("File watcher server stopped");
   }
 }
 
-function runWorkspaceWatcherServer(): void {
+function runFileWatcherServer(): void {
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8000;
-  // const WORKSPACE_PATH = process.env.WORKSPACE_PATH || process.cwd();
-  const WORKSPACE_PATH = "workspace"; // Use a relative path for testing
+  // const WATCH_PATH = process.env.WATCH_PATH || process.cwd();
+  const WATCH_PATH = "../events-core/workspace"; // Use a relative path for testing
 
-  const logger: Logger<ILogObj> = new Logger({ name: "WorkspaceWatcher" });
+  const logger: Logger<ILogObj> = new Logger({ name: "FileWatcherServer" });
 
-  logger.info(`Starting workspace watcher for: ${WORKSPACE_PATH}`);
+  logger.info(`Starting file watcher for: ${WATCH_PATH}`);
 
-  const server = new WorkspaceWatcherServer({
+  const server = new FileWatcherServer({
     port: PORT,
-    workspacePath: WORKSPACE_PATH,
+    watchPath: WATCH_PATH,
     logger,
   });
 
@@ -115,19 +110,19 @@ function runWorkspaceWatcherServer(): void {
 
   // Handle process termination
   process.on("SIGINT", () => {
-    logger.info("Shutting down workspace watcher...");
+    logger.info("Shutting down file watcher...");
     server.stop();
     process.exit(0);
   });
 
   process.on("SIGTERM", () => {
-    logger.info("Shutting down workspace watcher...");
+    logger.info("Shutting down file watcher...");
     server.stop();
     process.exit(0);
   });
 
-  logger.info("Workspace watcher is running. Press Ctrl+C to stop.");
+  logger.info("File watcher is running. Press Ctrl+C to stop.");
 }
 
 // Run the server
-runWorkspaceWatcherServer();
+runFileWatcherServer();

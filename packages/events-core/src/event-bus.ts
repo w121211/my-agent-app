@@ -155,9 +155,7 @@ export class EventBus implements IEventBus {
     const eventKind = event.kind;
     const handlers = this.handlers.get(eventKind);
 
-    this.logger.debug(
-      `Emitting ${eventKind} to ${handlers?.size || 0} handlers`
-    );
+    this.logger.debug(`Emitting event ${eventKind}`, event);
 
     if (!handlers || handlers.size === 0) {
       this.logger.warn(
@@ -171,8 +169,6 @@ export class EventBus implements IEventBus {
     );
 
     await Promise.all(promises);
-
-    this.logger.debug(`Emitted ${eventKind} to ${handlers.size} handlers`);
   }
 
   /**

@@ -561,15 +561,17 @@ export interface ServerMessageSavedToChatFileEvent extends BaseServerEvent {
   filePath: string;
 }
 
-export interface FileWatcherEventData {
-  chokidarEvent:
-    | "add"
-    | "addDir"
-    | "change"
-    | "unlink"
-    | "unlinkDir"
-    | "ready"
-    | "error";
+export type ChokidarFsEventKind =
+  | "add"
+  | "addDir"
+  | "change"
+  | "unlink"
+  | "unlinkDir"
+  | "ready"
+  | "error";
+
+export interface ChokidarFsEventData {
+  fsEventKind: ChokidarFsEventKind;
   srcPath: string;
   isDirectory: boolean;
   error?: Error; // For error events
@@ -577,7 +579,7 @@ export interface FileWatcherEventData {
 
 export interface ServerFileWatcherEvent extends BaseServerEvent {
   kind: "ServerFileWatcherEvent";
-  data: FileWatcherEventData;
+  data: ChokidarFsEventData;
 }
 
 export interface ServerSystemTestExecutedEvent extends BaseServerEvent {
