@@ -76,45 +76,10 @@ export const ServerEventKind = [
 
 export type ServerEventKind = (typeof ServerEventKind)[number];
 
-/**
- * Events originating from UI interactions
- */
-export const UIEventKind = [
-  // User interaction events
-  "UINewTaskButtonClicked",
-  "UIFolderNodeClicked",
-  "UIFileNodeClicked",
-  "UIStartTaskButtonClicked",
-  "UIStopTaskButtonClicked",
-  "UICloneSubtaskButtonClicked",
-  "UINewChatButtonClicked",
-  "UICloneChatButtonClicked",
-  "UIBranchChatButtonClicked",
-  "UISendMessageButtonClicked",
-  "UIApproveWorkButtonClicked",
-
-  // UI state events
-  "UIFileNodeSelected",
-  "UIFolderNodeExpansionToggled",
-  "UIFileOpened",
-  "UITaskInputModalShown",
-  "UITaskInputSubmitted",
-  "UIChatInputModalShown",
-  "UIChatInputSubmitted",
-  "UIChatFileOpened",
-  "UIErrorNotificationShown",
-] as const;
-
-export type UIEventKind = (typeof UIEventKind)[number];
-
 // Combine all event types for type definitions
 // TODO:The string union type is included temporarily for development convenience
 // when working with custom or dynamic event types that haven't been fully typed yet
-export type EventKind =
-  | ClientEventKind
-  | ServerEventKind
-  | UIEventKind
-  | string;
+export type EventKind = ClientEventKind | ServerEventKind | string;
 
 export interface TeamConfig {
   agent: Role;
@@ -208,13 +173,6 @@ export interface BaseClientEvent extends BaseEvent {
  */
 export interface BaseServerEvent extends BaseEvent {
   kind: ServerEventKind;
-}
-
-/**
- * Base interface for UI-originated events
- */
-export interface BaseUIEvent extends BaseEvent {
-  kind: UIEventKind;
 }
 
 // Client Command Events
@@ -351,117 +309,6 @@ export interface ClientUIStateUpdatedEvent extends BaseClientEvent {
   state: Record<string, unknown>;
 }
 
-// UI Events
-
-// User Interaction Events
-export interface UINewTaskButtonClickedEvent extends BaseUIEvent {
-  kind: "UINewTaskButtonClicked";
-}
-
-export interface UIFolderNodeClickedEvent extends BaseUIEvent {
-  kind: "UIFolderNodeClicked";
-  path: string;
-}
-
-export interface UIFileNodeClickedEvent extends BaseUIEvent {
-  kind: "UIFileNodeClicked";
-  path: string;
-}
-
-export interface UIStartTaskButtonClickedEvent extends BaseUIEvent {
-  kind: "UIStartTaskButtonClicked";
-  taskId: string;
-}
-
-export interface UIStopTaskButtonClickedEvent extends BaseUIEvent {
-  kind: "UIStopTaskButtonClicked";
-  taskId: string;
-}
-
-export interface UICloneSubtaskButtonClickedEvent extends BaseUIEvent {
-  kind: "UICloneSubtaskButtonClicked";
-  taskId: string;
-  subtaskId: string;
-}
-
-export interface UINewChatButtonClickedEvent extends BaseUIEvent {
-  kind: "UINewChatButtonClicked";
-  taskId: string;
-  subtaskId: string;
-}
-
-export interface UICloneChatButtonClickedEvent extends BaseUIEvent {
-  kind: "UICloneChatButtonClicked";
-  chatId: string;
-}
-
-export interface UIBranchChatButtonClickedEvent extends BaseUIEvent {
-  kind: "UIBranchChatButtonClicked";
-  chatId: string;
-  messageId: string;
-}
-
-export interface UISendMessageButtonClickedEvent extends BaseUIEvent {
-  kind: "UISendMessageButtonClicked";
-  chatId: string;
-  content: string;
-}
-
-export interface UIApproveWorkButtonClickedEvent extends BaseUIEvent {
-  kind: "UIApproveWorkButtonClicked";
-  chatId: string;
-}
-
-// UI State Events
-export interface UIFileNodeSelectedEvent extends BaseUIEvent {
-  kind: "UIFileNodeSelected";
-  path: string;
-}
-
-export interface UIFolderNodeExpansionToggledEvent extends BaseUIEvent {
-  kind: "UIFolderNodeExpansionToggled";
-  path: string;
-  expanded: boolean;
-}
-
-export interface UIFileOpenedEvent extends BaseUIEvent {
-  kind: "UIFileOpened";
-  path: string;
-}
-
-export interface UITaskInputModalShownEvent extends BaseUIEvent {
-  kind: "UITaskInputModalShown";
-  taskId: string;
-}
-
-export interface UITaskInputSubmittedEvent extends BaseUIEvent {
-  kind: "UITaskInputSubmitted";
-  taskId: string;
-  input: unknown;
-}
-
-export interface UIChatInputModalShownEvent extends BaseUIEvent {
-  kind: "UIChatInputModalShown";
-  chatId: string;
-}
-
-export interface UIChatInputSubmittedEvent extends BaseUIEvent {
-  kind: "UIChatInputSubmitted";
-  chatId: string;
-  input: unknown;
-}
-
-export interface UIChatFileOpenedEvent extends BaseUIEvent {
-  kind: "UIChatFileOpened";
-  chatId: string;
-}
-
-export interface UIErrorNotificationShownEvent extends BaseUIEvent {
-  kind: "UIErrorNotificationShown";
-  message: string;
-  error?: Error;
-}
-
 // Server Events
 
 export interface ServerTaskCreatedEvent extends BaseServerEvent {
@@ -588,28 +435,6 @@ export interface ServerSystemTestExecutedEvent extends BaseServerEvent {
 }
 
 // Union types for events
-export type UIEventUnion =
-  | UINewTaskButtonClickedEvent
-  | UIFolderNodeClickedEvent
-  | UIFileNodeClickedEvent
-  | UIStartTaskButtonClickedEvent
-  | UIStopTaskButtonClickedEvent
-  | UICloneSubtaskButtonClickedEvent
-  | UINewChatButtonClickedEvent
-  | UICloneChatButtonClickedEvent
-  | UIBranchChatButtonClickedEvent
-  | UISendMessageButtonClickedEvent
-  | UIApproveWorkButtonClickedEvent
-  | UIFileNodeSelectedEvent
-  | UIFolderNodeExpansionToggledEvent
-  | UIFileOpenedEvent
-  | UITaskInputModalShownEvent
-  | UITaskInputSubmittedEvent
-  | UIChatInputModalShownEvent
-  | UIChatInputSubmittedEvent
-  | UIChatFileOpenedEvent
-  | UIErrorNotificationShownEvent;
-
 export type ClientEventUnion =
   | ClientCreateTaskEvent
   | ClientStartTaskEvent
@@ -655,7 +480,7 @@ export type ServerEventUnion =
   | ServerSystemTestExecutedEvent;
 
 // Combined event union for backward compatibility
-export type EventUnion = UIEventUnion | ClientEventUnion | ServerEventUnion;
+export type EventUnion = ClientEventUnion | ServerEventUnion;
 
 /**
  * Type guard to check if an event is of a specific kind
@@ -665,13 +490,6 @@ export function isEventKind<T extends BaseEvent>(
   kind: EventKind
 ): event is T {
   return event.kind === kind;
-}
-
-/**
- * Type guard to check if an event is a UI event
- */
-export function isUIEvent(event: BaseEvent): event is UIEventUnion {
-  return UIEventKind.includes(event.kind as UIEventKind);
 }
 
 /**

@@ -69,6 +69,7 @@ export function DIProvider({
       const client = container.resolve<IWebSocketEventClient>(
         DI_TOKENS.WEBSOCKET_CLIENT
       );
+      console.debug("Connecting WebSocket client", client);
       client.connect();
 
       // Cleanup on unmount

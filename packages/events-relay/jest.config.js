@@ -34,9 +34,9 @@ export default {
       testMatch: [
         // "**/__tests__/**/websocket-event-client.test.ts",
         // "**/__tests__/jsdom/**/*.test.ts",
-        // "<rootDir>/tests/jsdom/websocket-event-client.test.ts",
+        "<rootDir>/tests/jsdom/websocket-event-client.test.ts",
         // "<rootDir>/tests/jsdom/msw-websocket-mock-example.test.ts",
-        "<rootDir>/tests/jsdom/msw-jsdom-example.test.ts",
+        // "<rootDir>/tests/jsdom/msw-jsdom-example.test.ts",
       ],
 
       // These settings are repeated here because project configs don't inherit from the root config

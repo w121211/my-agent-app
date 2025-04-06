@@ -2,47 +2,66 @@ import { ILogObj, Logger } from "tslog";
 import { inject, injectable } from "tsyringe";
 import { type IEventBus } from "@repo/events-core/event-bus";
 import {
-  ServerTaskCreated,
-  ServerTaskFolderCreated,
-  ServerTaskInitialized,
-  ServerTaskLoaded,
-  ServerSubtaskStarted,
-  ServerSubtaskCompleted,
-  ServerSubtaskUpdated,
-  ServerNextSubtaskTriggered,
-  ServerChatCreated,
-  ServerChatFileCreated,
-  ServerChatUpdated,
-  ServerAgentProcessedMessage,
-  ServerAgentResponseGenerated,
-  ServerMessageReceived,
-  ServerMessageSavedToChatFile,
-  ServerFileSystem,
-  ServerTestEvent,
+  ServerTaskCreatedEvent,
+  ServerTaskFolderCreatedEvent,
+  ServerTaskInitializedEvent,
+  ServerTaskLoadedEvent,
+  ServerSubtaskStartedEvent,
+  ServerSubtaskCompletedEvent,
+  ServerSubtaskUpdatedEvent,
+  ServerNextSubtaskTriggeredEvent,
+  ServerChatCreatedEvent,
+  ServerChatFileCreatedEvent,
+  ServerChatContentUpdatedEvent,
+  ServerAgentProcessedMessageEvent,
+  ServerAgentResponseGeneratedEvent,
+  ServerMessageReceivedEvent,
+  ServerMessageSavedToChatFileEvent,
+  ServerFileWatcherEvent,
+  ClientCreateTaskEvent,
+  ClientStartTaskEvent,
+  ClientStopTaskEvent,
+  ClientStartSubtaskEvent,
+  ClientCompleteSubtaskEvent,
+  ClientStartNewChatEvent,
+  ClientSubmitInitialPromptEvent,
+  ClientSubmitMessageEvent,
+  ClientApproveWorkEvent,
+  ClientRunTestEvent,
   ChatMetadata,
 } from "@repo/events-core/event-types";
+import { DI_TOKENS } from "../../lib/di/di-tokens";
 import {
   useEditorStore,
   TreeNodeItemType,
   hasChildrenNodeItems,
   isChatTreeNodeItem,
-  isTaskTreeNodeItem,
-  isSubtaskTreeNodeItem,
-  ChatTreeNodeItem,
 } from "./editor-store";
-import { DI_TOKENS } from "../../lib/di/di-tokens";
 import {
-  UIPanelToggleEvent,
-  UIItemSelectEvent,
-  UIFolderToggleEvent,
-  UILayoutChangeEvent,
-  UIChatMessageSubmitEvent,
-  UICreateTaskEvent,
-  UICreateSubtaskEvent,
-  UICreateChatEvent,
-  UIPromptSubmitEvent,
-} from "./ui-types";
-import { UIPanelType, UILayoutType, UIUserStatus } from "./ui-types";
+  UiNewTaskButtonClickedEvent,
+  UiFolderNodeClickedEvent,
+  UiFileNodeClickedEvent,
+  UiStartTaskButtonClickedEvent,
+  UiStopTaskButtonClickedEvent,
+  UiNewChatButtonClickedEvent,
+  UiSendMessageButtonClickedEvent,
+  UiApproveWorkButtonClickedEvent,
+  UiFileNodeSelectedEvent,
+  UiFolderNodeExpansionToggledEvent,
+  UiFileOpenedEvent,
+  UiErrorNotificationShownEvent,
+} from "./ui-event-types";
+
+// UI types (assumed to be defined elsewhere)
+export type UIPanelType = "explorer" | "editor" | "chat" | "task" | string;
+export type UILayoutType = "two-column" | "three-column";
+export type UIUserStatus = "editing" | "viewing" | "idle";
+export interface UIPanelVisibility {
+  explorer: boolean;
+  editor: boolean;
+  chat: boolean;
+  task: boolean;
+}
 
 @injectable()
 export class EditorService {
@@ -63,40 +82,43 @@ export class EditorService {
     const store = useEditorStore.getState();
 
     // Task-related event handlers
-    this.eventBus.subscribe(
-      "SERVER_TASK_CREATED",
-      (event: ServerTaskCreated) => {
+    this.eventBus.subscribe<ServerTaskCreatedEvent>(
+      "ServerTaskCreated",
+      (event) => {
         store.createNewTask();
         this.logger.debug(`Task created: ${event.taskId}`);
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_TASK_FOLDER_CREATED",
-      (event: ServerTaskFolderCreated) => {
+    this.eventBus.subscribe<ServerTaskFolderCreatedEvent>(
+      "ServerTaskFolderCreated",
+      (event) => {
         this.logger.debug(`Task folder created: ${event.folderPath}`);
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_TASK_INITIALIZED",
-      (event: ServerTaskInitialized) => {
+    this.eventBus.subscribe<ServerTaskInitializedEvent>(
+      "ServerTaskInitialized",
+      (event) => {
         this.logger.debug(`Task initialized: ${event.taskId}`);
       }
     );
 
-    this.eventBus.subscribe("SERVER_TASK_LOADED", (event: ServerTaskLoaded) => {
-      const taskItem = this.findItemById(event.taskId);
-      if (taskItem) {
-        store.setSelectedItem(taskItem);
+    this.eventBus.subscribe<ServerTaskLoadedEvent>(
+      "ServerTaskLoaded",
+      (event) => {
+        const taskItem = this.findItemById(event.taskId);
+        if (taskItem) {
+          store.setSelectedItem(taskItem);
+        }
+        this.logger.debug(`Task loaded: ${event.taskId}`);
       }
-      this.logger.debug(`Task loaded: ${event.taskId}`);
-    });
+    );
 
     // Subtask-related event handlers
-    this.eventBus.subscribe(
-      "SERVER_SUBTASK_STARTED",
-      (event: ServerSubtaskStarted) => {
+    this.eventBus.subscribe<ServerSubtaskStartedEvent>(
+      "ServerSubtaskStarted",
+      (event) => {
         const subtaskItem = this.findItemById(event.subtaskId);
         if (subtaskItem) {
           store.setSelectedItem(subtaskItem);
@@ -111,25 +133,25 @@ export class EditorService {
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_SUBTASK_COMPLETED",
-      (event: ServerSubtaskCompleted) => {
+    this.eventBus.subscribe<ServerSubtaskCompletedEvent>(
+      "ServerSubtaskCompleted",
+      (event) => {
         this.logger.debug(`Subtask completed: ${event.subtaskId}`);
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_SUBTASK_UPDATED",
-      (event: ServerSubtaskUpdated) => {
+    this.eventBus.subscribe<ServerSubtaskUpdatedEvent>(
+      "ServerSubtaskUpdated",
+      (event) => {
         this.logger.debug(
           `Subtask updated: ${event.subtaskId}, status: ${event.status}`
         );
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_NEXT_SUBTASK_TRIGGERED",
-      (event: ServerNextSubtaskTriggered) => {
+    this.eventBus.subscribe<ServerNextSubtaskTriggeredEvent>(
+      "ServerNextSubtaskTriggered",
+      (event) => {
         this.logger.debug(
           `Next subtask triggered after: ${event.currentSubtaskId}`
         );
@@ -137,9 +159,9 @@ export class EditorService {
     );
 
     // Chat-related event handlers
-    this.eventBus.subscribe(
-      "SERVER_CHAT_CREATED",
-      (event: ServerChatCreated) => {
+    this.eventBus.subscribe<ServerChatCreatedEvent>(
+      "ServerChatCreated",
+      (event) => {
         const subtaskItem = this.findItemById(event.subtaskId);
         if (subtaskItem && hasChildrenNodeItems(subtaskItem)) {
           store.createNewChat(subtaskItem.id);
@@ -148,39 +170,39 @@ export class EditorService {
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_CHAT_FILE_CREATED",
-      (event: ServerChatFileCreated) => {
+    this.eventBus.subscribe<ServerChatFileCreatedEvent>(
+      "ServerChatFileCreated",
+      (event) => {
         this.logger.debug(`Chat file created: ${event.filePath}`);
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_CHAT_UPDATED",
-      (event: ServerChatUpdated) => {
+    this.eventBus.subscribe<ServerChatContentUpdatedEvent>(
+      "ServerChatContentUpdated",
+      (event) => {
         this.logger.debug(
           `Chat updated: ${event.chatId}, last message: ${event.lastMessageId}`
         );
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_AGENT_PROCESSED_MESSAGE",
-      (event: ServerAgentProcessedMessage) => {
+    this.eventBus.subscribe<ServerAgentProcessedMessageEvent>(
+      "ServerAgentProcessedMessage",
+      (event) => {
         this.logger.debug(`Agent processed message: ${event.messageId}`);
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_AGENT_RESPONSE_GENERATED",
-      (event: ServerAgentResponseGenerated) => {
+    this.eventBus.subscribe<ServerAgentResponseGeneratedEvent>(
+      "ServerAgentResponseGenerated",
+      (event) => {
         this.logger.debug(`Agent response generated for chat: ${event.chatId}`);
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_MESSAGE_RECEIVED",
-      (event: ServerMessageReceived) => {
+    this.eventBus.subscribe<ServerMessageReceivedEvent>(
+      "ServerMessageReceived",
+      (event) => {
         const chatItem = this.findItemById(event.chatId);
         if (chatItem && isChatTreeNodeItem(chatItem)) {
           store.sendMessage(chatItem.id, event.message.content);
@@ -189,21 +211,20 @@ export class EditorService {
       }
     );
 
-    this.eventBus.subscribe(
-      "SERVER_MESSAGE_SAVED_TO_CHAT_FILE",
-      (event: ServerMessageSavedToChatFile) => {
+    this.eventBus.subscribe<ServerMessageSavedToChatFileEvent>(
+      "ServerMessageSavedToChatFile",
+      (event) => {
         this.logger.debug(`Message saved to chat file: ${event.filePath}`);
       }
     );
 
     // System-related event handlers
-    this.eventBus.subscribe("SERVER_FILE_SYSTEM", (event: ServerFileSystem) => {
-      this.logger.debug(`File system event: ${JSON.stringify(event.data)}`);
-    });
-
-    this.eventBus.subscribe("SERVER_TEST_EVENT", (event: ServerTestEvent) => {
-      this.logger.debug(`Test event received: ${event.message}`);
-    });
+    this.eventBus.subscribe<ServerFileWatcherEvent>(
+      "ServerFileWatcherEvent",
+      (event) => {
+        this.logger.debug(`File system event: ${JSON.stringify(event.data)}`);
+      }
+    );
 
     this.logger.debug("Registered event handlers for editor events");
   }
@@ -211,104 +232,63 @@ export class EditorService {
   private registerUIEventHandlers(): void {
     const store = useEditorStore.getState();
 
-    // UI Panel Toggle
-    this.eventBus.subscribe<UIPanelToggleEvent>("UI_PANEL_TOGGLE", (event) => {
-      store.setPanelVisibility(
-        event.panelType as keyof UIPanelVisibility,
-        event.isVisible
-      );
-      this.logger.debug(`Panel ${event.panelType} toggled: ${event.isVisible}`);
-    });
+    // File node selection
+    this.eventBus.subscribe<UiFileNodeSelectedEvent>(
+      "UiFileNodeSelected",
+      (event) => {
+        const item = this.findItemByPath(event.path);
+        if (item) {
+          store.setSelectedItem(item);
+          this.logger.debug(`Item selected by path: ${event.path}`);
+        }
+      }
+    );
 
-    // UI Item Select
-    this.eventBus.subscribe<UIItemSelectEvent>("UI_ITEM_SELECT", (event) => {
-      const item = this.findItemById(event.itemId);
+    // Folder expansion toggle
+    this.eventBus.subscribe<UiFolderNodeExpansionToggledEvent>(
+      "UiFolderNodeExpansionToggled",
+      (event) => {
+        const item = this.findItemByPath(event.path);
+        if (item) {
+          store.toggleFolder(item.id);
+          this.logger.debug(`Folder toggled: ${event.path}`);
+        }
+      }
+    );
+
+    // File opened
+    this.eventBus.subscribe<UiFileOpenedEvent>("UiFileOpened", (event) => {
+      const item = this.findItemByPath(event.path);
       if (item) {
         store.setSelectedItem(item);
-        this.logger.debug(`Item selected: ${event.itemId}`);
-      } else {
-        this.logger.warn(`Item not found for selection: ${event.itemId}`);
+        this.logger.debug(`File opened: ${event.path}`);
       }
     });
 
-    // UI Folder Toggle
-    this.eventBus.subscribe<UIFolderToggleEvent>(
-      "UI_FOLDER_TOGGLE",
-      (event) => {
-        store.toggleFolder(event.folderId);
-        this.logger.debug(`Folder toggled: ${event.folderId}`);
-      }
-    );
-
-    // UI Layout Change
-    this.eventBus.subscribe<UILayoutChangeEvent>(
-      "UI_LAYOUT_CHANGE",
-      (event) => {
-        store.setLayout(event.layout);
-        this.logger.debug(`Layout changed to: ${event.layout}`);
-      }
-    );
-
-    // UI Chat Message Submit
-    this.eventBus.subscribe<UIChatMessageSubmitEvent>(
-      "UI_CHAT_MESSAGE_SUBMIT",
+    // Chat message submit
+    this.eventBus.subscribe<UiSendMessageButtonClickedEvent>(
+      "UiSendMessageButtonClicked",
       (event) => {
         this.clientSubmitMessage(event.chatId, event.content);
         this.logger.debug(`Chat message submitted for chat: ${event.chatId}`);
       }
     );
 
-    // UI Create Task
-    this.eventBus.subscribe<UICreateTaskEvent>("UI_CREATE_TASK", (event) => {
-      this.clientCreateTask(event.taskName, {});
-      this.logger.debug(`Create task requested: ${event.taskName}`);
-    });
-
-    // UI Create Subtask
-    this.eventBus.subscribe<UICreateSubtaskEvent>(
-      "UI_CREATE_SUBTASK",
-      (event) => {
-        // Currently no direct client command for subtask creation
-        this.logger.debug(
-          `Create subtask requested: ${event.subtaskName} for task ${event.taskId}`
-        );
+    // Create task
+    this.eventBus.subscribe<UiNewTaskButtonClickedEvent>(
+      "UiNewTaskButtonClicked",
+      () => {
+        store.createNewTask();
+        this.logger.debug("Create task requested");
       }
     );
 
-    // UI Create Chat
-    this.eventBus.subscribe<UICreateChatEvent>("UI_CREATE_CHAT", (event) => {
-      const item = this.findItemById(event.parentId);
-      if (item) {
-        if (hasChildrenNodeItems(item)) {
-          if (isTaskTreeNodeItem(item)) {
-            this.clientStartNewChat(item.id, item.id);
-          } else if (isSubtaskTreeNodeItem(item)) {
-            this.clientStartNewChat(item.data.taskId, item.id);
-          }
-          this.logger.debug(
-            `Create chat requested for parent: ${event.parentId}`
-          );
-        } else {
-          this.logger.warn(
-            `Parent does not support children: ${event.parentId}`
-          );
-        }
-      } else {
-        this.logger.warn(`Parent not found for new chat: ${event.parentId}`);
-      }
-    });
-
-    // UI Prompt Submit
-    this.eventBus.subscribe<UIPromptSubmitEvent>(
-      "UI_PROMPT_SUBMIT",
+    // Start new chat
+    this.eventBus.subscribe<UiNewChatButtonClickedEvent>(
+      "UiNewChatButtonClicked",
       (event) => {
-        if (event.promptType === "task") {
-          this.clientCreateTask(event.content, {});
-        } else if (event.promptType === "chat") {
-          // Handle chat creation with initial prompt
-          // Would need context for which task/subtask this belongs to
-          this.logger.debug(`Prompt submitted for new chat: ${event.content}`);
-        }
+        this.clientStartNewChat(event.taskId, event.subtaskId);
+        this.logger.debug(`New chat requested for subtask: ${event.subtaskId}`);
       }
     );
 
@@ -338,24 +318,28 @@ export class EditorService {
     return findItemRecursive(root, id);
   }
 
-  // Helper method to create new chat and get the created item back
-  private createChat(parentId: string): ChatTreeNodeItem | null {
-    const store = useEditorStore.getState();
-    try {
-      return store.createNewChat(parentId);
-    } catch (error) {
-      this.logger.error(`Failed to create chat in ${parentId}: ${error}`);
-      return null;
+  // Helper method to find an item by path
+  private findItemByPath(path: string): TreeNodeItemType | null {
+    // Simple implementation - in real code this would be more robust
+    // For now just extract the ID from the last part of the path
+    const parts = path.split("/");
+    const lastPart = parts[parts.length - 1];
+    const idMatch = lastPart?.match(/^([a-z0-9-]+)/i);
+
+    if (idMatch && idMatch[1]) {
+      return this.findItemById(idMatch[1]);
     }
+
+    return null;
   }
 
-  // Public methods to emit client events - renamed to better reflect client event emission
+  // Public methods to emit client events
   public clientCreateTask(
     taskName: string,
     taskConfig: Record<string, unknown>
   ): void {
-    const event = {
-      eventType: "CLIENT_CREATE_TASK_COMMAND" as const,
+    const event: ClientCreateTaskEvent = {
+      kind: "ClientCreateTask",
       timestamp: new Date(),
       taskName,
       taskConfig,
@@ -364,8 +348,17 @@ export class EditorService {
   }
 
   public clientStartTask(taskId: string): void {
-    const event = {
-      eventType: "CLIENT_START_TASK_COMMAND" as const,
+    const event: ClientStartTaskEvent = {
+      kind: "ClientStartTask",
+      timestamp: new Date(),
+      taskId,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public clientStopTask(taskId: string): void {
+    const event: ClientStopTaskEvent = {
+      kind: "ClientStopTask",
       timestamp: new Date(),
       taskId,
     };
@@ -373,8 +366,8 @@ export class EditorService {
   }
 
   public clientStartSubtask(taskId: string, subtaskId: string): void {
-    const event = {
-      eventType: "CLIENT_START_SUBTASK_COMMAND" as const,
+    const event: ClientStartSubtaskEvent = {
+      kind: "ClientStartSubtask",
       timestamp: new Date(),
       taskId,
       subtaskId,
@@ -388,8 +381,8 @@ export class EditorService {
     output: string,
     requiresApproval: boolean
   ): void {
-    const event = {
-      eventType: "CLIENT_COMPLETE_SUBTASK_COMMAND" as const,
+    const event: ClientCompleteSubtaskEvent = {
+      kind: "ClientCompleteSubtask",
       timestamp: new Date(),
       taskId,
       subtaskId,
@@ -404,8 +397,8 @@ export class EditorService {
     subtaskId: string,
     metadata?: ChatMetadata
   ): void {
-    const event = {
-      eventType: "CLIENT_START_NEW_CHAT_COMMAND" as const,
+    const event: ClientStartNewChatEvent = {
+      kind: "ClientStartNewChat",
       timestamp: new Date(),
       taskId,
       subtaskId,
@@ -413,19 +406,18 @@ export class EditorService {
     };
     this.eventBus.emit(event);
 
-    // This is an immediate local action to improve UI responsiveness
-    // The server event will eventually ensure data consistency
+    // Local action to improve UI responsiveness
     if (subtaskId) {
       const subtaskItem = this.findItemById(subtaskId);
       if (subtaskItem && hasChildrenNodeItems(subtaskItem)) {
-        this.createChat(subtaskItem.id);
+        useEditorStore.getState().createNewChat(subtaskItem.id);
       }
     }
   }
 
   public clientSubmitInitialPrompt(chatId: string, prompt: string): void {
-    const event = {
-      eventType: "CLIENT_SUBMIT_INITIAL_PROMPT_COMMAND" as const,
+    const event: ClientSubmitInitialPromptEvent = {
+      kind: "ClientSubmitInitialPrompt",
       timestamp: new Date(),
       chatId,
       prompt,
@@ -434,8 +426,8 @@ export class EditorService {
   }
 
   public clientSubmitMessage(chatId: string, content: string): void {
-    const event = {
-      eventType: "CLIENT_SUBMIT_MESSAGE_COMMAND" as const,
+    const event: ClientSubmitMessageEvent = {
+      kind: "ClientSubmitMessage",
       timestamp: new Date(),
       chatId,
       content,
@@ -443,17 +435,12 @@ export class EditorService {
     this.eventBus.emit(event);
 
     // Local state update for immediate UI feedback
-    // The actual server response will come later
-    try {
-      useEditorStore.getState().sendMessage(chatId, content);
-    } catch (error) {
-      this.logger.error(`Failed to send message locally: ${error}`);
-    }
+    useEditorStore.getState().sendMessage(chatId, content);
   }
 
   public clientApproveWork(chatId: string, approvedWork?: string): void {
-    const event = {
-      eventType: "CLIENT_APPROVE_WORK" as const,
+    const event: ClientApproveWorkEvent = {
+      kind: "ClientApproveWork",
       timestamp: new Date(),
       chatId,
       approvedWork,
@@ -461,9 +448,9 @@ export class EditorService {
     this.eventBus.emit(event);
   }
 
-  public clientSendTestEvent(message: string): void {
-    const event = {
-      eventType: "CLIENT_TEST_EVENT" as const,
+  public clientRunTest(message: string): void {
+    const event: ClientRunTestEvent = {
+      kind: "ClientRunTest",
       timestamp: new Date(),
       message,
     };
@@ -471,48 +458,63 @@ export class EditorService {
   }
 
   // UI event emitters
-  public uiTogglePanel(panelType: UIPanelType, isVisible: boolean): void {
-    const event: UIPanelToggleEvent = {
-      eventType: "UI_PANEL_TOGGLE",
+  public uiNewTaskButtonClicked(): void {
+    const event: UiNewTaskButtonClickedEvent = {
+      kind: "UiNewTaskButtonClicked",
       timestamp: new Date(),
-      panelType,
-      isVisible,
     };
     this.eventBus.emit(event);
   }
 
-  public uiSelectItem(itemId: string): void {
-    const event: UIItemSelectEvent = {
-      eventType: "UI_ITEM_SELECT",
+  public uiFolderNodeClicked(path: string): void {
+    const event: UiFolderNodeClickedEvent = {
+      kind: "UiFolderNodeClicked",
       timestamp: new Date(),
-      itemId,
+      path,
     };
     this.eventBus.emit(event);
   }
 
-  public uiToggleFolder(folderId: string): void {
-    const isExpanded = !useEditorStore.getState().isExpanded(folderId);
-    const event: UIFolderToggleEvent = {
-      eventType: "UI_FOLDER_TOGGLE",
+  public uiFileNodeClicked(path: string): void {
+    const event: UiFileNodeClickedEvent = {
+      kind: "UiFileNodeClicked",
       timestamp: new Date(),
-      folderId,
-      isExpanded,
+      path,
     };
     this.eventBus.emit(event);
   }
 
-  public uiChangeLayout(layout: UILayoutType): void {
-    const event: UILayoutChangeEvent = {
-      eventType: "UI_LAYOUT_CHANGE",
+  public uiStartTaskButtonClicked(taskId: string): void {
+    const event: UiStartTaskButtonClickedEvent = {
+      kind: "UiStartTaskButtonClicked",
       timestamp: new Date(),
-      layout,
+      taskId,
     };
     this.eventBus.emit(event);
   }
 
-  public uiSubmitChatMessage(chatId: string, content: string): void {
-    const event: UIChatMessageSubmitEvent = {
-      eventType: "UI_CHAT_MESSAGE_SUBMIT",
+  public uiStopTaskButtonClicked(taskId: string): void {
+    const event: UiStopTaskButtonClickedEvent = {
+      kind: "UiStopTaskButtonClicked",
+      timestamp: new Date(),
+      taskId,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiNewChatButtonClicked(taskId: string, subtaskId: string): void {
+    const event: UiNewChatButtonClickedEvent = {
+      kind: "UiNewChatButtonClicked",
+      timestamp: new Date(),
+      taskId,
+      subtaskId,
+    };
+    this.eventBus.emit(event);
+  }
+
+  public uiSendMessageButtonClicked(chatId: string, content: string): void {
+    const event: UiSendMessageButtonClickedEvent = {
+      kind: "UiSendMessageButtonClicked",
       timestamp: new Date(),
       chatId,
       content,
@@ -520,68 +522,47 @@ export class EditorService {
     this.eventBus.emit(event);
   }
 
-  public uiCreateTask(taskName: string): void {
-    const event: UICreateTaskEvent = {
-      eventType: "UI_CREATE_TASK",
+  public uiApproveWorkButtonClicked(chatId: string): void {
+    const event: UiApproveWorkButtonClickedEvent = {
+      kind: "UiApproveWorkButtonClicked",
       timestamp: new Date(),
-      taskName,
+      chatId,
     };
     this.eventBus.emit(event);
   }
 
-  public uiCreateSubtask(taskId: string, subtaskName: string): void {
-    const event: UICreateSubtaskEvent = {
-      eventType: "UI_CREATE_SUBTASK",
+  public uiErrorNotification(message: string, error?: Error): void {
+    const event: UiErrorNotificationShownEvent = {
+      kind: "UiErrorNotificationShown",
       timestamp: new Date(),
-      taskId,
-      subtaskName,
-    };
-    this.eventBus.emit(event);
-  }
-
-  public uiCreateChat(parentId: string): void {
-    const event: UICreateChatEvent = {
-      eventType: "UI_CREATE_CHAT",
-      timestamp: new Date(),
-      parentId,
-    };
-    this.eventBus.emit(event);
-  }
-
-  public uiSubmitPrompt(promptType: "chat" | "task", content: string): void {
-    const event: UIPromptSubmitEvent = {
-      eventType: "UI_PROMPT_SUBMIT",
-      timestamp: new Date(),
-      promptType,
-      content,
+      message,
+      error,
     };
     this.eventBus.emit(event);
   }
 
   // Utility methods for UI components
-  public togglePanelVisibility(panel: UIPanelType): void {
-    const panelVisibility = useEditorStore.getState().panelVisibility;
-    const isCurrentlyVisible =
-      panelVisibility[panel as keyof UIPanelVisibility];
-    this.uiTogglePanel(panel, !isCurrentlyVisible);
+  public toggleFolderExpansion(path: string): void {
+    const item = this.findItemByPath(path);
+    if (item) {
+      const isExpanded = useEditorStore.getState().isExpanded(item.id);
+
+      const event: UiFolderNodeExpansionToggledEvent = {
+        kind: "UiFolderNodeExpansionToggled",
+        timestamp: new Date(),
+        path,
+        expanded: !isExpanded,
+      };
+      this.eventBus.emit(event);
+    }
   }
 
-  public toggleLayout(): void {
-    const currentLayout = useEditorStore.getState().layout;
-    const newLayout =
-      currentLayout === "two-column" ? "three-column" : "two-column";
-    this.uiChangeLayout(newLayout);
-  }
-
-  public openPromptModal(type: "chat" | "task"): void {
-    useEditorStore.getState().setPromptModal(true, type);
-  }
-
-  public closePromptModal(): void {
-    useEditorStore.getState().setPromptModal(false, "task");
-  }
-
-  public updateUserStatus(userId: string, status: UIUserStatus): void {
-    useEditorStore.getState().updateUserStatus(userId, status);
+  public openFile(path: string): void {
+    const event: UiFileOpenedEvent = {
+      kind: "UiFileOpened",
+      timestamp: new Date(),
+      path,
+    };
+    this.eventBus.emit(event);
   }
 }

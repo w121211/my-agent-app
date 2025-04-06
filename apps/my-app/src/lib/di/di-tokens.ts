@@ -5,4 +5,5 @@ export const DI_TOKENS = {
   WEBSOCKET_CLIENT: Symbol("WebSocketClient"),
   FILE_EXPLORER_SERVICE: Symbol("FileExplorerService"),
   EDITOR_SERVICE: Symbol("EditorService"),
+  WORKSPACE_TREE_SERVICE: Symbol("WorkspaceTreeService"),
 };
