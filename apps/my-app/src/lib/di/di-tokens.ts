@@ -1,9 +1,18 @@
-// Symbol tokens for type-safe dependency injection
+/**
+ * Dependency Injection tokens for the application
+ */
 export const DI_TOKENS = {
-  LOGGER: Symbol("Logger"),
-  EVENT_BUS: Symbol("EventBus"),
-  WEBSOCKET_CLIENT: Symbol("WebSocketClient"),
-  FILE_EXPLORER_SERVICE: Symbol("FileExplorerService"),
-  EDITOR_SERVICE: Symbol("EditorService"),
-  WORKSPACE_TREE_SERVICE: Symbol("WorkspaceTreeService"),
-};
+  // Core services
+  LOGGER: "LOGGER",
+  EVENT_BUS: "EVENT_BUS",
+  WEBSOCKET_CLIENT: "WEBSOCKET_CLIENT",
+  CONNECTION_SERVICE: "CONNECTION_SERVICE",
+
+  // Feature services
+  FILE_EXPLORER_SERVICE: "FILE_EXPLORER_SERVICE",
+  EDITOR_SERVICE: "EDITOR_SERVICE",
+  WORKSPACE_TREE_SERVICE: "WORKSPACE_TREE_SERVICE",
+} as const;
+
+// Type for DI tokens
+export type DIToken = (typeof DI_TOKENS)[keyof typeof DI_TOKENS];

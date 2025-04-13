@@ -1,6 +1,9 @@
 import path from "node:path";
 import { EventBus } from "../src/event-bus.js";
-import { FileWatcher, createFileWatcher } from "../src/file-watcher.js";
+import {
+  FileWatcherService,
+  createFileWatcher,
+} from "../src/file-watcher-service.js";
 
 interface MockWatcher {
   on: jest.Mock;
@@ -35,6 +38,14 @@ jest.mock("chokidar", () => {
   };
 });
 
+// Mock fs/promises module
+jest.mock("node:fs/promises", () => {
+  return {
+    stat: jest.fn().mockResolvedValue({ isDirectory: () => true }),
+    readdir: jest.fn().mockResolvedValue([]),
+  };
+});
+
 // TODO: Consider not mocking EventBus and instead using a test instance
 // Mock the EventBus
 jest.mock("../src/event-bus", () => {
@@ -54,20 +65,20 @@ jest.mock("../src/event-bus", () => {
   };
 });
 
-describe("FileWatcher", () => {
-  let fileWatcher: FileWatcher;
+describe("FileWatcherService", () => {
+  let fileWatcherService: FileWatcherService;
   let mockEventBus: EventBus;
   const workspacePath = "/test/workspace";
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockEventBus = new EventBus({ environment: "server" });
-    fileWatcher = new FileWatcher(mockEventBus, workspacePath);
+    fileWatcherService = new FileWatcherService(mockEventBus, workspacePath);
   });
 
   test("constructor initializes with default options", () => {
-    // Access the private field in FileWatcher for testing purposes
-    const options = (fileWatcher as any).chokidarOptions;
+    // Access the private field in FileWatcherService for testing purposes
+    const options = (fileWatcherService as any).chokidarOptions;
 
     // Assert default options are set
     expect(options).toMatchObject({
@@ -91,13 +102,13 @@ describe("FileWatcher", () => {
     };
 
     // Act
-    const customWatcher = new FileWatcher(
+    const customWatcher = new FileWatcherService(
       mockEventBus,
       workspacePath,
       customOptions
     );
 
-    // Access the private field in FileWatcher for testing purposes
+    // Access the private field in FileWatcherService for testing purposes
     const options = (customWatcher as any).chokidarOptions;
 
     // Assert options are properly merged
@@ -111,7 +122,7 @@ describe("FileWatcher", () => {
 
   test("startWatching initializes the file watcher", () => {
     // Act
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
 
     // Get the chokidar module
     const chokidar = require("chokidar");
@@ -121,17 +132,17 @@ describe("FileWatcher", () => {
       workspacePath,
       expect.any(Object)
     );
-    expect(fileWatcher.isActive()).toBe(true);
+    expect(fileWatcherService.isActive()).toBe(true);
   });
 
   test("startWatching does nothing if already watching", () => {
     // Arrange
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
     const chokidar = require("chokidar");
     chokidar.watch.mockClear();
 
     // Act
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
 
     // Assert
     expect(chokidar.watch).not.toHaveBeenCalled();
@@ -139,21 +150,21 @@ describe("FileWatcher", () => {
 
   test("stopWatching closes the watcher", async () => {
     // Arrange
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
     const chokidar = require("chokidar");
     const mockWatcher = chokidar.watch();
 
     // Act
-    await fileWatcher.stopWatching();
+    await fileWatcherService.stopWatching();
 
     // Assert
     expect(mockWatcher.close).toHaveBeenCalled();
-    expect(fileWatcher.isActive()).toBe(false);
+    expect(fileWatcherService.isActive()).toBe(false);
   });
 
   test("file events are emitted to the event bus", () => {
     // Arrange
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
     const chokidar = require("chokidar");
     const mockWatcher = chokidar.watch();
     const filePath = path.join(workspacePath, "test.json");
@@ -177,7 +188,7 @@ describe("FileWatcher", () => {
 
   test("directory events are emitted to the event bus", () => {
     // Arrange
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
     const chokidar = require("chokidar");
     const mockWatcher = chokidar.watch();
     const dirPath = path.join(workspacePath, "test-dir");
@@ -201,7 +212,7 @@ describe("FileWatcher", () => {
 
   test("error events are emitted to the event bus", () => {
     // Arrange
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
     const chokidar = require("chokidar");
     const mockWatcher = chokidar.watch();
     const testError = new Error("Test error");
@@ -226,7 +237,7 @@ describe("FileWatcher", () => {
 
   test("ready event is emitted to the event bus", () => {
     // Arrange
-    fileWatcher.startWatching();
+    fileWatcherService.startWatching();
     const chokidar = require("chokidar");
     const mockWatcher = chokidar.watch();
 
@@ -246,22 +257,66 @@ describe("FileWatcher", () => {
       })
     );
   });
+
+  test("handles workspace tree requests", async () => {
+    // Arrange
+    const fs = require("node:fs/promises");
+    fs.stat.mockResolvedValue({ isDirectory: () => true });
+    fs.readdir.mockResolvedValue([
+      { name: "file1.txt", isDirectory: () => false },
+      { name: "dir1", isDirectory: () => true },
+    ]);
+
+    // Mock buildFolderTree implementation
+    const mockFolderTree = {
+      name: "test",
+      path: "/",
+      isDirectory: true,
+      children: [],
+    };
+    jest
+      .spyOn(fileWatcherService as any, "buildFolderTree")
+      .mockResolvedValue(mockFolderTree);
+
+    // Act - simulate receiving a workspace tree request
+    const requestEvent = {
+      kind: "ClientRequestWorkspaceFolderTree",
+      timestamp: new Date(),
+      correlationId: "test-correlation-id",
+      workspacePath: "",
+    };
+
+    await (fileWatcherService as any).handleWorkspaceTreeRequest(requestEvent);
+
+    // Assert
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "ServerWorkspaceFolderTreeResponsed",
+        correlationId: "test-correlation-id",
+        workspacePath: "",
+        folderTree: mockFolderTree,
+      })
+    );
+  });
 });
 
 describe("createFileWatcher", () => {
-  test("creates and starts a FileWatcher instance", () => {
+  test("creates and starts a FileWatcherService instance", () => {
     // Arrange
     const mockEventBus = new EventBus({ environment: "server" });
     const workspacePath = "/test/workspace";
 
-    // Spy on FileWatcher's startWatching method
-    const startWatchingSpy = jest.spyOn(FileWatcher.prototype, "startWatching");
+    // Spy on FileWatcherService's startWatching method
+    const startWatchingSpy = jest.spyOn(
+      FileWatcherService.prototype,
+      "startWatching"
+    );
 
     // Act
     const fileWatcher = createFileWatcher(mockEventBus, workspacePath);
 
     // Assert
-    expect(fileWatcher).toBeInstanceOf(FileWatcher);
+    expect(fileWatcher).toBeInstanceOf(FileWatcherService);
     expect(startWatchingSpy).toHaveBeenCalled();
     expect(fileWatcher.isActive()).toBe(true);
 
@@ -269,7 +324,7 @@ describe("createFileWatcher", () => {
     startWatchingSpy.mockRestore();
   });
 
-  test("passes custom options to the FileWatcher constructor", () => {
+  test("passes custom options to the FileWatcherService constructor", () => {
     // Arrange
     const mockEventBus = new EventBus({ environment: "server" });
     const workspacePath = "/test/workspace";

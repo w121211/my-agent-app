@@ -11,6 +11,16 @@ export type ChatStatus = "ACTIVE" | "CLOSED";
 export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR";
 
 /**
+ * Structure representing a file system node in the folder tree
+ */
+export type FolderTreeNode = {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  children?: FolderTreeNode[];
+};
+
+/**
  * Events originating from clients
  */
 export const ClientEventKind = [
@@ -28,7 +38,7 @@ export const ClientEventKind = [
   "ClientCloneChat",
   "ClientBranchChat",
   "ClientApproveWork",
-  "ClientRunTest",
+  "ClientRequestWorkspaceFolderTree",
 
   // Client state updates
   "ClientFileTreeUpdated",
@@ -40,6 +50,9 @@ export const ClientEventKind = [
   "ClientChatUpdated",
   "ClientTaskUpdated",
   "ClientUIStateUpdated",
+
+  // Client test events
+  "ClientTestPing",
 ] as const;
 
 export type ClientEventKind = (typeof ClientEventKind)[number];
@@ -71,7 +84,8 @@ export const ServerEventKind = [
 
   // System related
   "ServerFileWatcherEvent",
-  "ServerSystemTestExecuted",
+  "ServerWorkspaceFolderTreeResponsed",
+  "ServerTestPing",
 ] as const;
 
 export type ServerEventKind = (typeof ServerEventKind)[number];
@@ -255,8 +269,13 @@ export interface ClientApproveWorkEvent extends BaseClientEvent {
   approvedWork?: string;
 }
 
-export interface ClientRunTestEvent extends BaseClientEvent {
-  kind: "ClientRunTest";
+export interface ClientRequestWorkspaceFolderTreeEvent extends BaseClientEvent {
+  kind: "ClientRequestWorkspaceFolderTree";
+  workspacePath?: string; // Optional path to specify which workspace folder to query
+}
+
+export interface ClientTestPingEvent extends BaseClientEvent {
+  kind: "ClientTestPing";
   message: string;
 }
 
@@ -429,8 +448,16 @@ export interface ServerFileWatcherEvent extends BaseServerEvent {
   data: ChokidarFsEventData;
 }
 
-export interface ServerSystemTestExecutedEvent extends BaseServerEvent {
-  kind: "ServerSystemTestExecuted";
+export interface ServerWorkspaceFolderTreeResponsedEvent
+  extends BaseServerEvent {
+  kind: "ServerWorkspaceFolderTreeResponsed";
+  workspacePath: string;
+  folderTree: FolderTreeNode | null;
+  error?: string; // Optional error message if the request failed
+}
+
+export interface ServerTestPingEvent extends BaseServerEvent {
+  kind: "ServerTestPing";
   message: string;
 }
 
@@ -449,7 +476,8 @@ export type ClientEventUnion =
   | ClientCloneChatEvent
   | ClientBranchChatEvent
   | ClientApproveWorkEvent
-  | ClientRunTestEvent
+  | ClientRequestWorkspaceFolderTreeEvent
+  | ClientTestPingEvent
   | ClientFileTreeUpdatedEvent
   | ClientDirectoryAddedEvent
   | ClientFileAddedEvent
@@ -477,7 +505,8 @@ export type ServerEventUnion =
   | ServerMessageReceivedEvent
   | ServerMessageSavedToChatFileEvent
   | ServerFileWatcherEvent
-  | ServerSystemTestExecutedEvent;
+  | ServerWorkspaceFolderTreeResponsedEvent
+  | ServerTestPingEvent;
 
 // Combined event union for backward compatibility
 export type EventUnion = ClientEventUnion | ServerEventUnion;

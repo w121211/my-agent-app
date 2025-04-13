@@ -4,10 +4,10 @@ import {
   createServerEventBus,
 } from "../src/event-bus.js";
 import {
-  ClientRunTestEvent,
+  ClientTestPingEvent,
   ClientApproveWorkEvent,
   ServerChatCreatedEvent,
-  ServerSystemTestExecutedEvent,
+  ServerTestPingEvent,
 } from "../src/event-types.js";
 
 // Mock logger to prevent unnecessary logs during testing
@@ -40,8 +40,8 @@ describe("EventBus", () => {
     it("should invoke handler when an event is emitted", async () => {
       // Setup
       const mockHandler = jest.fn();
-      const kind = "ClientRunTest";
-      const testEvent: ClientRunTestEvent = {
+      const kind = "ClientTestPing";
+      const testEvent: ClientTestPingEvent = {
         kind,
         timestamp: new Date(),
         message: "Test message",
@@ -62,8 +62,8 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const kind = "ClientRunTest";
-      const testEvent: ClientRunTestEvent = {
+      const kind = "ClientTestPing";
+      const testEvent: ClientTestPingEvent = {
         kind,
         timestamp: new Date(),
         message: "Test message",
@@ -112,8 +112,8 @@ describe("EventBus", () => {
         result.push("async handler completed");
       };
 
-      const kind = "ClientRunTest";
-      const testEvent: ClientRunTestEvent = {
+      const kind = "ClientTestPing";
+      const testEvent: ClientTestPingEvent = {
         kind,
         timestamp: new Date(),
         message: "Test message",
@@ -135,8 +135,8 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const kind = "ClientRunTest";
-      const testEvent: ClientRunTestEvent = {
+      const kind = "ClientTestPing";
+      const testEvent: ClientTestPingEvent = {
         kind,
         timestamp: new Date(),
         message: "Test message",
@@ -160,7 +160,7 @@ describe("EventBus", () => {
     it("should do nothing when unsubscribing a non-existent handler", () => {
       // Setup
       const mockHandler = jest.fn();
-      const kind = "ClientRunTest";
+      const kind = "ClientTestPing";
 
       // Act & Assert (should not throw)
       expect(() => {
@@ -174,8 +174,8 @@ describe("EventBus", () => {
       // Setup
       const mockHandler1 = jest.fn();
       const mockHandler2 = jest.fn();
-      const kind = "ClientRunTest";
-      const testEvent: ClientRunTestEvent = {
+      const kind = "ClientTestPing";
+      const testEvent: ClientTestPingEvent = {
         kind,
         timestamp: new Date(),
         message: "Test message",
@@ -201,7 +201,7 @@ describe("EventBus", () => {
     it("should properly track if handlers exist", () => {
       // Setup
       const mockHandler = jest.fn();
-      const kind = "ClientRunTest";
+      const kind = "ClientTestPing";
 
       // Initially no handlers
       expect(eventBus.hasHandlers(kind)).toBe(false);
@@ -234,16 +234,16 @@ describe("EventBus", () => {
       // Setup
       const mockClientHandler = jest.fn();
       const mockServerHandler = jest.fn();
-      const clientKind = "ClientRunTest";
-      const serverKind = "ServerSystemTestExecuted";
+      const clientKind = "ClientTestPing";
+      const serverKind = "ServerTestPing";
 
-      const clientEvent: ClientRunTestEvent = {
+      const clientEvent: ClientTestPingEvent = {
         kind: clientKind,
         timestamp: new Date(),
         message: "Client test",
       };
 
-      const serverEvent: ServerSystemTestExecutedEvent = {
+      const serverEvent: ServerTestPingEvent = {
         kind: serverKind,
         timestamp: new Date(),
         message: "Server test",
@@ -277,8 +277,8 @@ describe("EventBus", () => {
       eventBus.subscribeToAllClientEvents(mockHandler);
 
       // Create test events for different client event types
-      const testEvent1: ClientRunTestEvent = {
-        kind: "ClientRunTest",
+      const testEvent1: ClientTestPingEvent = {
+        kind: "ClientTestPing",
         timestamp: new Date(),
         message: "Test 1",
       };
@@ -303,8 +303,8 @@ describe("EventBus", () => {
     it("should return a function that unsubscribes from all client events", async () => {
       // Setup
       const mockHandler = jest.fn();
-      const testEvent: ClientRunTestEvent = {
-        kind: "ClientRunTest",
+      const testEvent: ClientTestPingEvent = {
+        kind: "ClientTestPing",
         timestamp: new Date(),
         message: "Test message",
       };
@@ -332,8 +332,8 @@ describe("EventBus", () => {
       eventBus.subscribeToAllServerEvents(mockHandler);
 
       // Create test events for different server event types
-      const testEvent1: ServerSystemTestExecutedEvent = {
-        kind: "ServerSystemTestExecuted",
+      const testEvent1: ServerTestPingEvent = {
+        kind: "ServerTestPing",
         timestamp: new Date(),
         message: "Test 1",
       };

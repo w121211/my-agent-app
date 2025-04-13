@@ -17,7 +17,6 @@ import {
 export interface IWebSocketEventClient {
   connect(): void;
   disconnect(): void;
-  isConnected(): boolean;
 }
 
 /**
@@ -41,7 +40,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
   private readonly maxReconnectAttempts = 5;
   private readonly reconnectDelay = 1000;
   private eventBusUnsubscriber: (() => void) | null = null;
-  private isConnectedStatus = false;
+  private isConnected = false;
   private reconnectTimer: number | null = null;
   private logger: Logger<ILogObj>;
 
@@ -54,22 +53,12 @@ export class WebSocketEventClient implements IWebSocketEventClient {
   }
 
   /**
-   * Checks if the WebSocket connection is currently established and open
-   */
-  public isConnected(): boolean {
-    this.logger.debug(
-      `WebSocket connection status: ${this.isConnectedStatus ? "connected" : "disconnected"}, readyState: ${this.ws ? this.ws.readyState : "no websocket"}`
-    );
-    return this.isConnectedStatus && this.ws?.readyState === WebSocket.OPEN;
-  }
-
-  /**
    * Connects to the WebSocket server and sets up bidirectional event relay
    */
   connect(): void {
     // Don't attempt to connect if already connected
     if (
-      this.isConnectedStatus ||
+      this.isConnected ||
       (this.ws && this.ws.readyState === WebSocket.OPEN)
     ) {
       this.logger.debug(
@@ -95,7 +84,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     }
 
     this.unsubscribeFromClientEventsForwarding();
-    this.isConnectedStatus = false;
+    this.isConnected = false;
   }
 
   private setupEventListeners(): void {
@@ -104,7 +93,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     this.ws.onopen = () => {
       this.logger.info("WebSocket connected", this.url);
       this.reconnectAttempts = 0;
-      this.isConnectedStatus = true;
+      this.isConnected = true;
 
       // Cancel any pending reconnection attempts
       this.cancelPendingReconnect();
@@ -116,7 +105,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     this.ws.onclose = () => {
       this.logger.info("WebSocket connection closed", this.url);
       this.unsubscribeFromClientEventsForwarding();
-      this.isConnectedStatus = false;
+      this.isConnected = false;
       this.handleReconnect();
     };
 
@@ -127,7 +116,6 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     this.ws.onmessage = this.handleServerMessage;
   }
 
-  // Rest of the class implementation remains the same
   private cancelPendingReconnect(): void {
     if (this.reconnectTimer !== null) {
       window.clearTimeout(this.reconnectTimer);
@@ -136,6 +124,9 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     }
   }
 
+  /**
+   * Subscribes to client events on the event bus to forward them to the server
+   */
   private subscribeToClientEventsForForwarding(): void {
     // Unsubscribe first to prevent duplicate handlers
     this.unsubscribeFromClientEventsForwarding();
@@ -155,6 +146,9 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     this.logger.debug("Subscribed to all client events for forwarding");
   }
 
+  /**
+   * Unsubscribes from the event bus
+   */
   private unsubscribeFromClientEventsForwarding(): void {
     this.logger.debug("Unsubscribing from client events for forwarding");
 
@@ -164,13 +158,16 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     }
   }
 
+  /**
+   * Handles reconnection logic with exponential backoff
+   */
   private handleReconnect(): void {
     // Cancel any existing reconnection attempt
     this.cancelPendingReconnect();
 
     // Don't reconnect if already connected
     if (
-      this.isConnectedStatus ||
+      this.isConnected ||
       (this.ws && this.ws.readyState === WebSocket.OPEN)
     ) {
       this.logger.debug("WebSocket already connected, skipping reconnection");
@@ -192,7 +189,7 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     this.reconnectTimer = window.setTimeout(() => {
       // Double-check we're not already connected before attempting reconnection
       if (
-        this.isConnectedStatus ||
+        this.isConnected ||
         (this.ws && this.ws.readyState === WebSocket.OPEN)
       ) {
         this.logger.debug(
@@ -210,11 +207,14 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     }, delay);
   }
 
+  /**
+   * Sends a client event to the server
+   */
   private async sendClientEvent(event: ClientEventUnion): Promise<void> {
     if (
       !this.ws ||
       this.ws.readyState !== WebSocket.OPEN ||
-      !this.isConnectedStatus
+      !this.isConnected
     ) {
       this.logger.warn(
         "WebSocket is not connected, cannot send event:",
@@ -236,6 +236,9 @@ export class WebSocketEventClient implements IWebSocketEventClient {
     }
   }
 
+  /**
+   * Handles incoming messages from the server
+   */
   private handleServerMessage = (message: MessageEvent): void => {
     try {
       const data = JSON.parse(message.data) as RelayMessage;

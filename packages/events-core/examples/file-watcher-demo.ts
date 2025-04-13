@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Logger } from "tslog";
 import { createServerEventBus } from "../src/event-bus.js";
-import { createFileWatcher } from "../src/file-watcher.js";
+import { createFileWatcher } from "../src/file-watcher-service.js";
 import { ServerFileWatcherEvent } from "../src/event-types.js";
 
 // Create a logger for the demo

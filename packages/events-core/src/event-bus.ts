@@ -180,7 +180,6 @@ export class EventBus implements IEventBus {
 
   /**
    * Get the number of handlers for an event kind
-   
    */
   public getHandlerCount(eventKind: EventKind): number {
     return this.handlers.get(eventKind)?.size || 0;

@@ -4,6 +4,421 @@
 
 
 
+
+React 重新加載 component ＆完成連線後，因為先前的 scheduled reconnect 被 triggered，結果造成原本已經建立好的連線又被斷開＆重連
+有哪些方法可以解決這問題？
+請分析，不用code
+
+
+為什麼app在第一次連線 websocket server 時會失敗？但第二次卻會成功？
+我的code中有做兩次分別的連線嗎？（不是指失敗後的attempt）
+請分析，不用code
+
+- Typescript, next.js, 環境：browser
+
+請參考 editor page.tsx，單獨寫一個 workspace tree explorer 的 page.tsx，將 workspace tree explorer 獨立出來
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript, next.js, 環境：browser
+- Adopt typescript best practices
+- Logger 用 slog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+我們的目標是利用事件系統來確保 ui file explorer 與 server’s workspace 
+請參考現行的 editor service，寫一個 folder tree service （給個適當命名）
+- Ui tree 只是用顯示當前的 workspace，沒有新增/刪除 / change file, folder等功能（MVP階段） -> 所以不要考慮這部分
+- Workspace 的更新邏輯: receive ServerFileWatcherEvent -> workspace folder tree update
+- 後端 File watcher 是用 chokidar
+- 利用 watcher 初始化時（before “ready”)的 events，來初始化 explorer store
+- 
+
+
+請按照更新的 event-types.ts ，ui-event-types.ts，更新 editor-service.ts
+
+我希望 ui event bus 盡可能是利用原本的 event bus，不另外再寫一個 class
+例如說，UiEventBus = EventBus<UiEventUnion, …>(…) 等等
+或是你有其他好的方案？
+
+EventKind 雖然允許用 string 來允許自行定義的 event
+但這樣會造成任意 event 都能被傳輸
+可不可以改成由使用者在創建自行給予 event kind 來限縮 events
+
+我該如何改寫 原本的 event bus 來做到
+
+請按照更新的 event-types.ts ，ui-types.ts，把所有的 ui events 獨立出來，寫一個 ui-events.ts
+
+
+
+
+
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript, 環境：browser
+- Adopt typescript best practices
+- Logger 用 slog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+我有一個前後端 app ，使用事件系統串連，在前端的 ui events （只會在前端使用），我應該是要定義在後端的 event-types.ts，還是另外寫一個在前端寫 ui-types.ts
+- Typescript
+- Adopt typescript best practices
+
+
+
+
+>     this.logger = config.logger || new Logger({ name: "FileWatcherServer" });
+    this.watchPath = path.resolve(config.watchPath);
+    this.port = config.port;
+
+    this.eventBus = createServerEventBus({ logger: this.logger });
+
+    this.wsEventServer = createWebSocketEventServer({
+      port: this.port,
+      eventBus: this.eventBus,
+      logger: this.logger,
+    });
+
+
+這邊會造成 ws event server 的 log 顯示成 file watcher server: ...，變成無法區分其實是從 ws event server 過來的
+有哪些實務解法？
+請分析，不用code
+
+
+
+websocket event client 為什麼要在 close 或 disconnect 的時候 call this.subscribeToClientEventsForForwarding(); ?
+請分析，不用code
+
+
+
+
+請調整 event-types.ts
+1. 重命名 EventType -> EventKind，包括 ClientEventType, etc..
+2. 要注意有些地方也要跟著更新，例如 type:EventType, kind: EventKind, …
+3. export function isUIEvent(event: BaseEvent): event is BaseUIEvent  改成  event is UIEventUnion & 類似的也要更新
+
+
+
+export type EventType =
+  | ClientEventType
+  | ServerEventType
+  | UIEventType
+  | string;
+
+1.  EventType 命名成 EventKind 會不會比較適合？
+
+
+export function isUIEvent(event: BaseEvent): event is BaseUIEvent {
+  return UIEventType.includes(event.kind as UIEventType);
+}
+
+2. event is BaseUIEvent 改成  event is UIEventUnion 是不是比較好？
+
+請以主流做法做分析，不用code
+
+
+
+
+
+我希望把event-types.ts 中的 property eventType 改成 kind
+你覺得除此之外，還有哪些地方可以換成 kind 的？
+請思考＆回答，不用code
+
+
+請按更新的 file-watcher.ts 調整 file-watcher.test.ts
+
+請按更新的 types 調整 file-watcher.ts
+
+
+目前 file watcher 是用 chokidar
+- eventType 給具體的值？
+- 目前的 properties 足夠了嗎？
+
+
+
+在開發上事件名取叫做 “ClientCreateTask” 感覺比 “Client.CreateTask” 方便
+- 我可以直接快速的 copy paste
+- 跟 interface 命名相同，比較不會混淆
+
+
+請移除事件名中的 “.” ，更新這兩個 markdowns
+- 例如：UI.NewTaskButtonClicked -> UINewTaskButtonClicked
+
+
+請按照更新的命名更新`event-types.ts`
+
+
+
+
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Typescript, 環境：node
+- Adopt typescript best practices
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+編寫 `design-events.md`, `design-ui-events-v7.md`
+- 事件流格式照原本的寫法
+- 輸出一個 md file
+
+
+
+請分析、評論這個新的事件命名方案
+
+
+
+讓我們思考該如何重新命名 events
+- 符合主流實踐、typescript
+- 使用 Pascal Case
+- CQRS概念
+- 明確區分 server、client、ui等等
+
+請先以這3個事件，提出幾個命名方案 ＆ 如何命名
+
+1. UI: user click new task button
+2. Client: create task
+3. Server: task created
+
+
+
+
+
+請設計命名規則
+不用修改
+
+
+
+
+
+
+Server events -> UI處理
+- File watcher event (Chokidar)
+    - Add // workspce 新增檔案
+        - UI: tree update
+    - Add dir // 新增dir
+        - UI: tree update
+    - Unlink // 檔案被刪
+        - UI: tree update
+        - UI: editor -> if file is opened, ask to reload
+    - Unlink dir // Dir被刪
+        - UI: tree -> update
+    - Change
+        - UI: editor -> 
+		if file is opened
+			if is not chat file -> ask to reload
+			if is chat file
+				if is ai response
+- Task event
+    - Create
+        - UI: tree -> 套用 adddir event
+    - Update
+        - UI: tree -> update
+
+- Subtask event
+    - Create ->  套用 adddir event
+    - Update
+        - Status changed
+            - UI: tree -> update
+    - On subtask start/stop/done
+        - UI: message -> show info
+
+- Chat event
+    - Create -> 利用通用的file watcher add event
+    - On human msg submitted -> (UI) 因為store已經在ClientSubmitChatMessageCommand時更新，這裡無需處理
+        - (server) chat file changed -> (UI) 可能要透過id等來判斷是否已經處理過了 -> 忽略通用的file watcher event, do nothing
+    - On AI msg (stream) recevived -> (UI) if opened, 更新store
+        - (server) chat file changed -> (UI) 可能要透過id等來判斷是否已經處理過了 -> 忽略通用的file watcher event, do nothing	
+    - On error
+
+
+
+
+UI user actions
+
+- Click folder tree node (task, subtask 因為也是folder，相同的處理邏輯)
+    - (UI store) node as "selected" & expand/collapse
+
+- Click file tree node (chat file)
+    - (UI store) node as "selected" & editor open file
+
+- click [start subtask/task] button
+    - (Server event) task, subtask updated -> 套用 task/subtask update
+
+- Stop task, subtask
+    - (Server event) task, subtask updated -> 套用 task/subtask update
+
+- click [new task] button
+    - (UI store) Show chat input modal
+        - User input & submit
+            - (Server) task dir created -> (UI) 套用 file watcher event
+            - (Server) Subtask-0 dir created -> (UI) 套用 file watcher event
+            - (Server) Chat file created -> (UI) 套用 file watcher event & Editor open chat file (可以利用 client select chat file command)
+
+- click [Clone subtask] button -> (UI) 套用 file watcher event
+
+- Create subtask
+    - 目前還不確定
+
+- New chat
+    - Chat input modal
+        - Input & submit
+            - Server: chat file created
+            - Client: open chat file (= select chat file = click on chat file node)
+
+
+- click [new chat] button
+    - (UI) Show chat input modal
+        - User input & submit
+            - (Server) Chat file created -> (UI) 套用 file watcher event & Editor open chat file (可以利用 client select chat file command)
+
+- Clone/branch chat command
+    - (Server) chat file cloned, branched
+    - (Server) Chat file created -> (UI) 套用 file watcher event & Editor open chat file (可以利用 client select chat file command)
+
+- Send chat message/prompt command
+    - (Server) ai message received -> (UI) 套用server chat event
+
+---
+請參考以上流程，重新編寫 ui 事件流設計
+- 格式參考：design-events.md
+- 事件命名用 Pascal case
+- UI 事件的命名要有區隔
+- 不要 code
+
+
+
+
+
+
+
+
+
+
+
+
+在目前的 client events 名稱中，command 還有意義嗎？是否該拿掉？
+
+請從 CQRS 的角度來評論目前的 event 名稱，舉出哪些需要調整、建議哪些名字
+
+
+
+如果前端想要定期獲取整個 workspace structure，透過一個新事件
+我可以怎樣設計？
+不用code
+
+
+
+
+請用 msw 模擬 websocket server 測試 editor page
+- Typescript, Jest
+- Test env：browser
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
+
+我要如何使用 msw mock websocket server，來測試前端 app？
+- Typescript, React, Zustand, Next.js
+- Env：browser
+- Jest
+- Follow typescript best practices
+- MVP 階段，不用過度設計，保持簡潔清楚
+
+
+我想要測試 editor page ，要怎樣做？
+請分析回答，不用code
+
+
+在 next.js app 要如何用 jest 測試 component
+- Typescript, Next.js
+- Env：browser
+- Jest
+
+
+
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+請按照 design-ui-events-v6.md 的事件流，更新 editor-service.ts、editor-store.ts、定義 ui events
+
+- Typescript, React, Zustand, Next.js
+- Env：browser
+- Follow typescript best practices
+- 不用標 React.FC，讓 typescript 自動推導 type
+- MVP 階段，不用過度設計，保持簡潔清楚，explicit
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+請按照更新的 editor-store.ts，更新 editor-service.ts
+
+
+> Object literal may only specify known properties, and 'children' does not exist in type 'TaskItem'.ts(2353)
+
+> children: [ { id: "s1", name: "s1-planning", type: "subtask", taskId: "t21", seqNumber: 1, status: "COMPLETED”, …
+> children?: (FileItem | ChatItem | FolderItem)[];
+
+問題在於 FolderItem 的 children 因為有可能不是 FolderItem，所以 ts 會報錯
+
+一個我知道的解法是獨立定義 children object, eg `const children: FolderItem = …`
+但除了這個還有哪些方法可以解決？
+
+
+
+1. TaskItem, SubtaskItem 本質上都是 folder，應該直接 extends folder item
+2. BaseItem, TaskItem, … 應該都是 tree node item 吧？是不是該叫做 BaseTreeNodeItem 會比較適合？其他也是一樣因為現在這樣容易跟後端的 task, subtask 搞混
+
+1. 我發現有一些 types 可能原本就定義在 event-types.ts，例如 Chat, Message，前端這裡要定義的應該是僅用於 ui 的 type
+    1. 如果是一般的 data type，應該就直接 import
+    2. 如果是在原本 data type 上需要額外加一些東西，要怎樣做比較適合？
+
+Message 改叫 ChatMessage 會不會比較適合？
+
+請分析，不用code
+
+
+
+
+
+
+請參考更新的 ui design, component names，更新 editor types, store, page
+
+- Typescript, React, Zustand, Next.js
+- Env：browser
+- Follow typescript best practices
+-  不用標 React.FC，讓 typescript 自動推導 type
+- MVP 階段，不用過度設計，保持簡潔清楚
+- Logger 用 tslog
+- 避免用 as ，確保 type safe，follow typescript best practices
+- 不需要 try, catch，只需要throw error
+- Comments 用英文，只有必要的地方才加 comment，不要過度 comment，保持精簡
+
+
+
+
+
 Editor store, service 是用於前端的，若將這兩個 files 一起放在 events-core package 會比較好嗎？
 請分析＆做出你的選擇，不用code
 
@@ -40,7 +455,6 @@ Editor store, service 是用於前端的，若將這兩個 files 一起放在 ev
 
 請寫 editor service 的 集成測試，測試實際運作
 - 不要 mock
-
 - Typescript, Jest
 - Test env：browser
 - MVP 階段，不用過度設計，保持簡潔清楚

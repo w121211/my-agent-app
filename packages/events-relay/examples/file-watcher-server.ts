@@ -1,14 +1,18 @@
-// $ pnpm tsx examples/file-watcher-server.ts
+// File watcher server example
+// Run with: pnpm tsx examples/file-watcher-server.ts
 import path from "node:path";
 import { ILogObj, Logger } from "tslog";
 import { createServerEventBus, IEventBus } from "@repo/events-core/event-bus";
 import {
-  ClientRunTestEvent,
+  ClientTestPingEvent,
   isEventKind,
   ServerFileWatcherEvent,
-  ServerSystemTestExecutedEvent,
+  ServerTestPingEvent,
 } from "@repo/events-core/event-types";
-import { createFileWatcher, FileWatcher } from "@repo/events-core/file-watcher";
+import {
+  createFileWatcherService,
+  type FileWatcherService,
+} from "@repo/events-core/file-watcher-service";
 import { createWebSocketEventServer } from "../src/websocket-event-server.js";
 
 interface FileWatcherConfig {
@@ -20,7 +24,7 @@ interface FileWatcherConfig {
 class FileWatcherServer {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
-  private readonly fileWatcher: FileWatcher;
+  private readonly fileWatcher: FileWatcherService;
   private readonly wsEventServer: ReturnType<typeof createWebSocketEventServer>;
   private readonly watchPath: string;
   private readonly port: number;
@@ -36,7 +40,7 @@ class FileWatcherServer {
       eventBus: this.eventBus,
       logger: this.logger,
     });
-    this.fileWatcher = createFileWatcher(this.eventBus, this.watchPath);
+    this.fileWatcher = createFileWatcherService(this.eventBus, this.watchPath);
 
     this.setupEventHandlers();
 
@@ -45,12 +49,12 @@ class FileWatcherServer {
 
   private setupEventHandlers(): void {
     // Handle client test events
-    this.eventBus.subscribe<ClientRunTestEvent>("ClientRunTest", (event) => {
-      if (isEventKind<ClientRunTestEvent>(event, "ClientRunTest")) {
-        this.logger.info(`Received ClientRunTestEvent: ${event.message}`);
+    this.eventBus.subscribe<ClientTestPingEvent>("ClientTestPing", (event) => {
+      if (isEventKind<ClientTestPingEvent>(event, "ClientTestPing")) {
+        this.logger.info(`Received ClientTestPing: ${event.message}`);
 
-        const serverTestEvent: ServerSystemTestExecutedEvent = {
-          kind: "ServerSystemTestExecuted",
+        const serverTestEvent: ServerTestPingEvent = {
+          kind: "ServerTestPing",
           timestamp: new Date(),
           message: `Server received: ${event.message}`,
           correlationId: event.correlationId,

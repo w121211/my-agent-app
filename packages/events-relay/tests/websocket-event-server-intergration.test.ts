@@ -1,6 +1,9 @@
 import WebSocket from "ws";
 import { createServerEventBus, EventBus } from "@repo/events-core/event-bus";
-import { ClientRunTestEvent } from "@repo/events-core/event-types";
+import {
+  ClientTestPingEvent,
+  ServerTestPingEvent,
+} from "@repo/events-core/event-types";
 import {
   WebSocketEventServer,
   createWebSocketEventServer,
@@ -39,14 +42,14 @@ describe("WebSocketEventServer Integration Tests", () => {
       const message = JSON.parse(data.toString());
 
       expect(message.kind).toBe("SERVER_EVENT");
-      expect(message.event.kind).toBe("ServerSystemTestExecuted");
+      expect(message.event.kind).toBe("ServerTestPing");
 
       done();
     });
 
     // Emit a server event on the event bus
-    eventBus.emit({
-      kind: "ServerSystemTestExecuted",
+    eventBus.emit<ServerTestPingEvent>({
+      kind: "ServerTestPing",
       timestamp: new Date(),
       message: "Test message",
     });
@@ -54,8 +57,8 @@ describe("WebSocketEventServer Integration Tests", () => {
 
   test("server should process client events and forward to event bus", (done) => {
     // Subscribe to client event on the event bus
-    eventBus.subscribe("ClientRunTest", (event: ClientRunTestEvent) => {
-      expect(event.kind).toBe("ClientRunTest");
+    eventBus.subscribe<ClientTestPingEvent>("ClientTestPing", (event) => {
+      expect(event.kind).toBe("ClientTestPing");
       expect(event.message).toBe("Test from client");
 
       done();
@@ -66,7 +69,7 @@ describe("WebSocketEventServer Integration Tests", () => {
       JSON.stringify({
         kind: "CLIENT_EVENT",
         event: {
-          kind: "ClientRunTest",
+          kind: "ClientTestPing",
           timestamp: new Date(),
           message: "Test from client",
         },
@@ -110,7 +113,7 @@ describe("WebSocketEventServer Integration Tests", () => {
 
       // Emit event after both clients are connected
       eventBus.emit({
-        kind: "ServerSystemTestExecuted",
+        kind: "ServerTestPing",
         timestamp: new Date(),
         message: "Broadcast test",
       });

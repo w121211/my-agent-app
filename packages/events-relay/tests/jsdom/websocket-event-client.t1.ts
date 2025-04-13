@@ -1,6 +1,6 @@
 /**
  * Jest CLI command to run this test:
- * pnpm jest --selectProjects=msw-jsdom-tests --testPathPattern=websocket-event-client -t "should relay client events"
+ * pnpm jest --selectProjects=msw-jsdom-tests tests/jsdom/websocket-event-client.test.ts -t "should relay client events"
  *
  * Note: VS Code Jest extension will fail to run this test because it doesn't support jest project settings.
  */
@@ -250,43 +250,5 @@ describe("WebSocketEventClient", () => {
         resolve();
       }, 1500); // Wait for the first reconnection attempt
     });
-  });
-
-  it("should report connection status correctly", async () => {
-    // Arrange
-    const eventBus = createClientEventBus();
-    const client = new WebSocketEventClient("ws://localhost:8000/ws", eventBus);
-
-    // Act & Assert - initially disconnected
-    expect(client.isConnected()).toBe(false);
-
-    // Connect and verify status
-    client.connect();
-
-    // Wait for connection to establish
-    await new Promise<void>((resolve) => {
-      // If no event is received in 2 seconds, fail the test
-      const timeoutId = setTimeout(() => {
-        unsubscribe();
-        throw new Error("Connection timeout");
-      }, 2000);
-
-      // Subscribe to any server event to verify connection
-      const unsubscribe = eventBus.subscribe<ServerTestPingEvent>(
-        "ServerTestPing",
-        () => {
-          clearTimeout(timeoutId);
-          unsubscribe();
-
-          // Now test the connection status
-          expect(client.isConnected()).toBe(true);
-          resolve();
-        }
-      );
-    });
-
-    // Disconnect and verify status again
-    client.disconnect();
-    expect(client.isConnected()).toBe(false);
   });
 });

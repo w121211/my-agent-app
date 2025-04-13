@@ -8,7 +8,7 @@ import { TaskRepository, ChatRepository } from "../repositories.js";
 import { TaskService } from "../task-service.js";
 import { SubtaskService } from "../subtask-service.js";
 import { ChatService } from "../chat-service.js";
-import { FileWatcher } from "../file-watcher.js";
+import { FileWatcher } from "../file-watcher-service.js";
 import {
   ClientEventType,
   ServerEventType,
