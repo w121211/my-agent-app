@@ -192,15 +192,7 @@ const WorkspaceExplorerPage = () => {
   }, [setRoot]);
 
   return (
-    <DIProvider
-      // WebSocket config for connecting to the server
-      websocketConfig={{
-        hostname: "localhost",
-        port: 8000,
-        protocol: "ws:",
-      }}
-      logger={logger}
-    >
+    <DIProvider>
       <div className="flex h-screen bg-gray-50">
         <div className="w-72 bg-white border-r flex flex-col h-full">
           {/* <ExplorerHeader /> */}

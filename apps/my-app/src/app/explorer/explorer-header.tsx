@@ -1,8 +1,6 @@
 import React from "react";
 import { RefreshCw, Plus } from "lucide-react";
 import { ILogObj, Logger } from "tslog";
-import { container } from "../../lib/di/di-container";
-import { DI_TOKENS } from "../../lib/di/di-tokens";
 import { useWorkspaceTreeService } from "../../lib/di/di-provider";
 // import { WorkspaceTreeService } from "../../features/workspace-tree/workspace-tree-service";
 import { ConnectionStatusIndicator } from "./connection-status-indicator";

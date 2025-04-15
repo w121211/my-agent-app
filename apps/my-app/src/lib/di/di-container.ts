@@ -11,83 +11,99 @@ import { FileExplorerService } from "../../features/file-explorer-di/file-explor
 import { EditorService } from "../../features/editor/editor-service";
 import { WorkspaceTreeService } from "../../features/workspace-tree/workspace-tree-service";
 import { ConnectionService } from "../../features/connection/connection-service";
+import { ConfigService } from "../config/config-service";
 import { DI_TOKENS } from "./di-tokens";
 
 // Create default logger
 const defaultLogger = new Logger<ILogObj>({ name: "AppContainer" });
 
-// Register logger
+// Register core services
 container.register<Logger<ILogObj>>(DI_TOKENS.LOGGER, {
   useValue: defaultLogger,
 });
 
-// WebSocketClient and EventBus configuration
-export interface WebSocketConfig {
-  hostname: string; // Required
-  port: number; // Required
-  protocol: string; // Required
-}
+// Register ConfigService (singleton)
+container.registerSingleton<ConfigService>(
+  DI_TOKENS.CONFIG_SERVICE,
+  ConfigService
+);
 
-export function setupEventCommunication(
-  config: WebSocketConfig
-): IWebSocketEventClient {
-  const logger = container.resolve<Logger<ILogObj>>(DI_TOKENS.LOGGER);
+// Register feature services
+container.registerSingleton<FileExplorerService>(
+  DI_TOKENS.FILE_EXPLORER_SERVICE,
+  FileExplorerService
+);
 
-  // Create basic event bus for WebSocket client
-  const baseEventBus = createClientEventBus({
-    logger: logger.getSubLogger({ name: "BaseEventBus" }),
-  });
+container.registerSingleton<EditorService>(
+  DI_TOKENS.EDITOR_SERVICE,
+  EditorService
+);
 
-  // Register WebSocket client first
-  const client = getWebSocketEventClient({
-    eventBus: baseEventBus,
-    hostname: config.hostname,
-    port: config.port,
-    protocol: config.protocol,
-    logger: logger.getSubLogger({ name: "WebSocketClient" }),
-  });
+container.registerSingleton<WorkspaceTreeService>(
+  DI_TOKENS.WORKSPACE_TREE_SERVICE,
+  WorkspaceTreeService
+);
 
-  // Update the WebSocketClient registration with the real client
-  container.register<IWebSocketEventClient>(DI_TOKENS.WEBSOCKET_CLIENT, {
-    useValue: client,
-  });
+container.registerSingleton<ConnectionService>(
+  DI_TOKENS.CONNECTION_SERVICE,
+  ConnectionService
+);
 
-  // Then register ConnectionAwareEventBus that wraps the base event bus
-  const connectionAwareEventBus = new ConnectionAwareEventBus(
-    baseEventBus,
-    client,
-    logger.getSubLogger({ name: "ConnectionAwareEventBus" })
-  );
+// For browser-specific services, use factory registrations
+container.register<IWebSocketEventClient>(DI_TOKENS.WEBSOCKET_CLIENT, {
+  useFactory: (dependencyContainer) => {
+    if (typeof window === "undefined") {
+      throw new Error(
+        "WebSocketClient can only be created in browser environment"
+      );
+    }
 
-  container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
-    useValue: connectionAwareEventBus,
-  });
+    const logger = dependencyContainer.resolve<Logger<ILogObj>>(
+      DI_TOKENS.LOGGER
+    );
+    const configService = dependencyContainer.resolve<ConfigService>(
+      DI_TOKENS.CONFIG_SERVICE
+    );
 
-  // Register FileExplorerService (singleton)
-  container.registerSingleton<FileExplorerService>(
-    DI_TOKENS.FILE_EXPLORER_SERVICE,
-    FileExplorerService
-  );
+    const wsConfig = configService.getWebSocketConfig();
 
-  // Register EditorService (singleton)
-  container.registerSingleton<EditorService>(
-    DI_TOKENS.EDITOR_SERVICE,
-    EditorService
-  );
+    const baseEventBus = createClientEventBus({
+      logger: logger.getSubLogger({ name: "BaseEventBus" }),
+    });
 
-  // Register WorkspaceTreeService (singleton)
-  container.registerSingleton<WorkspaceTreeService>(
-    DI_TOKENS.WORKSPACE_TREE_SERVICE,
-    WorkspaceTreeService
-  );
+    return getWebSocketEventClient({
+      eventBus: baseEventBus,
+      hostname: wsConfig.hostname,
+      port: wsConfig.port,
+      protocol: wsConfig.protocol,
+      logger: logger.getSubLogger({ name: "WebSocketClient" }),
+    });
+  },
+});
 
-  // Register ConnectionService (singleton)
-  container.registerSingleton<ConnectionService>(
-    DI_TOKENS.CONNECTION_SERVICE,
-    ConnectionService
-  );
+container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
+  useFactory: (dependencyContainer) => {
+    if (typeof window === "undefined") {
+      throw new Error("EventBus can only be created in browser environment");
+    }
 
-  return client;
-}
+    const logger = dependencyContainer.resolve<Logger<ILogObj>>(
+      DI_TOKENS.LOGGER
+    );
+    const baseEventBus = createClientEventBus({
+      logger: logger.getSubLogger({ name: "BaseEventBus" }),
+    });
+
+    const wsClient = dependencyContainer.resolve<IWebSocketEventClient>(
+      DI_TOKENS.WEBSOCKET_CLIENT
+    );
+
+    return new ConnectionAwareEventBus(
+      baseEventBus,
+      wsClient,
+      logger.getSubLogger({ name: "ConnectionAwareEventBus" })
+    );
+  },
+});
 
 export { container };

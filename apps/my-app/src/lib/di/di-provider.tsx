@@ -6,19 +6,15 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { ILogObj, Logger } from "tslog";
 import { IWebSocketEventClient } from "@repo/events-relay/websocket-event-client";
 import { IEventBus } from "@repo/events-core/event-bus";
-import {
-  container,
-  setupEventCommunication,
-  WebSocketConfig,
-} from "./di-container";
+import { container } from "./di-container";
 import { DI_TOKENS } from "./di-tokens";
 import { FileExplorerService } from "../../features/file-explorer-di/file-explorer-service";
 import { EditorService } from "../../features/editor/editor-service";
 import { ConnectionService } from "../../features/connection/connection-service";
 import { WorkspaceTreeService } from "@/features/workspace-tree/workspace-tree-service";
+import { ConfigService } from "../config/config-service";
 
 // Context to provide container services to React components
 type DIContextType = {
@@ -28,6 +24,7 @@ type DIContextType = {
   getEditorService: () => EditorService;
   getConnectionService: () => ConnectionService;
   getWorkspaceTreeService: () => WorkspaceTreeService;
+  getConfigService: () => ConfigService;
 };
 
 const DIContext = createContext<DIContextType>({
@@ -49,41 +46,35 @@ const DIContext = createContext<DIContextType>({
   getWorkspaceTreeService: () => {
     throw new Error("WorkspaceTreeService not initialized");
   },
+  getConfigService: () => {
+    throw new Error("ConfigService not initialized");
+  },
 });
 
 interface DIProviderProps {
   children: ReactNode;
-  websocketConfig: WebSocketConfig;
-  logger?: Logger<ILogObj>;
 }
 
-export function DIProvider({
-  children,
-  websocketConfig,
-  logger,
-}: DIProviderProps) {
+export function DIProvider({ children }: DIProviderProps) {
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Register custom logger if provided
-  useEffect(() => {
-    if (logger) {
-      container.register(DI_TOKENS.LOGGER, { useValue: logger });
-    }
-  }, [logger]);
-
-  // Initialize WebSocket client and EventBus
+  // Initialize WebSocket connection and monitoring
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    // Setup WebSocket client and EventBus communication
-    const client = setupEventCommunication(websocketConfig);
+    // Services are already registered in di-container.ts
+    const wsClient = container.resolve<IWebSocketEventClient>(
+      DI_TOKENS.WEBSOCKET_CLIENT
+    );
+    const connectionService = container.resolve<ConnectionService>(
+      DI_TOKENS.CONNECTION_SERVICE
+    );
 
-    // Connect the WebSocket client
-    client.connect();
-
-    // Mark as initialized only after WebSocket client is set up
+    // Connect and start monitoring
+    wsClient.connect();
+    connectionService.startMonitoring();
     setIsInitialized(true);
 
     // Cleanup on unmount
@@ -92,20 +83,9 @@ export function DIProvider({
         DI_TOKENS.CONNECTION_SERVICE
       );
       connectionService.stopMonitoring();
-      client.disconnect();
+      wsClient.disconnect();
     };
-  }, [websocketConfig]);
-
-  // Effect to start connection monitoring after initialization
-  useEffect(() => {
-    if (isInitialized) {
-      // Now safely get and start the connection service
-      const connectionService = container.resolve<ConnectionService>(
-        DI_TOKENS.CONNECTION_SERVICE
-      );
-      connectionService.startMonitoring();
-    }
-  }, [isInitialized]);
+  }, []);
 
   // Create stable context value with useMemo
   const contextValue = useMemo<DIContextType>(
@@ -119,22 +99,14 @@ export function DIProvider({
         container.resolve<EditorService>(DI_TOKENS.EDITOR_SERVICE),
       getConnectionService: () =>
         container.resolve<ConnectionService>(DI_TOKENS.CONNECTION_SERVICE),
-      getWorkspaceTreeService: () => {
-        // logger?.debug("DIProvider - Resolving WorkspaceTreeService");
-        // return container.resolve<WorkspaceTreeService>(
-        //   DI_TOKENS.WORKSPACE_TREE_SERVICE
-        // );
-        try {
-          return container.resolve<WorkspaceTreeService>(
-            DI_TOKENS.WORKSPACE_TREE_SERVICE
-          );
-        } catch (error) {
-          logger?.error("Failed to resolve WorkspaceTreeService", error);
-          throw new Error("WorkspaceTreeService not available");
-        }
-      },
+      getWorkspaceTreeService: () =>
+        container.resolve<WorkspaceTreeService>(
+          DI_TOKENS.WORKSPACE_TREE_SERVICE
+        ),
+      getConfigService: () =>
+        container.resolve<ConfigService>(DI_TOKENS.CONFIG_SERVICE),
     }),
-    [isInitialized] // Re-create when initialized changes
+    [isInitialized]
   );
 
   return (
@@ -155,17 +127,12 @@ export function useEventBus(): IEventBus {
 
 export function useEditorService(): EditorService {
   const { getEditorService } = useContext(DIContext);
-  const service = useMemo(() => getEditorService(), [getEditorService]);
-  return service;
+  return useMemo(() => getEditorService(), [getEditorService]);
 }
 
 export function useFileExplorerService(): FileExplorerService {
   const { getFileExplorerService } = useContext(DIContext);
-  const service = useMemo(
-    () => getFileExplorerService(),
-    [getFileExplorerService]
-  );
-  return service;
+  return useMemo(() => getFileExplorerService(), [getFileExplorerService]);
 }
 
 export function useConnectionService(): ConnectionService {
@@ -176,4 +143,9 @@ export function useConnectionService(): ConnectionService {
 export function useWorkspaceTreeService(): WorkspaceTreeService {
   const { getWorkspaceTreeService } = useContext(DIContext);
   return useMemo(() => getWorkspaceTreeService(), [getWorkspaceTreeService]);
+}
+
+export function useConfigService(): ConfigService {
+  const { getConfigService } = useContext(DIContext);
+  return useMemo(() => getConfigService(), [getConfigService]);
 }
