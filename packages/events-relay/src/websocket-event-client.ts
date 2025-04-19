@@ -57,9 +57,9 @@ export class WebSocketEventClient implements IWebSocketEventClient {
    * Checks if the WebSocket connection is currently established and open
    */
   public isConnected(): boolean {
-    this.logger.debug(
-      `WebSocket connection status: ${this.isConnectedStatus ? "connected" : "disconnected"}, readyState: ${this.ws ? this.ws.readyState : "no websocket"}`
-    );
+    // this.logger.debug(
+    //   `WebSocket connection status: ${this.isConnectedStatus ? "connected" : "disconnected"}, readyState: ${this.ws ? this.ws.readyState : "no websocket"}`
+    // );
     return this.isConnectedStatus && this.ws?.readyState === WebSocket.OPEN;
   }
 
@@ -216,6 +216,19 @@ export class WebSocketEventClient implements IWebSocketEventClient {
       this.ws.readyState !== WebSocket.OPEN ||
       !this.isConnectedStatus
     ) {
+      // TODO: This is a limitation in the current architecture.
+      // Ideally, we should throw an error here to notify the event bus about the connection failure
+      // so it can properly handle the situation and inform the caller.
+      // However, the event bus doesn't directly interact with the WebSocket client
+      // (the WS client subscribes to events and forwards them, so the event bus emits and forgets).
+      //
+      // To properly solve this issue, we would need to refactor both the event bus and WebSocket client.
+      // We want the event bus to know when an event emission fails (e.g., due to disconnection).
+      //
+      // Potential solutions:
+      // 1. Stop having the WS client subscribe to all client events automatically
+      //    (but this breaks the decoupling between event bus and WS client)
+      // 2. Make event bus emit async and only resolve the promise when emission succeeds
       this.logger.warn(
         "WebSocket is not connected, cannot send event:",
         event.kind

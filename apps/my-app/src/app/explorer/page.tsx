@@ -6,20 +6,15 @@ import {
   useWorkspaceTreeStore,
   TreeNode,
   FolderTreeNode,
-  FileTreeNode,
   isFolderNode,
 } from "../../features/workspace-tree/workspace-tree-store";
-import { WorkspaceTreeService } from "../../features/workspace-tree/workspace-tree-service";
-import { DIProvider } from "../../lib/di/di-provider";
-import { container } from "../../lib/di/di-container";
-import { DI_TOKENS } from "../../lib/di/di-tokens";
-import ExplorerHeader from "./explorer-header";
 import {
-  FileNodeComponent,
-  FolderNodeComponent,
-  TreeNodeComponent,
-} from "./tree-components";
-import { IWebSocketEventClient } from "@repo/events-relay/websocket-event-client";
+  DIProvider,
+  useWorkspaceTreeService,
+  useServicesInitialized,
+} from "../../lib/di/di-provider";
+import ExplorerHeader from "./explorer-header";
+import { TreeNodeComponent } from "./tree-components";
 
 // Setup logger
 const logger = new Logger<ILogObj>({ name: "workspace-explorer" });
@@ -28,12 +23,22 @@ const logger = new Logger<ILogObj>({ name: "workspace-explorer" });
 const WorkspaceTreeViewer = () => {
   const { root } = useWorkspaceTreeStore();
   const [isLoading, setIsLoading] = useState(true);
+  const workspaceTreeService = useWorkspaceTreeService();
+  const servicesInitialized = useServicesInitialized();
 
   useEffect(() => {
     if (root) {
       setIsLoading(false);
     }
   }, [root]);
+
+  // Request workspace tree data after services are initialized
+  useEffect(() => {
+    if (servicesInitialized && workspaceTreeService) {
+      logger.info("Requesting initial workspace tree");
+      workspaceTreeService.requestWorkspaceTree();
+    }
+  }, [servicesInitialized, workspaceTreeService]);
 
   if (isLoading) {
     return (
@@ -78,7 +83,6 @@ const FilePreviewPanel = () => {
       </div>
       <div className="bg-gray-50 p-4 rounded border">
         <pre className="whitespace-pre-wrap">
-          {/* In a real app, we would load and display the file content here */}
           {`File content would be displayed here for: ${selectedNode.path}`}
         </pre>
       </div>
@@ -89,113 +93,78 @@ const FilePreviewPanel = () => {
 // Main Page Component
 const WorkspaceExplorerPage = () => {
   const { setRoot } = useWorkspaceTreeStore();
-  const [isServiceInitialized, setIsServiceInitialized] = useState(false);
 
+  // Initialize with sample data for immediate rendering
   useEffect(() => {
-    // Add debug log at the beginning of the effect for tracking component lifecycle
-    logger.debug(
-      "WorkspaceExplorerPage - Component mounted, initializing workspace tree"
-    );
-
-    // Once the component is mounted, retrieve the tree service and request the workspace tree
-    const initializeWorkspaceTree = () => {
-      logger.debug("Initializing workspace tree service");
-
-      try {
-        const workspaceTreeService = container.resolve<WorkspaceTreeService>(
-          DI_TOKENS.WORKSPACE_TREE_SERVICE
-        );
-
-        // Mark as initialized - this will be falsy until resolved from container
-        if (workspaceTreeService) {
-          setIsServiceInitialized(true);
-
-          // Request the workspace tree
-          logger.info("Requesting initial workspace tree");
-          workspaceTreeService.requestWorkspaceTree();
-        }
-      } catch (error) {
-        logger.error("Failed to initialize workspace tree service", error);
-
-        // Fallback to sample data if service initialization fails
-        initializeWithSampleData();
-      }
+    // Sample data for immediate display
+    const sampleRoot: FolderTreeNode = {
+      id: "root",
+      name: "workspace",
+      type: "folder",
+      path: "/",
+      children: [
+        {
+          id: "folder-1",
+          name: "src",
+          type: "folder",
+          path: "/src",
+          children: [
+            {
+              id: "folder-2",
+              name: "components",
+              type: "folder",
+              path: "/src/components",
+              children: [
+                {
+                  id: "file-1",
+                  name: "Button.tsx",
+                  type: "file",
+                  path: "/src/components/Button.tsx",
+                  lastModified: new Date(),
+                },
+                {
+                  id: "file-2",
+                  name: "Card.tsx",
+                  type: "file",
+                  path: "/src/components/Card.tsx",
+                  lastModified: new Date(),
+                },
+              ],
+            },
+            {
+              id: "file-3",
+              name: "App.tsx",
+              type: "file",
+              path: "/src/App.tsx",
+              lastModified: new Date(),
+            },
+          ],
+        },
+        {
+          id: "file-4",
+          name: "package.json",
+          type: "file",
+          path: "/package.json",
+          lastModified: new Date(),
+        },
+        {
+          id: "file-5",
+          name: "tsconfig.json",
+          type: "file",
+          path: "/tsconfig.json",
+          lastModified: new Date(),
+        },
+      ],
     };
 
-    // Fallback function to initialize with sample data
-    const initializeWithSampleData = () => {
-      logger.warn("Using sample workspace data for initialization");
-      const sampleRoot: FolderTreeNode = {
-        id: "root",
-        name: "workspace",
-        type: "folder",
-        path: "/",
-        children: [
-          {
-            id: "folder-1",
-            name: "src",
-            type: "folder",
-            path: "/src",
-            children: [
-              {
-                id: "folder-2",
-                name: "components",
-                type: "folder",
-                path: "/src/components",
-                children: [
-                  {
-                    id: "file-1",
-                    name: "Button.tsx",
-                    type: "file",
-                    path: "/src/components/Button.tsx",
-                    lastModified: new Date(),
-                  },
-                  {
-                    id: "file-2",
-                    name: "Card.tsx",
-                    type: "file",
-                    path: "/src/components/Card.tsx",
-                    lastModified: new Date(),
-                  },
-                ],
-              },
-              {
-                id: "file-3",
-                name: "App.tsx",
-                type: "file",
-                path: "/src/App.tsx",
-                lastModified: new Date(),
-              },
-            ],
-          },
-          {
-            id: "file-4",
-            name: "package.json",
-            type: "file",
-            path: "/package.json",
-            lastModified: new Date(),
-          },
-          {
-            id: "file-5",
-            name: "tsconfig.json",
-            type: "file",
-            path: "/tsconfig.json",
-            lastModified: new Date(),
-          },
-        ],
-      };
-
-      setRoot(sampleRoot);
-    };
-
-    initializeWorkspaceTree();
+    setRoot(sampleRoot);
   }, [setRoot]);
 
   return (
     <DIProvider>
       <div className="flex h-screen bg-gray-50">
         <div className="w-72 bg-white border-r flex flex-col h-full">
-          {/* <ExplorerHeader /> */}
+          <ExplorerHeader />
           <div className="flex-grow overflow-hidden">
             <WorkspaceTreeViewer />
           </div>

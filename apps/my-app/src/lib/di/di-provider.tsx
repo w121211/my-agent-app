@@ -1,3 +1,5 @@
+"use client";
+
 import React, {
   createContext,
   useContext,
@@ -6,6 +8,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { ILogObj, Logger } from "tslog";
 import { IWebSocketEventClient } from "@repo/events-relay/websocket-event-client";
 import { IEventBus } from "@repo/events-core/event-bus";
 import { container } from "./di-container";
@@ -16,40 +19,37 @@ import { ConnectionService } from "../../features/connection/connection-service"
 import { WorkspaceTreeService } from "@/features/workspace-tree/workspace-tree-service";
 import { ConfigService } from "../config/config-service";
 
-// Context to provide container services to React components
+// Context for service access
 type DIContextType = {
-  getWebSocketClient: () => IWebSocketEventClient;
-  getEventBus: () => IEventBus;
-  getFileExplorerService: () => FileExplorerService;
-  getEditorService: () => EditorService;
-  getConnectionService: () => ConnectionService;
-  getWorkspaceTreeService: () => WorkspaceTreeService;
-  getConfigService: () => ConfigService;
+  isInitialized: boolean;
+  services: {
+    webSocketClient: IWebSocketEventClient | null;
+    eventBus: IEventBus | null;
+    fileExplorerService: FileExplorerService | null;
+    editorService: EditorService | null;
+    connectionService: ConnectionService | null;
+    workspaceTreeService: WorkspaceTreeService | null;
+    configService: ConfigService | null;
+  };
+};
+
+// Initial state with null services
+const initialServicesState = {
+  webSocketClient: null,
+  eventBus: null,
+  fileExplorerService: null,
+  editorService: null,
+  connectionService: null,
+  workspaceTreeService: null,
+  configService: null,
 };
 
 const DIContext = createContext<DIContextType>({
-  getWebSocketClient: () => {
-    throw new Error("WebSocketClient not initialized");
-  },
-  getEventBus: () => {
-    throw new Error("EventBus not initialized");
-  },
-  getFileExplorerService: () => {
-    throw new Error("FileExplorerService not initialized");
-  },
-  getEditorService: () => {
-    throw new Error("EditorService not initialized");
-  },
-  getConnectionService: () => {
-    throw new Error("ConnectionService not initialized");
-  },
-  getWorkspaceTreeService: () => {
-    throw new Error("WorkspaceTreeService not initialized");
-  },
-  getConfigService: () => {
-    throw new Error("ConfigService not initialized");
-  },
+  isInitialized: false,
+  services: initialServicesState,
 });
+
+const logger = new Logger<ILogObj>({ name: "DIProvider" });
 
 interface DIProviderProps {
   children: ReactNode;
@@ -57,56 +57,72 @@ interface DIProviderProps {
 
 export function DIProvider({ children }: DIProviderProps) {
   const [isInitialized, setIsInitialized] = useState(false);
+  const [services, setServices] = useState(initialServicesState);
 
-  // Initialize WebSocket connection and monitoring
+  // Initialize services only after component is mounted client-side
   useEffect(() => {
+    // Skip server-side execution
     if (typeof window === "undefined") {
       return;
     }
 
-    // Services are already registered in di-container.ts
-    const wsClient = container.resolve<IWebSocketEventClient>(
-      DI_TOKENS.WEBSOCKET_CLIENT
-    );
-    const connectionService = container.resolve<ConnectionService>(
-      DI_TOKENS.CONNECTION_SERVICE
-    );
+    try {
+      logger.debug("Initializing client-side services");
 
-    // Connect and start monitoring
-    wsClient.connect();
-    connectionService.startMonitoring();
-    setIsInitialized(true);
-
-    // Cleanup on unmount
-    return () => {
+      // Initialize services
+      const configService = container.resolve<ConfigService>(
+        DI_TOKENS.CONFIG_SERVICE
+      );
+      const wsClient = container.resolve<IWebSocketEventClient>(
+        DI_TOKENS.WEBSOCKET_CLIENT
+      );
+      const eventBus = container.resolve<IEventBus>(DI_TOKENS.EVENT_BUS);
+      const fileExplorerService = container.resolve<FileExplorerService>(
+        DI_TOKENS.FILE_EXPLORER_SERVICE
+      );
+      const editorService = container.resolve<EditorService>(
+        DI_TOKENS.EDITOR_SERVICE
+      );
       const connectionService = container.resolve<ConnectionService>(
         DI_TOKENS.CONNECTION_SERVICE
       );
-      connectionService.stopMonitoring();
-      wsClient.disconnect();
-    };
+      const workspaceTreeService = container.resolve<WorkspaceTreeService>(
+        DI_TOKENS.WORKSPACE_TREE_SERVICE
+      );
+
+      // Start services
+      wsClient.connect();
+      connectionService.startMonitoring();
+
+      // Update state
+      setServices({
+        webSocketClient: wsClient,
+        eventBus,
+        fileExplorerService,
+        editorService,
+        connectionService,
+        workspaceTreeService,
+        configService,
+      });
+
+      setIsInitialized(true);
+
+      // Cleanup on unmount
+      return () => {
+        connectionService.stopMonitoring();
+        wsClient.disconnect();
+      };
+    } catch (error) {
+      logger.error("Failed to initialize services:", error);
+    }
   }, []);
 
-  // Create stable context value with useMemo
   const contextValue = useMemo<DIContextType>(
     () => ({
-      getWebSocketClient: () =>
-        container.resolve<IWebSocketEventClient>(DI_TOKENS.WEBSOCKET_CLIENT),
-      getEventBus: () => container.resolve<IEventBus>(DI_TOKENS.EVENT_BUS),
-      getFileExplorerService: () =>
-        container.resolve<FileExplorerService>(DI_TOKENS.FILE_EXPLORER_SERVICE),
-      getEditorService: () =>
-        container.resolve<EditorService>(DI_TOKENS.EDITOR_SERVICE),
-      getConnectionService: () =>
-        container.resolve<ConnectionService>(DI_TOKENS.CONNECTION_SERVICE),
-      getWorkspaceTreeService: () =>
-        container.resolve<WorkspaceTreeService>(
-          DI_TOKENS.WORKSPACE_TREE_SERVICE
-        ),
-      getConfigService: () =>
-        container.resolve<ConfigService>(DI_TOKENS.CONFIG_SERVICE),
+      isInitialized,
+      services,
     }),
-    [isInitialized]
+    [isInitialized, services]
   );
 
   return (
@@ -115,37 +131,43 @@ export function DIProvider({ children }: DIProviderProps) {
 }
 
 // Custom hooks to access services
-export function useWebSocketClient(): IWebSocketEventClient {
-  const { getWebSocketClient } = useContext(DIContext);
-  return useMemo(() => getWebSocketClient(), [getWebSocketClient]);
+export function useWebSocketClient() {
+  const { services } = useContext(DIContext);
+  return services.webSocketClient;
 }
 
-export function useEventBus(): IEventBus {
-  const { getEventBus } = useContext(DIContext);
-  return useMemo(() => getEventBus(), [getEventBus]);
+export function useEventBus() {
+  const { services } = useContext(DIContext);
+  return services.eventBus;
 }
 
-export function useEditorService(): EditorService {
-  const { getEditorService } = useContext(DIContext);
-  return useMemo(() => getEditorService(), [getEditorService]);
+export function useEditorService() {
+  const { services } = useContext(DIContext);
+  return services.editorService;
 }
 
-export function useFileExplorerService(): FileExplorerService {
-  const { getFileExplorerService } = useContext(DIContext);
-  return useMemo(() => getFileExplorerService(), [getFileExplorerService]);
+export function useFileExplorerService() {
+  const { services } = useContext(DIContext);
+  return services.fileExplorerService;
 }
 
-export function useConnectionService(): ConnectionService {
-  const { getConnectionService } = useContext(DIContext);
-  return useMemo(() => getConnectionService(), [getConnectionService]);
+export function useConnectionService() {
+  const { services } = useContext(DIContext);
+  return services.connectionService;
 }
 
-export function useWorkspaceTreeService(): WorkspaceTreeService {
-  const { getWorkspaceTreeService } = useContext(DIContext);
-  return useMemo(() => getWorkspaceTreeService(), [getWorkspaceTreeService]);
+export function useWorkspaceTreeService() {
+  const { services } = useContext(DIContext);
+  return services.workspaceTreeService;
 }
 
-export function useConfigService(): ConfigService {
-  const { getConfigService } = useContext(DIContext);
-  return useMemo(() => getConfigService(), [getConfigService]);
+export function useConfigService() {
+  const { services } = useContext(DIContext);
+  return services.configService;
+}
+
+// Helper hook to know when services are ready
+export function useServicesInitialized() {
+  const { isInitialized } = useContext(DIContext);
+  return isInitialized;
 }

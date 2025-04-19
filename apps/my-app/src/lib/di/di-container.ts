@@ -17,7 +17,7 @@ import { DI_TOKENS } from "./di-tokens";
 // Create default logger
 const defaultLogger = new Logger<ILogObj>({ name: "AppContainer" });
 
-// Register core services
+// Register shared services
 container.register<Logger<ILogObj>>(DI_TOKENS.LOGGER, {
   useValue: defaultLogger,
 });
@@ -27,6 +27,62 @@ container.registerSingleton<ConfigService>(
   DI_TOKENS.CONFIG_SERVICE,
   ConfigService
 );
+
+// Create a shared event bus instance to use throughout the application
+// This fixes the issue where events emitted on one bus weren't being received by handlers on another bus
+const sharedBaseEventBus = createClientEventBus({
+  logger: defaultLogger.getSubLogger({ name: "ClientSharedBaseEventBus" }),
+});
+
+// Register WebSocketEventClient with the shared event bus
+container.register<IWebSocketEventClient>(DI_TOKENS.WEBSOCKET_CLIENT, {
+  useFactory: (dependencyContainer) => {
+    if (typeof window === "undefined") {
+      throw new Error(
+        "WebSocketClient can only be created in browser environment"
+      );
+    }
+
+    const logger = dependencyContainer.resolve<Logger<ILogObj>>(
+      DI_TOKENS.LOGGER
+    );
+    const configService = dependencyContainer.resolve<ConfigService>(
+      DI_TOKENS.CONFIG_SERVICE
+    );
+
+    const wsConfig = configService.getWebSocketConfig();
+
+    return getWebSocketEventClient({
+      eventBus: sharedBaseEventBus, // Use the shared event bus
+      hostname: wsConfig.hostname,
+      port: wsConfig.port,
+      protocol: wsConfig.protocol,
+      logger: logger.getSubLogger({ name: "WebSocketEventClient" }),
+    });
+  },
+});
+
+// Register ConnectionAwareEventBus with the same shared event bus
+container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
+  useFactory: (dependencyContainer) => {
+    if (typeof window === "undefined") {
+      throw new Error("EventBus can only be created in browser environment");
+    }
+
+    const logger = dependencyContainer.resolve<Logger<ILogObj>>(
+      DI_TOKENS.LOGGER
+    );
+    const wsClient = dependencyContainer.resolve<IWebSocketEventClient>(
+      DI_TOKENS.WEBSOCKET_CLIENT
+    );
+
+    return new ConnectionAwareEventBus(
+      sharedBaseEventBus, // Use the same shared event bus
+      wsClient,
+      logger.getSubLogger({ name: "ClientConnectionAwareEventBus" })
+    );
+  },
+});
 
 // Register feature services
 container.registerSingleton<FileExplorerService>(
@@ -48,62 +104,5 @@ container.registerSingleton<ConnectionService>(
   DI_TOKENS.CONNECTION_SERVICE,
   ConnectionService
 );
-
-// For browser-specific services, use factory registrations
-container.register<IWebSocketEventClient>(DI_TOKENS.WEBSOCKET_CLIENT, {
-  useFactory: (dependencyContainer) => {
-    if (typeof window === "undefined") {
-      throw new Error(
-        "WebSocketClient can only be created in browser environment"
-      );
-    }
-
-    const logger = dependencyContainer.resolve<Logger<ILogObj>>(
-      DI_TOKENS.LOGGER
-    );
-    const configService = dependencyContainer.resolve<ConfigService>(
-      DI_TOKENS.CONFIG_SERVICE
-    );
-
-    const wsConfig = configService.getWebSocketConfig();
-
-    const baseEventBus = createClientEventBus({
-      logger: logger.getSubLogger({ name: "BaseEventBus" }),
-    });
-
-    return getWebSocketEventClient({
-      eventBus: baseEventBus,
-      hostname: wsConfig.hostname,
-      port: wsConfig.port,
-      protocol: wsConfig.protocol,
-      logger: logger.getSubLogger({ name: "WebSocketClient" }),
-    });
-  },
-});
-
-container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
-  useFactory: (dependencyContainer) => {
-    if (typeof window === "undefined") {
-      throw new Error("EventBus can only be created in browser environment");
-    }
-
-    const logger = dependencyContainer.resolve<Logger<ILogObj>>(
-      DI_TOKENS.LOGGER
-    );
-    const baseEventBus = createClientEventBus({
-      logger: logger.getSubLogger({ name: "BaseEventBus" }),
-    });
-
-    const wsClient = dependencyContainer.resolve<IWebSocketEventClient>(
-      DI_TOKENS.WEBSOCKET_CLIENT
-    );
-
-    return new ConnectionAwareEventBus(
-      baseEventBus,
-      wsClient,
-      logger.getSubLogger({ name: "ConnectionAwareEventBus" })
-    );
-  },
-});
 
 export { container };

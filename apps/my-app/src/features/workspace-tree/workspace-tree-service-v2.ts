@@ -25,12 +25,7 @@ export class WorkspaceTreeService {
   private logger: Logger<ILogObj>;
   private isInitialized = false;
   private pendingFsEvents: ChokidarFsEventData[] = [];
-  private pendingTreeResponse = false;
-
-  // Retry mechanism properties
-  private retryCount = 0;
-  private maxRetries = 3;
-  private retryTimeout: number | null = null;
+  private pendingTreeResponse: boolean = false;
 
   constructor(
     @inject(DI_TOKENS.EVENT_BUS) private eventBus: IEventBus,
@@ -85,9 +80,6 @@ export class WorkspaceTreeService {
       `Received workspace tree response for path: ${event.workspacePath}`
     );
 
-    // Reset retry state on any response
-    this.resetRetryState();
-
     if (event.error) {
       this.logger.error(`Error retrieving workspace tree: ${event.error}`);
       this.pendingTreeResponse = false;
@@ -102,52 +94,7 @@ export class WorkspaceTreeService {
 
     // Convert server folder tree to store format and update the store
     this.updateStoreWithFolderTree(event.folderTree);
-
-    // Mark as initialized and process any pending events
-    if (!this.isInitialized) {
-      this.isInitialized = true;
-      this.logger.info("Workspace tree initialized via server response");
-      this.processPendingEvents();
-    }
-
     this.pendingTreeResponse = false;
-  }
-
-  // Process any pending file system events after initialization
-  private processPendingEvents(): void {
-    if (this.pendingFsEvents.length === 0) {
-      return;
-    }
-
-    this.logger.info(
-      `Processing ${this.pendingFsEvents.length} pending file system events`
-    );
-
-    // Sort events: directories first, then by path length
-    const sortedEvents = [...this.pendingFsEvents].sort((a, b) => {
-      // Directories before files
-      if (a.isDirectory && !b.isDirectory) return -1;
-      if (!a.isDirectory && b.isDirectory) return 1;
-
-      // Shorter paths (parent directories) before longer paths
-      return a.srcPath.length - b.srcPath.length;
-    });
-
-    // Process each event
-    for (const event of sortedEvents) {
-      this.processFsEvent(event);
-    }
-
-    // Clear pending events
-    this.pendingFsEvents = [];
-  }
-
-  private resetRetryState(): void {
-    this.retryCount = 0;
-    if (this.retryTimeout !== null) {
-      window.clearTimeout(this.retryTimeout);
-      this.retryTimeout = null;
-    }
   }
 
   private updateStoreWithFolderTree(serverTree: ServerFolderTreeNode): void {
@@ -213,7 +160,7 @@ export class WorkspaceTreeService {
 
   private initializeWorkspaceTree(): void {
     this.logger.info(
-      `Initializing workspace tree with ${this.pendingFsEvents.length} events from file watcher`
+      `Initializing workspace tree with ${this.pendingFsEvents.length} events`
     );
 
     const store = useWorkspaceTreeStore.getState();
@@ -230,7 +177,7 @@ export class WorkspaceTreeService {
       store.setRoot(rootNode);
     }
 
-    // Sort events: directories first, then by path length
+    // Sort events: directories first, then by path length (to ensure parent dirs are created first)
     const sortedEvents = [...this.pendingFsEvents].sort((a, b) => {
       // Directories before files
       if (a.isDirectory && !b.isDirectory) return -1;
@@ -247,17 +194,10 @@ export class WorkspaceTreeService {
       }
     }
 
-    // Mark as initialized and clear pending events
-    this.isInitialized = true;
+    // Clear pending events and mark as initialized
     this.pendingFsEvents = [];
-    this.logger.info(
-      "Workspace explorer initialization complete via file watcher events"
-    );
-
-    // Request a full tree to ensure we have the most up-to-date view
-    if (!this.pendingTreeResponse) {
-      this.requestWorkspaceTree();
-    }
+    this.isInitialized = true;
+    this.logger.info("Workspace explorer initialization complete");
   }
 
   private processFsEvent(fsEvent: ChokidarFsEventData): void {
@@ -382,6 +322,7 @@ export class WorkspaceTreeService {
       this.logger.debug(
         `Changed file is currently selected, may need UI refresh`
       );
+      // We could emit an event here if we need to notify other components
     }
   }
 
@@ -427,7 +368,6 @@ export class WorkspaceTreeService {
     return useWorkspaceTreeStore.getState().selectedNode;
   }
 
-  // Request workspace tree with retry mechanism
   public requestWorkspaceTree(path?: string): void {
     if (this.pendingTreeResponse) {
       this.logger.warn("Tree request already in progress, skipping");
@@ -436,13 +376,7 @@ export class WorkspaceTreeService {
 
     this.logger.info(`Requesting workspace tree for path: ${path || "/"}`);
     this.pendingTreeResponse = true;
-    this.retryCount = 0;
 
-    this.sendTreeRequest(path);
-  }
-
-  // Send the actual tree request
-  private sendTreeRequest(path?: string): void {
     this.eventBus
       .emit({
         kind: "ClientRequestWorkspaceFolderTree",
@@ -452,31 +386,7 @@ export class WorkspaceTreeService {
       })
       .catch((error) => {
         this.logger.error(`Error requesting workspace tree: ${error}`);
-        this.handleRequestFailure(path);
+        this.pendingTreeResponse = false;
       });
-  }
-
-  // Handle request failures with retry logic
-  private handleRequestFailure(path?: string): void {
-    this.pendingTreeResponse = false;
-
-    if (this.retryCount < this.maxRetries) {
-      const delay = Math.pow(2, this.retryCount) * 1000; // Exponential backoff
-      this.retryCount++;
-
-      this.logger.info(
-        `Retrying workspace tree request in ${delay}ms (Attempt ${this.retryCount}/${this.maxRetries})`
-      );
-
-      this.retryTimeout = window.setTimeout(() => {
-        this.pendingTreeResponse = true;
-        this.sendTreeRequest(path);
-      }, delay);
-    } else {
-      this.logger.error(
-        `Max retry attempts (${this.maxRetries}) reached for workspace tree request`
-      );
-      this.retryCount = 0;
-    }
   }
 }

@@ -1,9 +1,5 @@
 import { ILogObj, Logger } from "tslog";
-import {
-  IEventBus,
-  EventHandler,
-  EventBusEnvironment,
-} from "@repo/events-core/event-bus";
+import { IEventBus, EventHandler } from "@repo/events-core/event-bus";
 import {
   BaseEvent,
   EventKind,

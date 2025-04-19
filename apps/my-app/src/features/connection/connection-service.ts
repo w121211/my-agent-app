@@ -66,10 +66,9 @@ export class ConnectionService {
    * Check and update the current connection state
    */
   private updateConnectionState(): void {
-    this.logger.debug(
-      `Checking connection state. Current state: ${this.wsClient.isConnected()}`,
-      this.wsClient
-    );
+    // this.logger.debug(
+    //   `Checking connection state. Current state: ${this.wsClient.isConnected()}`
+    // );
 
     const isConnected = this.wsClient.isConnected();
 
