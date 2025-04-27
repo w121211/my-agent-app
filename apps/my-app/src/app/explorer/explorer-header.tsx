@@ -1,8 +1,7 @@
 import React from "react";
-import { RefreshCw, Plus } from "lucide-react";
+import { RefreshCw, Plus, MessageSquarePlus } from "lucide-react";
 import { ILogObj, Logger } from "tslog";
-import { useWorkspaceTreeService } from "../../lib/di/di-provider";
-// import { WorkspaceTreeService } from "../../features/workspace-tree/workspace-tree-service";
+import { useWorkspaceTreeService, useEventBus } from "../../lib/di/di-provider";
 import { ConnectionStatusIndicator } from "./connection-status-indicator";
 
 const logger = new Logger<ILogObj>({ name: "explorer-header" });
@@ -29,24 +28,34 @@ const ActionButton = ({
   </button>
 );
 
-// Explorer Header with workspace tree service integration
 const ExplorerHeader = () => {
-  // const workspaceTreeService = container.resolve<WorkspaceTreeService>(
-  //   DI_TOKENS.WORKSPACE_TREE_SERVICE
-  // );
   const workspaceTreeService = useWorkspaceTreeService();
-
-  // const connectionService = useConnectionService();
+  const eventBus = useEventBus();
 
   const handleRefresh = () => {
     logger.info("Manually refreshing workspace tree");
-    workspaceTreeService.requestWorkspaceTree();
+    workspaceTreeService?.requestWorkspaceTree();
   };
 
   const handleNewFolder = () => {
     logger.info("Create new folder action triggered");
-    // This would typically open a dialog to create a new folder
-    // For MVP, we'll just log this action
+  };
+
+  const handleNewChat = () => {
+    logger.info("New chat button clicked");
+    if (!eventBus) {
+      logger.error("Event bus not available");
+      return;
+    }
+
+    eventBus
+      .emit({
+        kind: "UINewChatButtonClicked",
+        timestamp: new Date(),
+      })
+      .catch((error) => {
+        logger.error("Failed to emit new chat event:", error);
+      });
   };
 
   return (
@@ -54,6 +63,12 @@ const ExplorerHeader = () => {
       <div className="flex items-center justify-between">
         <div className="text-lg font-medium">Workspace Explorer</div>
         <div className="flex gap-1">
+          <ActionButton
+            icon={MessageSquarePlus}
+            onClick={handleNewChat}
+            label="New Chat"
+            className="text-blue-600"
+          />
           <ActionButton
             icon={RefreshCw}
             onClick={handleRefresh}

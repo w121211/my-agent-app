@@ -10,7 +10,7 @@
 
    - Generic file operations (`ClientOpenFile`, `ServerFileOpened`)
    - Application-specific processing (`ServerChatInitialized`)
-   - UI updates (`UIChatPanelUpdated`, `ClientChatReady`)
+   - UI updates (`UIChatPanelUpdated`)
 
 5. **Consistent naming conventions**: Following established patterns in the codebase improves readability and reduces cognitive load.
 
@@ -68,7 +68,7 @@ ClientCreateNewChat {newTask: boolean, mode: "chat"|"agent", knowledge: string[]
 
 ## 1. Create New Chat Flow
 
-### User Experience
+### User Story
 
 A user wants to start a new conversation with the AI. They click the "New Chat" button, configure their chat settings including whether to create a new task, select their model preference, and input their initial prompt. After submission, a new chat interface appears ready for interaction.
 
@@ -122,7 +122,7 @@ UINewChatButtonClicked
 
 ## 2. Client Submit Chat Message Flow
 
-### User Experience
+### User Story
 
 A user in an active chat composes a message, potentially references files using the `#file` syntax, attaches documents if needed, and sends their message. They see their message appear in the chat, along with a loading indicator while the AI processes the response. The AI's response with any artifacts is then displayed.
 
@@ -176,7 +176,7 @@ UIMessageInputFocused
 
 ## 3. Open Existing Chat Flow
 
-### User Experience
+### User Story
 
 A user navigates to a previously created chat in the file explorer and clicks on it. The system loads the chat history and displays it in the main chat panel, ready for the user to continue the conversation from where they left off.
 
@@ -196,7 +196,6 @@ UIFileNodeClicked (chat file)
 
 # UI Update
 → UIChatPanelUpdated
-→ ClientChatReady
 ```
 
 ### UI Event Flow

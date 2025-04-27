@@ -11,6 +11,7 @@ import { FileExplorerService } from "../../features/file-explorer-di/file-explor
 import { EditorService } from "../../features/editor/editor-service";
 import { WorkspaceTreeService } from "../../features/workspace-tree/workspace-tree-service";
 import { ConnectionService } from "../../features/connection/connection-service";
+import { ChatService } from "../../features/chat/ui-chat-service";
 import { ConfigService } from "../config/config-service";
 import { DI_TOKENS } from "./di-tokens";
 
@@ -53,7 +54,7 @@ container.register<IWebSocketEventClient>(DI_TOKENS.WEBSOCKET_CLIENT, {
     const wsConfig = configService.getWebSocketConfig();
 
     return getWebSocketEventClient({
-      eventBus: sharedBaseEventBus, // Use the shared event bus
+      eventBus: sharedBaseEventBus,
       hostname: wsConfig.hostname,
       port: wsConfig.port,
       protocol: wsConfig.protocol,
@@ -77,7 +78,7 @@ container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
     );
 
     return new ConnectionAwareEventBus(
-      sharedBaseEventBus, // Use the same shared event bus
+      sharedBaseEventBus,
       wsClient,
       logger.getSubLogger({ name: "ClientConnectionAwareEventBus" })
     );
@@ -104,5 +105,7 @@ container.registerSingleton<ConnectionService>(
   DI_TOKENS.CONNECTION_SERVICE,
   ConnectionService
 );
+
+container.registerSingleton<ChatService>(DI_TOKENS.CHAT_SERVICE, ChatService);
 
 export { container };

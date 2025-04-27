@@ -10,7 +10,7 @@
 
    - Generic file operations (`ClientOpenFile`, `ServerFileOpened`)
    - Application-specific processing (`ServerChatInitialized`)
-   - UI updates (`UIChatPanelUpdated`, `ClientChatReady`)
+   - UI updates (`UIChatPanelUpdated`)
 
 5. **Consistent naming conventions**: Following established patterns in the codebase improves readability and reduces cognitive load.
 
@@ -64,11 +64,11 @@ ClientCreateNewChat {newTask: boolean, mode: "chat"|"agent", knowledge: string[]
 
 ---
 
-# UI Event Flows for Chat Interactions
+# Event Flows for Chat
 
-## Event 1: Create New Chat Flow
+## 1. Create New Chat Flow
 
-### User Experience
+### User Story
 
 A user wants to start a new conversation with the AI. They click the "New Chat" button, configure their chat settings including whether to create a new task, select their model preference, and input their initial prompt. After submission, a new chat interface appears ready for interaction.
 
@@ -120,9 +120,9 @@ UINewChatButtonClicked
 → UIChatInputReadyForNextMessage
 ```
 
-## Event 2: Client Submit Chat Message Flow
+## 2. Client Submit Chat Message Flow
 
-### User Experience
+### User Story
 
 A user in an active chat composes a message, potentially references files using the `#file` syntax, attaches documents if needed, and sends their message. They see their message appear in the chat, along with a loading indicator while the AI processes the response. The AI's response with any artifacts is then displayed.
 
@@ -174,9 +174,9 @@ UIMessageInputFocused
 → UIFileExplorerUpdated (shows new artifact files)
 ```
 
-## Event 3: Open Existing Chat Flow
+## 3. Open Existing Chat Flow
 
-### User Experience
+### User Story
 
 A user navigates to a previously created chat in the file explorer and clicks on it. The system loads the chat history and displays it in the main chat panel, ready for the user to continue the conversation from where they left off.
 
@@ -196,7 +196,6 @@ UIFileNodeClicked (chat file)
 
 # UI Update
 → UIChatPanelUpdated
-→ ClientChatReady
 ```
 
 ### UI Event Flow
@@ -224,105 +223,16 @@ UIFileExplorerNavigated
 → UIChatReadyForInteraction
 ```
 
-<!--淘汰-->
+---
 
-# Backend Chat Event Flows
+# 備註
 
-# Backend Event Flows
+"UserChatMessage" vs "UserPrompt ?
 
-## 1. Create New Chat Flow
+- 考慮到事件流的命名約定和清晰度，我的建議是採用 "UserChatMessage"，這樣可以與其他聊天訊息（如 "AssistantChatMessage"）保持一致的命名模式，同時也明確表示這是在聊天上下文中使用者發送的訊息。
 
-Users click the "New Chat" button, enter an initial prompt, choose whether to create a new task, set model options, and submit. The system creates the chat and displays the chat interface.
+在儲存 chat message 時，需要考慮到 #references 未來可能更動的情況，因為這會影響到事件流的 cache
 
-```
-ClientCreateNewChat {newTask: boolean, mode: "chat"|"agent", knowledge: string[], prompt: string, model: string}
-
-# If creating a new task
-
-(if newTask === true)
-→ ServerTaskFolderCreated
-→ ServerTaskConfigFileCreated
-
-# Chat file creation
-
-→ ServerChatFileCreated (under current folder)
-→ ServerChatInitialized
-
-# Chat mode processing
-
-(if mode === "chat")
-→ (Client Submit Chat Message Flow)
-
-# Agent mode processing (not for MVP1)
-
-(if mode === "agent")
-→ ServerAgentRunInitiated
-→ ServerAgentRunStarted
-→ ... (omitted, not considered for MVP1)
-```
-
-## 2. Client Submit Chat Message Flow
-
-Users type a message, optionally attach files, and send it. The system processes the message (including any file references), sends it to the AI, processes the AI response, and updates the chat.
-
-```
-
-ClientSubmitUserChatMessage {chat_id, message, attachments}
-→ ServerUserChatMessagePostProcessed (handles #references and knowledge)
-→ ServerChatMessageAppended {role: "user", content, timestamp}
-→ ServerChatFileUpdated
-→ ServerChatUpdated
-
-# Chat mode AI response
-
-(if mode === "chat")
-→ ServerAIResponseRequested
-→ ServerAIResponseGenerated
-→ ServerAIResponsePostProcessed (handles artifacts and formatting)
-→ ServerArtifactFileCreated (creates files for each artifact)
-→ ServerChatMessageAppended {role: "assistant", content, timestamp}
-→ ServerChatFileUpdated
-→ ServerChatUpdated
-
-# Agent mode processing (not for MVP1)
-
-(if mode === "agent")
-→ ... (omitted, not considered for MVP1)
-
-```
-
-- "UserChatMessage" vs "UserPrompt ?
-
-  - 考慮到事件流的命名約定和清晰度，我的建議是採用 "UserChatMessage"，這樣可以與其他聊天訊息（如 "AssistantChatMessage"）保持一致的命名模式，同時也明確表示這是在聊天上下文中使用者發送的訊息。
-
-- 在儲存 chat message 時，需要考慮到 #references 未來可能更動的情況，因為這會影響到事件流的 cache
-  - message 依然儲存成 #reference，同時加上每個檔案的MD5
-    - 在重跑時，重新確認 #reference 的 MD5，有不同的話就等於 dependency 已經更新，需要重跑（無法用 cache）
-  - #reference 路徑變更：這會直接找不到檔案，存成相對路徑或許比較好？或是說當使用者做資料夾移動時，可以提醒是否要更新 #references 路徑？
-
-## 3. Open Existing Chat Flow
-
-Users click on a chat file in the explorer. The system loads the file, initializes the chat data, and updates the UI to display the chat content.
-
-```
-
-# UI Interaction
-
-UIFileNodeClicked (chat file)
-→ UIFileNodeSelected
-
-# Command and Response
-
-→ ClientOpenFile {filePath}
-→ ServerFileOpened {filePath, content, fileType}
-
-# Chat-specific Processing
-
-→ ServerChatInitialized {chatData}
-
-# UI Update
-
-→ UIChatPanelUpdated
-→ ClientChatReady
-
-```
+- message 依然儲存成 #reference，同時加上每個檔案的MD5
+  - 在重跑時，重新確認 #reference 的 MD5，有不同的話就等於 dependency 已經更新，需要重跑（無法用 cache）
+- #reference 路徑變更：這會直接找不到檔案，存成相對路徑或許比較好？或是說當使用者做資料夾移動時，可以提醒是否要更新 #references 路徑？

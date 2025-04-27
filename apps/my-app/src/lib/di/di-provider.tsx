@@ -17,6 +17,7 @@ import { FileExplorerService } from "../../features/file-explorer-di/file-explor
 import { EditorService } from "../../features/editor/editor-service";
 import { ConnectionService } from "../../features/connection/connection-service";
 import { WorkspaceTreeService } from "@/features/workspace-tree/workspace-tree-service";
+import { ChatService } from "../../features/chat/ui-chat-service";
 import { ConfigService } from "../config/config-service";
 
 // Context for service access
@@ -30,11 +31,12 @@ type DIContextType = {
     connectionService: ConnectionService | null;
     workspaceTreeService: WorkspaceTreeService | null;
     configService: ConfigService | null;
+    chatService: ChatService | null;
   };
 };
 
 // Initial state with null services
-const initialServicesState = {
+const initialServicesState: DIContextType["services"] = {
   webSocketClient: null,
   eventBus: null,
   fileExplorerService: null,
@@ -42,6 +44,7 @@ const initialServicesState = {
   connectionService: null,
   workspaceTreeService: null,
   configService: null,
+  chatService: null,
 };
 
 const DIContext = createContext<DIContextType>({
@@ -89,6 +92,9 @@ export function DIProvider({ children }: DIProviderProps) {
       const workspaceTreeService = container.resolve<WorkspaceTreeService>(
         DI_TOKENS.WORKSPACE_TREE_SERVICE
       );
+      const chatService = container.resolve<ChatService>(
+        DI_TOKENS.CHAT_SERVICE
+      );
 
       // Start services
       wsClient.connect();
@@ -103,6 +109,7 @@ export function DIProvider({ children }: DIProviderProps) {
         connectionService,
         workspaceTreeService,
         configService,
+        chatService,
       });
 
       setIsInitialized(true);
@@ -164,6 +171,11 @@ export function useWorkspaceTreeService() {
 export function useConfigService() {
   const { services } = useContext(DIContext);
   return services.configService;
+}
+
+export function useChatService() {
+  const { services } = useContext(DIContext);
+  return services.chatService;
 }
 
 // Helper hook to know when services are ready
