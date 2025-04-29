@@ -7,6 +7,7 @@ import {
   ChokidarFsEventData,
   ServerWorkspaceFolderTreeResponsedEvent,
   FolderTreeNode as ServerFolderTreeNode,
+  ServerFileOpenedEvent,
 } from "@repo/events-core/event-types";
 import { DI_TOKENS } from "../../lib/di/di-tokens";
 import {
@@ -54,6 +55,50 @@ export class WorkspaceTreeService {
       "ServerWorkspaceFolderTreeResponsed",
       (event) => this.handleWorkspaceTreeResponse(event)
     );
+
+    // Subscribe to file opened events
+    this.eventBus.subscribe<ServerFileOpenedEvent>(
+      "ServerFileOpened",
+      (event) => this.handleFileOpenedEvent(event)
+    );
+  }
+
+  /**
+   * Handles file opened events from the server
+   * Identifies file type and selects the node in the tree
+   */
+  private handleFileOpenedEvent(event: ServerFileOpenedEvent): void {
+    const { filePath, fileType, content } = event;
+
+    // Select the node in the tree
+    this.selectNode(filePath);
+
+    // Determine if this is a chat file
+    const isChatFile = this.isChatFile(filePath, fileType);
+
+    this.logger.info(
+      `File opened: ${filePath}, type: ${fileType}, isChatFile: ${isChatFile}`
+    );
+
+    // Note: Other services will be listening for ServerFileOpened events
+    // and will handle displaying the content in the appropriate panel
+  }
+
+  /**
+   * Determines if a file is a chat file based on fileType and path
+   */
+  private isChatFile(filePath: string, fileType: string): boolean {
+    // Check if file is a chat file based on fileType
+    if (fileType === "chat" || fileType === "application/json") {
+      // Further check file extension or path patterns for chat files
+      return (
+        filePath.endsWith(".chat.json") ||
+        filePath.includes("/chats/") ||
+        filePath.endsWith(".v1.json") ||
+        filePath.endsWith(".v2.json")
+      );
+    }
+    return false;
   }
 
   private handleFileWatcherEvent(event: ServerFileWatcherEvent): void {
@@ -387,6 +432,9 @@ export class WorkspaceTreeService {
 
   // Public methods for UI components
 
+  /**
+   * Selects a node in the tree
+   */
   public selectNode(path: string): void {
     const store = useWorkspaceTreeStore.getState();
     const node = store.findNodeByPath(path);
@@ -396,6 +444,66 @@ export class WorkspaceTreeService {
       this.logger.debug(`Selected node: ${path}`);
     } else {
       this.logger.warn(`Node not found for selection: ${path}`);
+    }
+  }
+
+  /**
+   * Opens a file by emitting a ClientOpenFile event
+   */
+  public openFile(path: string): void {
+    const store = useWorkspaceTreeStore.getState();
+    const node = store.findNodeByPath(path);
+
+    if (!node) {
+      this.logger.warn(`Cannot open file: node not found at path ${path}`);
+      return;
+    }
+
+    if (node.type !== "file") {
+      this.logger.warn(`Cannot open ${path}: not a file`);
+      return;
+    }
+
+    // Select the node in the tree
+    this.selectNode(path);
+
+    // Emit the ClientOpenFile event
+    this.logger.debug(`Emitting ClientOpenFile event for ${path}`);
+    this.eventBus
+      .emit({
+        kind: "ClientOpenFile",
+        timestamp: new Date(),
+        correlationId: `file-open-${Date.now()}`,
+        filePath: path,
+      })
+      .catch((error) => {
+        this.logger.error(`Error opening file ${path}: ${error}`);
+      });
+  }
+
+  /**
+   * Handles node click events from the UI
+   * Routes to appropriate handler based on node type
+   */
+  public handleNodeClick(path: string): void {
+    const store = useWorkspaceTreeStore.getState();
+    const node = store.findNodeByPath(path);
+
+    if (!node) {
+      this.logger.warn(`Node click handler: node not found at path ${path}`);
+      return;
+    }
+
+    // Select the node
+    this.selectNode(path);
+
+    // If it's a file, open it
+    if (node.type === "file") {
+      this.openFile(path);
+    }
+    // If it's a folder, toggle expansion
+    else if (node.type === "folder") {
+      this.toggleFolder(path);
     }
   }
 

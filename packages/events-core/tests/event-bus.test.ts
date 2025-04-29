@@ -6,7 +6,7 @@ import {
 import {
   ClientTestPingEvent,
   ClientApproveWorkEvent,
-  ServerChatCreatedEvent,
+  ServerNewChatCreatedEvent,
   ServerTestPingEvent,
 } from "../src/event-types.js";
 
@@ -338,12 +338,11 @@ describe("EventBus", () => {
         message: "Test 1",
       };
 
-      const testEvent2: ServerChatCreatedEvent = {
-        kind: "ServerChatCreated",
+      const testEvent2: ServerNewChatCreatedEvent = {
+        kind: "ServerNewChatCreated",
         timestamp: new Date(),
         chatId: "test-chat-id",
-        taskId: "test-task-id",
-        subtaskId: "test-subtask-id",
+        filePath: "test-file-path",
       };
 
       // Act

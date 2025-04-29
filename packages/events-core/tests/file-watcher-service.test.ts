@@ -2,7 +2,7 @@ import path from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import {
   FileWatcherService,
-  createFileWatcher,
+  createFileWatcherService,
 } from "../src/file-watcher-service.js";
 
 interface MockWatcher {
@@ -300,7 +300,7 @@ describe("FileWatcherService", () => {
   });
 });
 
-describe("createFileWatcher", () => {
+describe("createFileWatcherService", () => {
   test("creates and starts a FileWatcherService instance", () => {
     // Arrange
     const mockEventBus = new EventBus({ environment: "server" });
@@ -313,7 +313,7 @@ describe("createFileWatcher", () => {
     );
 
     // Act
-    const fileWatcher = createFileWatcher(mockEventBus, workspacePath);
+    const fileWatcher = createFileWatcherService(mockEventBus, workspacePath);
 
     // Assert
     expect(fileWatcher).toBeInstanceOf(FileWatcherService);
@@ -337,7 +337,7 @@ describe("createFileWatcher", () => {
     const chokidar = require("chokidar");
 
     // Act
-    createFileWatcher(mockEventBus, workspacePath, customOptions);
+    createFileWatcherService(mockEventBus, workspacePath, customOptions);
 
     // Assert
     expect(chokidar.watch).toHaveBeenCalledWith(

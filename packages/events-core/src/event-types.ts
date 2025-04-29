@@ -85,6 +85,7 @@ export const ServerEventKind = [
   "ServerChatMessageAppended",
   "ServerChatFileUpdated",
   "ServerChatUpdated",
+  "ServerNewChatCreated", // Response to ClientCreateNewChat event
 
   // AI processing
   "ServerUserChatMessagePostProcessed",
@@ -463,6 +464,12 @@ export interface ServerChatUpdatedEvent extends BaseServerEvent {
   chat: Chat;
 }
 
+export interface ServerNewChatCreatedEvent extends BaseServerEvent {
+  kind: "ServerNewChatCreated";
+  chatId: string;
+  filePath: string;
+}
+
 export interface ServerUserChatMessagePostProcessedEvent
   extends BaseServerEvent {
   kind: "ServerUserChatMessagePostProcessed";
@@ -593,6 +600,7 @@ export type ServerEventUnion =
   | ServerChatMessageAppendedEvent
   | ServerChatFileUpdatedEvent
   | ServerChatUpdatedEvent
+  | ServerNewChatCreatedEvent
   | ServerUserChatMessagePostProcessedEvent
   | ServerAIResponseRequestedEvent
   | ServerAIResponseGeneratedEvent

@@ -1,5 +1,5 @@
 "use client";
 
-import ChatPage from "./chat-page";
+import ChatPanelPage from "./chat-panel-index";
 
-export default ChatPage;
+export default ChatPanelPage;

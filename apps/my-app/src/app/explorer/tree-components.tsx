@@ -1,4 +1,3 @@
-import React from "react";
 import { ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
 import { ILogObj, Logger } from "tslog";
 import {
@@ -8,6 +7,7 @@ import {
   FileTreeNode,
   isFolderNode,
 } from "../../features/workspace-tree/workspace-tree-store";
+import { useWorkspaceTreeService } from "../../lib/di/di-provider";
 
 const logger = new Logger<ILogObj>({ name: "tree-components" });
 
@@ -18,12 +18,18 @@ export const FileNodeComponent = ({
   node: FileTreeNode;
   level: number;
 }) => {
-  const { selectedNode, setSelectedNode } = useWorkspaceTreeStore();
+  const { selectedNode } = useWorkspaceTreeStore();
+  const workspaceTreeService = useWorkspaceTreeService();
   const paddingLeft = `${level * 16}px`;
 
   const handleClick = () => {
-    setSelectedNode(node);
-    logger.debug(`Selected file: ${node.path}`);
+    // Use the WorkspaceTreeService to handle file clicks
+    if (workspaceTreeService) {
+      workspaceTreeService.handleNodeClick(node.path);
+      logger.debug(`Handled file click: ${node.path}`);
+    } else {
+      logger.warn("WorkspaceTreeService not available");
+    }
   };
 
   const isSelected = selectedNode?.id === node.id;
@@ -54,13 +60,17 @@ export const FolderNodeComponent = ({
   node: FolderTreeNode;
   level?: number;
 }) => {
-  const { isExpanded, toggleFolderExpansion } = useWorkspaceTreeStore();
-  const expanded = isExpanded(node.path);
+  const workspaceTreeService = useWorkspaceTreeService();
+  const expanded = workspaceTreeService?.isExpanded(node.path) || false;
   const paddingLeft = `${level * 16}px`;
 
   const handleToggle = () => {
-    toggleFolderExpansion(node.path);
-    logger.debug(`Toggled folder: ${node.path}, expanded: ${!expanded}`);
+    if (workspaceTreeService) {
+      workspaceTreeService.handleNodeClick(node.path);
+      logger.debug(`Handled folder click: ${node.path}`);
+    } else {
+      logger.warn("WorkspaceTreeService not available");
+    }
   };
 
   return (

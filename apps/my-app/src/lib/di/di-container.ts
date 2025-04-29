@@ -7,12 +7,13 @@ import {
   getWebSocketEventClient,
 } from "@repo/events-relay/websocket-event-client";
 import { ConnectionAwareEventBus } from "@repo/events-relay/connection-aware-event-bus";
-import { FileExplorerService } from "../../features/file-explorer-di/file-explorer-service";
+import { ConfigService } from "../config/config-service";
+// import { FileExplorerService } from "../../features/file-explorer-di/file-explorer-service";
 import { EditorService } from "../../features/editor/editor-service";
 import { WorkspaceTreeService } from "../../features/workspace-tree/workspace-tree-service";
 import { ConnectionService } from "../../features/connection/connection-service";
-import { ChatService } from "../../features/chat/ui-chat-service";
-import { ConfigService } from "../config/config-service";
+import { ChatPanelService } from "../../features/chat-panel/chat-panel-service";
+import { PreviewPanelService } from "../../features/preview-panel/preview-panel-service";
 import { DI_TOKENS } from "./di-tokens";
 
 // Create default logger
@@ -86,10 +87,10 @@ container.register<IEventBus>(DI_TOKENS.EVENT_BUS, {
 });
 
 // Register feature services
-container.registerSingleton<FileExplorerService>(
-  DI_TOKENS.FILE_EXPLORER_SERVICE,
-  FileExplorerService
-);
+// container.registerSingleton<FileExplorerService>(
+//   DI_TOKENS.FILE_EXPLORER_SERVICE,
+//   FileExplorerService
+// );
 
 container.registerSingleton<EditorService>(
   DI_TOKENS.EDITOR_SERVICE,
@@ -106,6 +107,14 @@ container.registerSingleton<ConnectionService>(
   ConnectionService
 );
 
-container.registerSingleton<ChatService>(DI_TOKENS.CHAT_SERVICE, ChatService);
+container.registerSingleton<ChatPanelService>(
+  DI_TOKENS.CHAT_PANEL_SERVICE,
+  ChatPanelService
+);
+
+container.registerSingleton<ChatPanelService>(
+  DI_TOKENS.PREVIEW_PANEL_SERVICE,
+  PreviewPanelService
+);
 
 export { container };

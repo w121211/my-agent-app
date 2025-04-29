@@ -1,15 +1,55 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { ILogObj, Logger } from "tslog";
 import {
   Chat,
   Task,
-  Subtask,
   ChatMessage,
-  RepositoryError,
   EntityNotFoundError,
   ConcurrencyError,
   EntityWithId,
+  ChatStatus,
+  Role,
+  TaskStatus,
 } from "./event-types.js";
-import { IWorkspaceManager } from "./workspace-manager.js";
+
+// File operation helper functions
+export async function createDirectory(dirPath: string): Promise<string> {
+  await fs.mkdir(dirPath, { recursive: true });
+  return dirPath;
+}
+
+export async function writeJsonFile<T>(
+  filePath: string,
+  data: T
+): Promise<void> {
+  const content = JSON.stringify(data, null, 2);
+  await fs.writeFile(filePath, content, "utf8");
+}
+
+export async function readJsonFile<T>(filePath: string): Promise<T> {
+  const content = await fs.readFile(filePath, "utf8");
+  return JSON.parse(content) as T;
+}
+
+export async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function listDirectory(
+  dirPath: string
+): Promise<{ name: string; isDirectory: boolean }[]> {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  return entries.map((entry) => ({
+    name: entry.name,
+    isDirectory: entry.isDirectory(),
+  }));
+}
 
 /**
  * Generic repository interface for entity operations
@@ -29,10 +69,10 @@ abstract class BaseRepository<T extends EntityWithId>
 {
   protected entities: Map<string, T> = new Map();
   protected logger: Logger<ILogObj>;
-  protected workspaceManager: IWorkspaceManager;
+  protected workspacePath: string;
 
-  constructor(workspaceManager: IWorkspaceManager, loggerName?: string) {
-    this.workspaceManager = workspaceManager;
+  constructor(workspacePath: string, loggerName?: string) {
+    this.workspacePath = workspacePath;
     this.logger = new Logger({ name: loggerName || this.constructor.name });
   }
 
@@ -53,9 +93,6 @@ abstract class BaseRepository<T extends EntityWithId>
     }
   }
 
-  /**
-   * Validates entity before saving to ensure consistency
-   */
   protected validateEntity(entity: T): void {
     if (!entity.id) {
       throw new Error("Entity must have an 'id' attribute");
@@ -66,85 +103,99 @@ abstract class BaseRepository<T extends EntityWithId>
       throw new ConcurrencyError(entity.id);
     }
   }
+
+  protected resolvePath(relativePath: string): string {
+    return path.isAbsolute(relativePath)
+      ? relativePath
+      : path.join(this.workspacePath, relativePath);
+  }
+}
+
+// Interfaces for serialized data structures
+interface TaskData {
+  id: string;
+  seqNumber: number;
+  title: string;
+  status: string;
+  currentSubtaskId?: string;
+  folderPath?: string;
+  config: Record<string, unknown>;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+
+interface ChatFileData {
+  _type: string;
+  chatId: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  title?: string;
+  messages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    timestamp: string | Date;
+    metadata?: Record<string, unknown>;
+  }>;
 }
 
 /**
  * Repository for Task entity management
  */
 export class TaskRepository extends BaseRepository<Task> {
-  constructor(workspaceManager: IWorkspaceManager) {
-    super(workspaceManager, "TaskRepository");
+  constructor(workspacePath: string) {
+    super(workspacePath, "TaskRepository");
   }
 
-  /**
-   * Saves a task to memory and file system
-   */
   async save(task: Task): Promise<void> {
     this.validateEntity(task);
     this.entities.set(task.id, task);
-    await this.workspaceManager.saveTaskToJson(task);
-    this.logger.info(`Task ${task.id} saved successfully`);
+
+    if (task.folderPath) {
+      const taskFilePath = path.join(task.folderPath, "task.json");
+      await writeJsonFile(taskFilePath, task);
+      this.logger.info(`Task ${task.id} saved successfully`);
+    }
   }
 
-  /**
-   * Creates a new task folder and returns its path
-   */
   async createTaskFolder(task: Task): Promise<string> {
-    const folderPath = await this.workspaceManager.createTaskFolder(task);
+    const folderName = `task-${task.id}`;
+    const folderPath = this.resolvePath(folderName);
+    await createDirectory(folderPath);
+    this.logger.info(`Created task folder: ${folderPath}`);
     return folderPath;
   }
 
-  /**
-   * Retrieves a subtask within a task
-   */
-  async getSubtask(
-    taskId: string,
-    subtaskId: string
-  ): Promise<[Task, Subtask]> {
-    const task = await this.findById(taskId);
-    if (!task) {
-      throw new EntityNotFoundError(`Task ${taskId} not found`);
-    }
-
-    const subtask = task.subtasks.find((s) => s.id === subtaskId);
-    if (!subtask) {
-      throw new EntityNotFoundError(
-        `Subtask ${subtaskId} not found in task ${taskId}`
-      );
-    }
-
-    return [task, subtask];
-  }
-
-  /**
-   * Saves or updates a subtask within its parent task
-   */
-  async saveSubtask(subtask: Subtask): Promise<void> {
-    const task = await this.findById(subtask.taskId);
-    if (!task) {
-      throw new EntityNotFoundError(`Task ${subtask.taskId} not found`);
-    }
-
-    // Find and replace or add subtask
-    const index = task.subtasks.findIndex((s) => s.id === subtask.id);
-    if (index >= 0) {
-      task.subtasks[index] = subtask;
-    } else {
-      task.subtasks.push(subtask);
-    }
-
-    // Save the entire task to maintain consistency
-    await this.save(task);
-  }
-
-  /**
-   * Loads all tasks from workspace into memory
-   */
   async loadWorkspace(): Promise<void> {
-    const tasks = await this.workspaceManager.loadWorkspace();
+    const entries = await listDirectory(this.workspacePath);
 
-    // Convert the record to a map
-    this.entities = new Map(Object.entries(tasks));
+    const taskPromises = entries
+      .filter((entry) => entry.isDirectory && entry.name.startsWith("task-"))
+      .map(async (entry) => {
+        const taskFilePath = path.join(
+          this.workspacePath,
+          entry.name,
+          "task.json"
+        );
+
+        if (await fileExists(taskFilePath)) {
+          const taskData = await readJsonFile<TaskData>(taskFilePath);
+          const task: Task = {
+            id: taskData.id,
+            seqNumber: taskData.seqNumber,
+            title: taskData.title,
+            status: taskData.status as TaskStatus,
+            currentSubtaskId: taskData.currentSubtaskId,
+            folderPath: taskData.folderPath,
+            config: taskData.config,
+            createdAt: new Date(taskData.createdAt),
+            updatedAt: new Date(taskData.updatedAt),
+          };
+          this.entities.set(task.id, task);
+        }
+      });
+
+    await Promise.all(taskPromises);
     this.logger.info(`Loaded ${this.entities.size} tasks from workspace`);
   }
 }
@@ -153,59 +204,35 @@ export class TaskRepository extends BaseRepository<Task> {
  * Repository for Chat entity management
  */
 export class ChatRepository extends BaseRepository<Chat> {
-  constructor(workspaceManager: IWorkspaceManager) {
-    super(workspaceManager, "ChatRepository");
+  constructor(workspacePath: string) {
+    super(workspacePath, "ChatRepository");
   }
 
-  /**
-   * Saves a chat to memory and file system
-   */
   async save(chat: Chat): Promise<void> {
     this.validateEntity(chat);
     this.entities.set(chat.id, chat);
 
-    const chatPath = await this.workspaceManager.getChatFilePath(
-      chat.taskId,
-      chat.subtaskId,
-      chat.id
-    );
-
-    if (chatPath) {
-      await this.workspaceManager.saveChatToFile(chat, chatPath);
+    if (chat.filePath) {
+      await this.saveChatToFile(chat, chat.filePath);
       this.logger.info(`Chat ${chat.id} saved successfully`);
     }
   }
 
-  /**
-   * Creates a new chat and returns its file path
-   */
-  async createChat(chat: Chat): Promise<string> {
-    const folderPath = await this.workspaceManager.getSubtaskFolderPath(
-      chat.taskId,
-      chat.subtaskId
-    );
+  async createChat(chat: Chat, taskFolderPath: string): Promise<string> {
+    const fileName = `${chat.id}.chat.json`;
+    const filePath = path.join(taskFolderPath, fileName);
 
-    if (!folderPath) {
-      throw new RepositoryError(
-        `Could not find folder for task ${chat.taskId} and subtask ${chat.subtaskId}`
-      );
-    }
+    await this.saveChatToFile(chat, filePath);
+    chat.filePath = filePath;
+    this.entities.set(chat.id, chat);
 
-    const filePath = await this.workspaceManager.createChatFile(
-      chat,
-      folderPath
-    );
-    await this.save(chat);
     return filePath;
   }
 
-  /**
-   * Adds a message to a chat and persists the changes
-   */
   async addMessage(chatId: string, message: ChatMessage): Promise<void> {
     const chat = await this.findById(chatId);
     if (!chat) {
-      throw new EntityNotFoundError(`Chat ${chatId} not found`);
+      throw new EntityNotFoundError(chatId);
     }
 
     chat.messages.push(message);
@@ -213,26 +240,85 @@ export class ChatRepository extends BaseRepository<Chat> {
     await this.save(chat);
   }
 
-  /**
-   * Loads a chat from file system into memory
-   */
-  async loadChat(
+  async getChatFilePath(
     taskId: string,
-    subtaskId: string,
     chatId: string
-  ): Promise<Chat | undefined> {
-    const filePath = await this.workspaceManager.getChatFilePath(
-      taskId,
-      subtaskId,
-      chatId
-    );
+  ): Promise<string | undefined> {
+    const taskFolderPath = this.resolvePath(`task-${taskId}`);
+    const chatFilePath = path.join(taskFolderPath, `${chatId}.chat.json`);
+
+    if (await fileExists(chatFilePath)) {
+      return chatFilePath;
+    }
+
+    return undefined;
+  }
+
+  async loadChat(taskId: string, chatId: string): Promise<Chat | undefined> {
+    const filePath = await this.getChatFilePath(taskId, chatId);
 
     if (!filePath) {
       return undefined;
     }
 
-    const chat = await this.workspaceManager.readChatFile(filePath);
-    await this.save(chat);
+    return this.readChatFile(filePath);
+  }
+
+  async readChatFile(filePath: string): Promise<Chat> {
+    const chatFileData = await readJsonFile<ChatFileData>(filePath);
+
+    if (chatFileData._type !== "chat") {
+      throw new Error(`File ${filePath} is not a chat file`);
+    }
+
+    const taskId = this.extractTaskIdFromPath(filePath);
+
+    const chat: Chat = {
+      id: chatFileData.chatId,
+      taskId,
+      messages: chatFileData.messages.map((msg) => ({
+        id: msg.id,
+        role: msg.role as Role,
+        content: msg.content,
+        timestamp: new Date(msg.timestamp),
+        metadata: msg.metadata,
+      })),
+      status: "ACTIVE" as ChatStatus,
+      createdAt: new Date(chatFileData.createdAt),
+      updatedAt: new Date(chatFileData.updatedAt),
+      filePath,
+      metadata: {
+        title: chatFileData.title,
+      },
+    };
+
+    this.entities.set(chat.id, chat);
     return chat;
+  }
+
+  private async saveChatToFile(chat: Chat, filePath: string): Promise<void> {
+    const chatFile = {
+      _type: "chat",
+      chatId: chat.id,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      title: chat.metadata?.title || "New Chat",
+      messages: chat.messages,
+    };
+
+    await writeJsonFile(filePath, chatFile);
+  }
+
+  private extractTaskIdFromPath(filePath: string): string {
+    const pathParts = filePath.split(path.sep);
+
+    for (const part of pathParts) {
+      if (part.startsWith("task-")) {
+        return part.substring(5);
+      }
+    }
+
+    this.logger.warn(`Could not extract task ID from path: ${filePath}`);
+    return "unknown";
   }
 }

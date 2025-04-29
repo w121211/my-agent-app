@@ -1,8 +1,9 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 import { IEventBus } from "./event-bus.js";
-import { ChatRepository } from "./repositories.js";
-import { IWorkspaceManager } from "./workspace-manager.js";
+import { ChatRepository, fileExists } from "./repositories.js";
 import {
   Chat,
   ChatMessage,
@@ -19,23 +20,25 @@ import {
   ServerAIResponsePostProcessedEvent,
   ClientOpenFileEvent,
   ServerFileOpenedEvent,
+  ServerNewChatCreatedEvent,
+  ServerArtifactFileCreatedEvent,
 } from "./event-types.js";
 
 export class ChatService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
   private readonly chatRepo: ChatRepository;
-  private readonly workspaceManager: IWorkspaceManager;
+  private readonly workspacePath: string;
 
   constructor(
     eventBus: IEventBus,
     chatRepo: ChatRepository,
-    workspaceManager: IWorkspaceManager
+    workspacePath: string
   ) {
     this.logger = new Logger({ name: "ChatService" });
     this.eventBus = eventBus;
     this.chatRepo = chatRepo;
-    this.workspaceManager = workspaceManager;
+    this.workspacePath = workspacePath;
 
     this.eventBus.subscribe<ClientCreateNewChatEvent>(
       "ClientCreateNewChat",
@@ -49,7 +52,7 @@ export class ChatService {
 
     this.eventBus.subscribe<ClientOpenFileEvent>(
       "ClientOpenFile",
-      this.handleOpenFile.bind(this)
+      this.handleOpenChatFile.bind(this)
     );
   }
 
@@ -60,10 +63,14 @@ export class ChatService {
     const now = new Date();
 
     // Create task if requested (simplified for MVP)
+    // TODO: Should use repository to create task
     let taskId = "";
+    let taskFolderPath = this.workspacePath;
+
     if (event.newTask) {
       taskId = uuidv4();
-      // In a real implementation, emit a ClientCreateTask event
+      taskFolderPath = path.join(this.workspacePath, `task-${taskId}`);
+      await fs.mkdir(taskFolderPath, { recursive: true });
     }
 
     const chat: Chat = {
@@ -80,12 +87,20 @@ export class ChatService {
       },
     };
 
-    const filePath = await this.chatRepo.createChat(chat);
-    chat.filePath = filePath; // Store the filePath in the chat object
+    const filePath = await this.chatRepo.createChat(chat, taskFolderPath);
+    chat.filePath = filePath;
 
     await this.eventBus.emit<ServerChatFileCreatedEvent>({
       kind: "ServerChatFileCreated",
       taskId,
+      chatId,
+      filePath,
+      timestamp: new Date(),
+      correlationId: event.correlationId,
+    });
+
+    await this.eventBus.emit<ServerNewChatCreatedEvent>({
+      kind: "ServerNewChatCreated",
       chatId,
       filePath,
       timestamp: new Date(),
@@ -134,37 +149,43 @@ export class ChatService {
     await this.processUserMessage(chat, message, event.correlationId);
   }
 
-  private async handleOpenFile(event: ClientOpenFileEvent): Promise<void> {
+  private async handleOpenChatFile(event: ClientOpenFileEvent): Promise<void> {
     const filePath = event.filePath;
 
+    // Only process chat files
+    if (!filePath.endsWith(".chat.json")) {
+      return;
+    }
+
+    const fullPath = this.resolvePath(filePath);
+
+    if (!(await fileExists(fullPath))) {
+      throw new Error(`File does not exist: ${filePath}`);
+    }
+
     try {
-      const chat = await this.workspaceManager.readChatFile(filePath);
+      const chat = await this.chatRepo.readChatFile(fullPath);
       const content = JSON.stringify(chat);
-      const fileType = this.getFileType(filePath);
 
       await this.eventBus.emit<ServerFileOpenedEvent>({
         kind: "ServerFileOpened",
         filePath,
         content,
-        fileType,
+        fileType: "chat",
         timestamp: new Date(),
         correlationId: event.correlationId,
       });
 
-      // Initialize chat if it's a chat file
-      if (fileType === "chat") {
-        const chatData = chat;
-        await this.eventBus.emit<ServerChatInitializedEvent>({
-          kind: "ServerChatInitialized",
-          chatId: chatData.id,
-          chatData,
-          timestamp: new Date(),
-          correlationId: event.correlationId,
-        });
-      }
+      await this.eventBus.emit<ServerChatInitializedEvent>({
+        kind: "ServerChatInitialized",
+        chatId: chat.id,
+        chatData: chat,
+        timestamp: new Date(),
+        correlationId: event.correlationId,
+      });
     } catch (error) {
-      this.logger.error(`Failed to open file: ${filePath}`, error);
-      throw new Error(`Failed to open file: ${filePath}`);
+      this.logger.error(`Failed to open chat file: ${filePath}`, error);
+      throw new Error(`Failed to open chat file: ${filePath}`);
     }
   }
 
@@ -177,7 +198,6 @@ export class ChatService {
     const processedContent = message.content;
     const fileReferences = this.extractFileReferences(message.content);
 
-    // Post-process user message
     await this.eventBus.emit<ServerUserChatMessagePostProcessedEvent>({
       kind: "ServerUserChatMessagePostProcessed",
       chatId: chat.id,
@@ -206,7 +226,7 @@ export class ChatService {
     await this.eventBus.emit<ServerChatFileUpdatedEvent>({
       kind: "ServerChatFileUpdated",
       chatId: chat.id,
-      filePath: chat.filePath || "", // Use chat.filePath instead of getChatFilePath
+      filePath: chat.filePath || "",
       timestamp: new Date(),
       correlationId,
     });
@@ -239,13 +259,15 @@ export class ChatService {
       correlationId,
     });
 
-    // In a real implementation, this would call an AI service
+    // Placeholder for AI service integration
     const aiResponse = "This is a placeholder AI response";
+    const artifacts = this.detectArtifacts(aiResponse);
 
     await this.eventBus.emit<ServerAIResponseGeneratedEvent>({
       kind: "ServerAIResponseGenerated",
       chatId: chat.id,
       response: aiResponse,
+      artifacts,
       timestamp: new Date(),
       correlationId,
     });
@@ -258,6 +280,16 @@ export class ChatService {
     };
 
     await this.chatRepo.addMessage(chat.id, aiMessage);
+
+    // Process artifacts if any were detected
+    if (artifacts && artifacts.length > 0) {
+      await this.processArtifacts(
+        chat.id,
+        aiMessage.id,
+        artifacts,
+        correlationId
+      );
+    }
 
     await this.eventBus.emit<ServerAIResponsePostProcessedEvent>({
       kind: "ServerAIResponsePostProcessed",
@@ -281,7 +313,7 @@ export class ChatService {
     await this.eventBus.emit<ServerChatFileUpdatedEvent>({
       kind: "ServerChatFileUpdated",
       chatId: chat.id,
-      filePath: chat.filePath || "", // Use chat.filePath instead of getChatFilePath
+      filePath: chat.filePath || "",
       timestamp: new Date(),
       correlationId,
     });
@@ -295,6 +327,66 @@ export class ChatService {
     });
   }
 
+  private detectArtifacts(response: string): Array<{
+    id: string;
+    type: string;
+    content: string;
+  }> {
+    if (response.includes("```") || response.includes("code")) {
+      return [
+        {
+          id: uuidv4(),
+          type: "code",
+          content: "console.log('Hello, World!');",
+        },
+      ];
+    }
+
+    return [];
+  }
+
+  private async processArtifacts(
+    chatId: string,
+    messageId: string,
+    artifacts: Array<{ id: string; type: string; content: string }>,
+    correlationId?: string
+  ): Promise<void> {
+    for (const artifact of artifacts) {
+      const fileName = `artifact-${artifact.id}.${this.getArtifactExtension(artifact.type)}`;
+      const filePath = path.join(
+        this.workspacePath,
+        `task-${chatId.split("-")[0]}`,
+        fileName
+      );
+
+      await fs.writeFile(filePath, artifact.content, "utf8");
+
+      await this.eventBus.emit<ServerArtifactFileCreatedEvent>({
+        kind: "ServerArtifactFileCreated",
+        chatId,
+        messageId,
+        artifactId: artifact.id,
+        filePath,
+        fileType: artifact.type,
+        timestamp: new Date(),
+        correlationId,
+      });
+    }
+  }
+
+  private getArtifactExtension(type: string): string {
+    switch (type) {
+      case "code":
+        return "js";
+      case "markdown":
+        return "md";
+      case "diagram":
+        return "svg";
+      default:
+        return "txt";
+    }
+  }
+
   private extractFileReferences(
     content: string
   ): Array<{ path: string; md5: string }> {
@@ -303,19 +395,20 @@ export class ChatService {
     let match;
 
     while ((match = regex.exec(content)) !== null) {
-      references.push({
-        path: match[1],
-        md5: "placeholder", // In a real implementation, calculate MD5
-      });
+      if (match[1]) {
+        references.push({
+          path: match[1],
+          md5: "placeholder",
+        });
+      }
     }
 
     return references;
   }
 
-  private getFileType(filePath: string): string {
-    if (filePath.endsWith(".json")) {
-      return "chat";
-    }
-    return "unknown";
+  private resolvePath(relativePath: string): string {
+    return path.isAbsolute(relativePath)
+      ? relativePath
+      : path.join(this.workspacePath, relativePath);
   }
 }

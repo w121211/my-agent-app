@@ -11,7 +11,6 @@ import {
   ServerTaskInitializedEvent,
   ServerTaskLoadedEvent,
   Task,
-  TaskStatus,
 } from "./event-types.js";
 
 export class TaskService {
