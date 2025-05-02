@@ -1,7 +1,7 @@
 import { generateText } from "ai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { Logger, ILogObj } from "tslog"
-import { ChatMessage } from "./event-types.js"
+import { AIMessage } from "./event-types.js"
 
 /**
  * Model configuration interface
@@ -61,7 +61,7 @@ export interface AIAdapterConfig {
 export interface GenerateResponseOptions {
   modelId?: string
   systemPrompt?: string
-  messageHistory?: ChatMessage[]
+  messageHistory?: AIMessage[]
   maxTokens?: number
   temperature?: number
   topP?: number
@@ -108,17 +108,17 @@ export class AIAdapter {
    * Converts ChatMessage objects to the format expected by Vercel AI SDK
    */
   // prettier-ignore
-  private convertMessagesToAIFormat(messages: ChatMessage[]) {
-    return messages.map((message) => {
-      const role: "user" | "assistant" | "system" =
-        message.role === "USER" ? "user" : message.role === "ASSISTANT" ? "assistant" : "system"
+  //   private convertMessagesToAIFormat(messages: AIMessage[]) {
+  //     return messages.map((message) => {
+  //       const role: "user" | "assistant" | "system" =
+  //         message.role === "USER" ? "user" : message.role === "ASSISTANT" ? "assistant" : "system"
 
-      return {
-        role,
-        content: message.content,
-      }
-    })
-  }
+  //       return {
+  //         role,
+  //         content: message.content,
+  //       }
+  //     })
+  //   }
 
   /**
    * Finds a model configuration by ID
@@ -149,19 +149,19 @@ export class AIAdapter {
     this.logger.debug(`Generating response with model: ${model.displayName}`)
 
     const openRouterModel = this.openRouter(model.apiIdentifier)
-    const messages = options.messageHistory || []
-    const formattedMessages = this.convertMessagesToAIFormat(messages)
+    const messageHistory = options.messageHistory || []
+    // const formattedMessages = this.convertMessagesToAIFormat(messages)
 
     // Add system prompt if provided
     if (options.systemPrompt) {
-      formattedMessages.unshift({
+      messageHistory.unshift({
         role: "system",
         content: options.systemPrompt,
       })
     }
 
     // Add the current user prompt
-    formattedMessages.push({
+    messageHistory.push({
       role: "user",
       content: userPrompt,
     })
@@ -169,7 +169,7 @@ export class AIAdapter {
     // Generate text using Vercel AI SDK
     const { text } = await generateText({
       model: openRouterModel,
-      messages: formattedMessages,
+      messages: messageHistory,
       maxTokens: options.maxTokens,
       temperature: options.temperature,
       topP: options.topP,
