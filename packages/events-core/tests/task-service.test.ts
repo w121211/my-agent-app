@@ -1,380 +1,226 @@
-import { EventBus } from "../src/event-bus.js";
 import { TaskService } from "../src/task-service.js";
+import { IEventBus } from "../src/event-bus.js";
 import { TaskRepository } from "../src/repositories.js";
 import {
-  ClientEventType,
-  ClientCreateTaskCommand,
-  ClientStartTaskCommand,
-  ClientStartSubtaskCommand,
-  ServerNextSubtaskTriggered,
-  ServerEventType,
+  ClientCreateTaskEvent,
+  ClientStartTaskEvent,
+  ServerTaskCreatedEvent,
+  ServerTaskFolderCreatedEvent,
+  ServerTaskConfigFileCreatedEvent,
+  ServerTaskInitializedEvent,
+  ServerTaskLoadedEvent,
   Task,
   TaskStatus,
-  SubtaskStatus,
 } from "../src/event-types.js";
-import { IWorkspaceManager } from "../src/workspace-manager.js";
-
-// Mock dependencies
-jest.mock("../repositories");
-jest.mock("../workspace-manager");
 
 describe("TaskService", () => {
-  // Test setup
-  let eventBus: EventBus;
-  let taskRepo: TaskRepository;
-  let workspaceManager: IWorkspaceManager;
+  let mockEventBus: jest.Mocked<IEventBus>;
+  let mockTaskRepo: jest.Mocked<TaskRepository>;
   let taskService: TaskService;
-  let emitSpy: jest.SpyInstance;
+  let eventHandlers: Record<string, Function> = {};
 
   beforeEach(() => {
-    // Create fresh instances for each test
-    eventBus = new EventBus({ environment: "server" });
-
-    // Mock workspace manager
-    workspaceManager = {
-      createDirectory: jest.fn().mockResolvedValue("/mock/tasks/task-123"),
-      writeFile: jest
-        .fn()
-        .mockResolvedValue("/mock/tasks/task-123/config.json"),
-      readFile: jest.fn().mockResolvedValue(JSON.stringify({ key: "value" })),
-      fileExists: jest.fn().mockResolvedValue(true),
-      getWorkspacePath: jest.fn().mockReturnValue("/mock/workspace"),
-    } as unknown as IWorkspaceManager;
-
-    // Create repository with workspace manager
-    taskRepo = new TaskRepository(workspaceManager);
-
-    // Mock repository methods
-    (taskRepo.createTaskFolder as jest.Mock).mockResolvedValue(
-      "/mock/tasks/task-123"
-    );
-    (taskRepo.save as jest.Mock).mockResolvedValue(undefined);
-    (taskRepo.findById as jest.Mock).mockImplementation(
-      async (taskId: string) => {
-        // Default mock task
-        return {
-          id: taskId,
-          seqNumber: 1,
-          title: "Test Task",
-          status: "CREATED",
-          subtasks: [
-            {
-              id: "subtask-1",
-              taskId,
-              seqNumber: 0,
-              title: "First Subtask",
-              description: "First subtask description",
-              status: "PENDING",
-              team: { agent: "ASSISTANT" },
-              inputType: "string",
-              outputType: "json",
-            },
-            {
-              id: "subtask-2",
-              taskId,
-              seqNumber: 1,
-              title: "Second Subtask",
-              description: "Second subtask description",
-              status: "PENDING",
-              team: { agent: "FUNCTION_EXECUTOR", human: "USER" },
-              inputType: "json",
-              outputType: "json",
-            },
-          ],
-          folderPath: `/mock/tasks/${taskId}`,
-          config: { key: "value" },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-      }
-    );
-
-    // Spy on eventBus.emit
-    emitSpy = jest.spyOn(eventBus, "emit");
-
-    // Initialize the service under test
-    taskService = new TaskService(eventBus, taskRepo);
-  });
-
-  afterEach(() => {
     jest.clearAllMocks();
+
+    // Create mock event bus that captures handlers for testing
+    mockEventBus = {
+      emit: jest.fn().mockResolvedValue(undefined),
+      subscribe: jest.fn().mockImplementation((eventKind, handler) => {
+        eventHandlers[eventKind] = handler;
+        return jest.fn(); // Return unsubscribe function
+      }),
+      subscribeToAllClientEvents: jest.fn(),
+      subscribeToAllServerEvents: jest.fn(),
+      unsubscribe: jest.fn(),
+      unsubscribeAll: jest.fn(),
+      hasHandlers: jest.fn(),
+      getHandlerCount: jest.fn(),
+      clear: jest.fn(),
+    } as unknown as jest.Mocked<IEventBus>;
+
+    // Create mock task repository
+    mockTaskRepo = {
+      findById: jest.fn(),
+      findAll: jest.fn(),
+      save: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn(),
+      createTaskFolder: jest.fn(),
+    } as unknown as jest.Mocked<TaskRepository>;
+
+    // Initialize service which registers event handlers
+    taskService = new TaskService(mockEventBus, mockTaskRepo);
   });
 
-  describe("handleCreateTaskCommand", () => {
-    it("should create a task, save it, and emit appropriate events", async () => {
+  describe("Task Creation", () => {
+    it("should process task creation and emit appropriate events", async () => {
       // Arrange
-      const command: ClientCreateTaskCommand = {
-        eventType: "CLIENT_CREATE_TASK_COMMAND",
-        taskName: "New Test Task",
-        taskConfig: { testKey: "testValue" },
+      const taskName = "Test Task";
+      const taskConfig = { setting: "value" };
+      const folderPath = "/path/to/task-folder";
+
+      const createTaskEvent: ClientCreateTaskEvent = {
+        kind: "ClientCreateTask",
+        taskName,
+        taskConfig,
         timestamp: new Date(),
-        correlationId: "corr-123",
+        correlationId: "test-correlation-id",
       };
+
+      mockTaskRepo.createTaskFolder.mockResolvedValue(folderPath);
 
       // Act
-      await eventBus.emit(command);
+      const handler = eventHandlers["ClientCreateTask"];
+      if (!handler) throw new Error("Handler for ClientCreateTask not found");
+      await handler(createTaskEvent);
 
       // Assert
-      expect(taskRepo.createTaskFolder).toHaveBeenCalledTimes(1);
-      expect(taskRepo.save).toHaveBeenCalledTimes(1);
+      expect(mockTaskRepo.createTaskFolder).toHaveBeenCalled();
+      expect(mockTaskRepo.save).toHaveBeenCalled();
 
-      // Check if task was created correctly
-      const taskArg = (taskRepo.save as jest.Mock).mock.calls[0][0] as Task;
-      expect(taskArg.title).toBe(command.taskName);
-      expect(taskArg.config).toEqual(command.taskConfig);
-      expect(taskArg.status).toBe("CREATED");
-      expect(taskArg.subtasks.length).toBe(2); // Default Planning and Setup subtasks
+      // Verify saved task properties
+      const savedTask = mockTaskRepo.save.mock.calls[0]?.[0] as Task;
+      expect(savedTask.title).toBe(taskName);
+      expect(savedTask.status).toBe("CREATED");
+      expect(savedTask.config).toEqual(taskConfig);
+      expect(savedTask.folderPath).toBe(folderPath);
 
-      // Check emitted events
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventType: "SERVER_TASK_FOLDER_CREATED",
-          correlationId: command.correlationId,
-        })
+      // Verify emitted events
+      expect(mockEventBus.emit).toHaveBeenCalledTimes(3);
+
+      // Check ServerTaskFolderCreatedEvent
+      const folderCreatedEvent = mockEventBus.emit.mock.calls
+        .map((call) => call[0])
+        .find(
+          (event) => event.kind === "ServerTaskFolderCreated"
+        ) as ServerTaskFolderCreatedEvent;
+
+      expect(folderCreatedEvent).toBeDefined();
+      expect(folderCreatedEvent.folderPath).toBe(folderPath);
+      expect(folderCreatedEvent.taskId).toBe(savedTask.id);
+      expect(folderCreatedEvent.correlationId).toBe(
+        createTaskEvent.correlationId
       );
 
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventType: "SERVER_TASK_CREATED",
-          taskName: command.taskName,
-          config: command.taskConfig,
-          correlationId: command.correlationId,
-        })
+      // Check ServerTaskConfigFileCreatedEvent
+      const configFileCreatedEvent = mockEventBus.emit.mock.calls
+        .map((call) => call[0])
+        .find(
+          (event) => event.kind === "ServerTaskConfigFileCreated"
+        ) as ServerTaskConfigFileCreatedEvent;
+
+      expect(configFileCreatedEvent).toBeDefined();
+      expect(configFileCreatedEvent.config).toEqual(taskConfig);
+      expect(configFileCreatedEvent.filePath).toBe(`${folderPath}/task.json`);
+      expect(configFileCreatedEvent.correlationId).toBe(
+        createTaskEvent.correlationId
       );
 
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventType: "CLIENT_START_TASK_COMMAND",
-          correlationId: command.correlationId,
-        })
+      // Check ServerTaskCreatedEvent
+      const taskCreatedEvent = mockEventBus.emit.mock.calls
+        .map((call) => call[0])
+        .find(
+          (event) => event.kind === "ServerTaskCreated"
+        ) as ServerTaskCreatedEvent;
+
+      expect(taskCreatedEvent).toBeDefined();
+      expect(taskCreatedEvent.taskName).toBe(taskName);
+      expect(taskCreatedEvent.config).toEqual(taskConfig);
+      expect(taskCreatedEvent.correlationId).toBe(
+        createTaskEvent.correlationId
       );
     });
   });
 
-  describe("handleStartTaskCommand", () => {
-    it("should load task and start the first subtask", async () => {
+  describe("Task Starting", () => {
+    it("should update task status to IN_PROGRESS when starting a task", async () => {
       // Arrange
-      const command: ClientStartTaskCommand = {
-        eventType: "CLIENT_START_TASK_COMMAND",
-        taskId: "task-123",
+      const taskId = "test-task-id";
+      const startTaskEvent: ClientStartTaskEvent = {
+        kind: "ClientStartTask",
+        taskId,
         timestamp: new Date(),
-        correlationId: "corr-456",
+        correlationId: "test-correlation-id",
       };
 
-      // Act
-      await eventBus.emit(command);
-
-      // Assert
-      expect(taskRepo.findById).toHaveBeenCalledWith(command.taskId);
-
-      // Check emitted events
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventType: "SERVER_TASK_LOADED",
-          taskId: command.taskId,
-          correlationId: command.correlationId,
-        })
-      );
-
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventType: "CLIENT_START_SUBTASK_COMMAND",
-          taskId: command.taskId,
-          subtaskId: "subtask-1", // First subtask ID
-          correlationId: command.correlationId,
-        })
-      );
-    });
-
-    it("should throw error if task not found", async () => {
-      // Arrange
-      const command: ClientStartTaskCommand = {
-        eventType: "CLIENT_START_TASK_COMMAND",
-        taskId: "non-existent-task",
-        timestamp: new Date(),
-      };
-
-      // Mock repository to return undefined
-      (taskRepo.findById as jest.Mock).mockResolvedValueOnce(undefined);
-
-      // Act & Assert
-      await expect(eventBus.emit(command)).rejects.toThrow(
-        "Task non-existent-task not found"
-      );
-    });
-  });
-
-  describe("onNextSubtaskTriggered", () => {
-    it("should start the next subtask when current one is completed", async () => {
-      // Arrange
-      const event: ServerNextSubtaskTriggered = {
-        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
-        taskId: "task-123",
-        currentSubtaskId: "subtask-1",
-        timestamp: new Date(),
-        correlationId: "corr-789",
-      };
-
-      // Mock the task with completed first subtask
-      (taskRepo.findById as jest.Mock).mockResolvedValueOnce({
-        id: "task-123",
+      const existingTask: Task = {
+        id: taskId,
         seqNumber: 1,
-        title: "Test Task",
-        status: "IN_PROGRESS",
-        subtasks: [
-          {
-            id: "subtask-1",
-            taskId: "task-123",
-            seqNumber: 0,
-            title: "First Subtask",
-            description: "First subtask description",
-            status: "COMPLETED", // Already completed
-            team: { agent: "ASSISTANT" },
-            inputType: "string",
-            outputType: "json",
-          },
-          {
-            id: "subtask-2",
-            taskId: "task-123",
-            seqNumber: 1,
-            title: "Second Subtask",
-            description: "Second subtask description",
-            status: "PENDING",
-            team: { agent: "FUNCTION_EXECUTOR", human: "USER" },
-            inputType: "json",
-            outputType: "json",
-          },
-        ],
-        folderPath: "/mock/tasks/task-123",
-        config: { key: "value" },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      // Act
-      await eventBus.emit(event);
-
-      // Assert
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventType: "CLIENT_START_SUBTASK_COMMAND",
-          taskId: "task-123",
-          subtaskId: "subtask-2", // Next subtask
-          correlationId: event.correlationId,
-        })
-      );
-    });
-
-    it("should complete the task if no more subtasks", async () => {
-      // Arrange
-      const event: ServerNextSubtaskTriggered = {
-        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
-        taskId: "task-123",
-        currentSubtaskId: "subtask-2", // Last subtask
-        timestamp: new Date(),
-      };
-
-      // Mock the task with completed last subtask
-      const mockTask = {
-        id: "task-123",
-        seqNumber: 1,
-        title: "Test Task",
-        status: "IN_PROGRESS",
-        subtasks: [
-          {
-            id: "subtask-1",
-            taskId: "task-123",
-            seqNumber: 0,
-            title: "First Subtask",
-            description: "First subtask description",
-            status: "COMPLETED",
-            team: { agent: "ASSISTANT" },
-            inputType: "string",
-            outputType: "json",
-          },
-          {
-            id: "subtask-2",
-            taskId: "task-123",
-            seqNumber: 1,
-            title: "Second Subtask",
-            description: "Second subtask description",
-            status: "COMPLETED", // Last subtask completed
-            team: { agent: "FUNCTION_EXECUTOR", human: "USER" },
-            inputType: "json",
-            outputType: "json",
-          },
-        ],
-        folderPath: "/mock/tasks/task-123",
+        title: "Existing Task",
+        status: "CREATED" as TaskStatus,
         config: { key: "value" },
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      (taskRepo.findById as jest.Mock).mockResolvedValueOnce(mockTask);
+      mockTaskRepo.findById.mockResolvedValue(existingTask);
 
       // Act
-      await eventBus.emit(event);
+      const handler = eventHandlers["ClientStartTask"];
+      if (!handler) throw new Error("Handler for ClientStartTask not found");
+      await handler(startTaskEvent);
 
       // Assert
-      expect(taskRepo.save).toHaveBeenCalled();
+      expect(mockTaskRepo.findById).toHaveBeenCalledWith(taskId);
 
-      // Check task status was updated to COMPLETED
-      const savedTask = (taskRepo.save as jest.Mock).mock.calls[0][0];
-      expect(savedTask.status).toBe("COMPLETED");
+      // Verify the task was updated
+      const savedTask = mockTaskRepo.save.mock.calls[0]?.[0] as Task;
+      expect(savedTask.id).toBe(taskId);
+      expect(savedTask.status).toBe("IN_PROGRESS");
+
+      // Verify emitted events
+      expect(mockEventBus.emit).toHaveBeenCalledTimes(2);
+
+      // Check ServerTaskLoadedEvent
+      const taskLoadedEvent = mockEventBus.emit.mock.calls
+        .map((call) => call[0])
+        .find(
+          (event) => event.kind === "ServerTaskLoaded"
+        ) as ServerTaskLoadedEvent;
+
+      expect(taskLoadedEvent).toBeDefined();
+      expect(taskLoadedEvent.taskId).toBe(taskId);
+      expect(taskLoadedEvent.taskState).toEqual(savedTask);
+      expect(taskLoadedEvent.correlationId).toBe(startTaskEvent.correlationId);
+
+      // Check ServerTaskInitializedEvent
+      const taskInitializedEvent = mockEventBus.emit.mock.calls
+        .map((call) => call[0])
+        .find(
+          (event) => event.kind === "ServerTaskInitialized"
+        ) as ServerTaskInitializedEvent;
+
+      expect(taskInitializedEvent).toBeDefined();
+      expect(taskInitializedEvent.taskId).toBe(taskId);
+      expect(taskInitializedEvent.initialState).toEqual({
+        status: "IN_PROGRESS",
+      });
+      expect(taskInitializedEvent.correlationId).toBe(
+        startTaskEvent.correlationId
+      );
     });
 
-    it("should throw error if current subtask is not completed", async () => {
+    it("should throw an error when starting a non-existent task", async () => {
       // Arrange
-      const event: ServerNextSubtaskTriggered = {
-        eventType: "SERVER_NEXT_SUBTASK_TRIGGERED",
-        taskId: "task-123",
-        currentSubtaskId: "subtask-1",
+      const taskId = "non-existent-task-id";
+      const startTaskEvent: ClientStartTaskEvent = {
+        kind: "ClientStartTask",
+        taskId,
         timestamp: new Date(),
+        correlationId: "test-correlation-id",
       };
 
-      // Mock task with non-completed subtask
-      (taskRepo.findById as jest.Mock).mockResolvedValueOnce({
-        id: "task-123",
-        subtasks: [
-          {
-            id: "subtask-1",
-            taskId: "task-123",
-            seqNumber: 0,
-            status: "IN_PROGRESS", // Not completed
-          },
-        ],
-      });
+      mockTaskRepo.findById.mockResolvedValue(undefined);
 
       // Act & Assert
-      await expect(eventBus.emit(event)).rejects.toThrow(
-        "Current subtask subtask-1 not completed"
-      );
-    });
-  });
-
-  describe("Event handling integration", () => {
-    it("should correctly subscribe to events on initialization", () => {
-      // Spy on the subscribe method
-      const subscribeSpy = jest.spyOn(eventBus, "subscribe");
-
-      // Create a new service to trigger subscriptions
-      new TaskService(eventBus, taskRepo);
-
-      // Verify the service subscribed to the expected events
-      expect(subscribeSpy).toHaveBeenCalledWith(
-        "CLIENT_CREATE_TASK_COMMAND",
-        expect.any(Function)
+      const handler = eventHandlers["ClientStartTask"];
+      if (!handler) throw new Error("Handler for ClientStartTask not found");
+      await expect(handler(startTaskEvent)).rejects.toThrow(
+        `Task ${taskId} not found`
       );
 
-      expect(subscribeSpy).toHaveBeenCalledWith(
-        "CLIENT_START_TASK_COMMAND",
-        expect.any(Function)
-      );
-
-      expect(subscribeSpy).toHaveBeenCalledWith(
-        "SERVER_NEXT_SUBTASK_TRIGGERED",
-        expect.any(Function)
-      );
+      // Verify no further processing happened
+      expect(mockTaskRepo.save).not.toHaveBeenCalled();
+      expect(mockEventBus.emit).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,5 +1,5 @@
 import path from "node:path";
-import fs from "node:fs/promises"; // Using promises API
+import fs from "node:fs/promises";
 import chokidar, { FSWatcher, ChokidarOptions } from "chokidar";
 import { Logger, ILogObj } from "tslog";
 import { IEventBus } from "./event-bus.js";

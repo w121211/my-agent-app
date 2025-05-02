@@ -13,10 +13,12 @@ import { IWebSocketEventClient } from "@repo/events-relay/websocket-event-client
 import { IEventBus } from "@repo/events-core/event-bus";
 import { container } from "./di-container";
 import { DI_TOKENS } from "./di-tokens";
-import { FileExplorerService } from "../../features/file-explorer-di/file-explorer-service";
+// import { FileExplorerService } from "../../features/file-explorer-di/file-explorer-service";
 import { EditorService } from "../../features/editor/editor-service";
 import { ConnectionService } from "../../features/connection/connection-service";
-import { WorkspaceTreeService } from "@/features/workspace-tree/workspace-tree-service";
+import { WorkspaceTreeService } from "../../features/workspace-tree/workspace-tree-service";
+import { ChatPanelService } from "../../features/chat-panel/chat-panel-service";
+import { PreviewPanelService } from "../../features/preview-panel/preview-panel-service";
 import { ConfigService } from "../config/config-service";
 
 // Context for service access
@@ -25,23 +27,27 @@ type DIContextType = {
   services: {
     webSocketClient: IWebSocketEventClient | null;
     eventBus: IEventBus | null;
-    fileExplorerService: FileExplorerService | null;
+    // fileExplorerService: FileExplorerService | null;
     editorService: EditorService | null;
     connectionService: ConnectionService | null;
     workspaceTreeService: WorkspaceTreeService | null;
     configService: ConfigService | null;
+    chatPanelService: ChatPanelService | null;
+    previewPanelService: PreviewPanelService | null;
   };
 };
 
 // Initial state with null services
-const initialServicesState = {
+const initialServicesState: DIContextType["services"] = {
   webSocketClient: null,
   eventBus: null,
-  fileExplorerService: null,
+  // fileExplorerService: null,
   editorService: null,
   connectionService: null,
   workspaceTreeService: null,
   configService: null,
+  chatPanelService: null,
+  previewPanelService: null,
 };
 
 const DIContext = createContext<DIContextType>({
@@ -63,6 +69,7 @@ export function DIProvider({ children }: DIProviderProps) {
   useEffect(() => {
     // Skip server-side execution
     if (typeof window === "undefined") {
+      logger.debug("Skipping service initialization on server-side");
       return;
     }
 
@@ -77,9 +84,9 @@ export function DIProvider({ children }: DIProviderProps) {
         DI_TOKENS.WEBSOCKET_CLIENT
       );
       const eventBus = container.resolve<IEventBus>(DI_TOKENS.EVENT_BUS);
-      const fileExplorerService = container.resolve<FileExplorerService>(
-        DI_TOKENS.FILE_EXPLORER_SERVICE
-      );
+      // const fileExplorerService = container.resolve<FileExplorerService>(
+      //   DI_TOKENS.FILE_EXPLORER_SERVICE
+      // );
       const editorService = container.resolve<EditorService>(
         DI_TOKENS.EDITOR_SERVICE
       );
@@ -88,6 +95,12 @@ export function DIProvider({ children }: DIProviderProps) {
       );
       const workspaceTreeService = container.resolve<WorkspaceTreeService>(
         DI_TOKENS.WORKSPACE_TREE_SERVICE
+      );
+      const chatPanelService = container.resolve<ChatPanelService>(
+        DI_TOKENS.CHAT_PANEL_SERVICE
+      );
+      const previewPanelService = container.resolve<PreviewPanelService>(
+        DI_TOKENS.PREVIEW_PANEL_SERVICE
       );
 
       // Start services
@@ -98,11 +111,13 @@ export function DIProvider({ children }: DIProviderProps) {
       setServices({
         webSocketClient: wsClient,
         eventBus,
-        fileExplorerService,
+        // fileExplorerService,
         editorService,
         connectionService,
         workspaceTreeService,
         configService,
+        chatPanelService,
+        previewPanelService,
       });
 
       setIsInitialized(true);
@@ -146,10 +161,10 @@ export function useEditorService() {
   return services.editorService;
 }
 
-export function useFileExplorerService() {
-  const { services } = useContext(DIContext);
-  return services.fileExplorerService;
-}
+// export function useFileExplorerService() {
+//   const { services } = useContext(DIContext);
+//   return services.fileExplorerService;
+// }
 
 export function useConnectionService() {
   const { services } = useContext(DIContext);
@@ -164,6 +179,16 @@ export function useWorkspaceTreeService() {
 export function useConfigService() {
   const { services } = useContext(DIContext);
   return services.configService;
+}
+
+export function useChatPanelService() {
+  const { services } = useContext(DIContext);
+  return services.chatPanelService;
+}
+
+export function usePreviewPanelService() {
+  const { services } = useContext(DIContext);
+  return services.previewPanelService;
 }
 
 // Helper hook to know when services are ready

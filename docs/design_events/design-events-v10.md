@@ -1,90 +1,32 @@
-# Key Design Principles for Event Flow
-
-1. **Command-driven approach**: Using `ClientOpenFile` as a command rather than a request creates a cleaner event pattern that aligns with the rest of the system.
-
-2. **Event reduction**: Simplifying the flow by eliminating redundant events (like separate request/response pairs) makes the system more maintainable.
-
-3. **Clear state transitions**: Each event represents a distinct state change in the system, making the flow easy to reason about.
-
-4. **Separation of concerns**:
-
-   - Generic file operations (`ClientOpenFile`, `ServerFileOpened`)
-   - Application-specific processing (`ServerChatInitialized`)
-   - UI updates (`UIChatPanelUpdated`, `ClientChatReady`)
-
-5. **Consistent naming conventions**: Following established patterns in the codebase improves readability and reduces cognitive load.
-
-6. **Progressive processing**: The flow moves logically from user interaction → command → server processing → client update.
-
-7. **Composable events**: The design allows for reuse of the file opening sequence for different file types, with type-specific processing added as needed.
-
-8. **Preservation of intent**: The event names clearly communicate what is happening at each step without implementation details.
-
-## 二層結構（用戶流程+技術事件）
-
-```
-┌─────────────────────────────────────────┐
-│      用戶流程 (User Flows)              │
-│ 描述完整的用戶交互場景和預期結果          │
-└───────────────────┬─────────────────────┘
-                   ↓
-┌─────────────────────────────────────────┐
-│       技術事件 (Technical Events)       │
-│ UI、Client和Server事件的集合             │
-└─────────────────────────────────────────┘
-```
-
-## 建議的精簡事件命名約定
-
-保留UI/Client/Server前綴，但確保事件名稱本身包含足夠的業務語義：
-
-- `UICreateTaskButtonClicked` → 用戶界面事件
-- `ClientTaskCreationRequested` → 前端業務邏輯請求
-- `ServerTaskCreated` → 後端處理結果，已包含業務狀態變化
-
-## 寫法範例
-
-````markdown
-# 流程 1: 創建新聊天
-
-用戶點擊"新聊天"按鈕，輸入初始提示和選擇是否創建新任務，設定模型選項後提交，系統創建聊天並顯示聊天界面。
-
-```txt
-ClientCreateNewChat {newTask: boolean, mode: "chat"|"agent", knowledge: string[], prompt: string, model: string}
-
-# If creating a new task
-
-(if newTask === true)
-→ ServerTaskFolderCreated
-→ ServerTaskConfigFileCreated
-
-...
-```
-````
-
----
-
 # Event Flows for Chat
 
 ## 1. Create New Chat Flow
 
-### User Experience
+### User Story
 
 A user wants to start a new conversation with the AI. They click the "New Chat" button, configure their chat settings including whether to create a new task, select their model preference, and input their initial prompt. After submission, a new chat interface appears ready for interaction.
 
 ### Core Event Flow
 
 ```
+# User Interaction
+UINewChatButtonClicked
+
 ClientCreateNewChat {newTask: boolean, mode: "chat"|"agent", knowledge: string[], prompt: string, model: string}
 
-# If creating a new task
 (if newTask === true)
-→ ServerTaskFolderCreated
-→ ServerTaskConfigFileCreated
+  → ServerTaskFolderCreated
+  → ServerTaskConfigFileCreated
 
 # Chat file creation
-→ ServerChatFileCreated (under current folder)
+→ ServerChatFileCreated (under current folder or the newly created task folder)
 → ServerChatInitialized
+
+# Creation Completed
+→ ServerNewChatCreated {filePath: newChatPath, chatId: newChatId}
+→ UIFileAutoClicked {filePath: newChatPath}   # UI 自動點選新創的chat file，後續就跟一般的open chat file一樣
+  → ClientOpenFile {filePath: newChatPath}
+  (continues to Open Existing Chat Flow)
 
 # Chat mode processing
 (if mode === "chat")
@@ -97,146 +39,106 @@ ClientCreateNewChat {newTask: boolean, mode: "chat"|"agent", knowledge: string[]
 → ... (omitted, not considered for MVP1)
 ```
 
-### UI Event Flow
+## 2. Submit Chat Message Flow
 
-```
-UINewChatButtonClicked
-→ UINewChatModalDisplayed
-  - UITaskCreationToggled (optional)
-  - UIModelSelected (optional)
-  - UIKnowledgeFilesAdded (via drag & drop or file selection)
-  - UIInitialPromptEntered
-
-→ UINewChatModalSubmitted
-→ UILoadingIndicatorDisplayed
-→ ClientCreateNewChat {payload}
-
-# UI Updates based on server responses
-→ UIFileExplorerUpdated (shows new chat file and task folder if created)
-→ UIChatPanelActivated
-→ UIInitialPromptDisplayed
-→ UILoadingIndicatorForAIResponse
-→ UIAIResponseDisplayed (when response is received)
-→ UIChatInputReadyForNextMessage
-```
-
-## 2. Client Submit Chat Message Flow
-
-### User Experience
+### User Story
 
 A user in an active chat composes a message, potentially references files using the `#file` syntax, attaches documents if needed, and sends their message. They see their message appear in the chat, along with a loading indicator while the AI processes the response. The AI's response with any artifacts is then displayed.
 
 ### Core Event Flow
 
 ```
-ClientSubmitUserChatMessage {chat_id, message, attachments}
+# User Interface
+UIChatMessageSubmitted {message, attachments}
+
+# Client Command
+→ ClientSubmitUserChatMessage {chat_id, message, attachments}
+
+# Server Processing - User Message
 → ServerUserChatMessagePostProcessed (handles #references and knowledge)
 → ServerChatMessageAppended {role: "user", content, timestamp}
 → ServerChatFileUpdated
-→ ServerChatUpdated
+→ UIChatMessagesUpdated (shows user message)
 
-# Chat mode AI response
-(if mode === "chat")
+# Server Processing - AI Response
 → ServerAIResponseRequested
+→ UIChatResponseLoadingStarted
 → ServerAIResponseGenerated
 → ServerAIResponsePostProcessed (handles artifacts and formatting)
+
+# Artifact Creation (if needed)
 → ServerArtifactFileCreated (creates files for each artifact)
+→ UIPreviewPanelUpdated (shows artifact)
+
+# Chat Update
 → ServerChatMessageAppended {role: "assistant", content, timestamp}
+→ UIChatMessagesUpdated (shows AI response)
+→ UIChatResponseLoadingEnded
 → ServerChatFileUpdated
-→ ServerChatUpdated
 ```
 
-### UI Event Flow
+## 3. Open File Flow
 
-```
-UIMessageInputFocused
-→ UIMessageComposed
-  - UIFileReferenced (when user types #filename)
-    → UIFileReferenceAutocompleteSuggested
-    → UIFileReferenceSelected (optional)
-  - UIFileAttached (optional, via drag & drop or attachment button)
-    → UIAttachmentPreviewDisplayed
+### User Story
 
-→ UISendButtonClicked
-→ UIUserMessageAppearsPending
-→ ClientSubmitUserChatMessage {payload}
-→ UIUserMessageConfirmed (message appears in chat)
-→ UILoadingIndicatorForAIResponse
-
-# When AI response comes in
-→ UITypingIndicatorDisplayed
-→ UIAIResponseStreamStarted
-→ UIAIResponseChunkRendered (for each chunk of streaming response)
-→ UIArtifactPlaceholderInserted (for each artifact in response)
-→ UIArtifactRendered (when artifact is processed)
-→ UIMessageControlsDisplayed (copy, retry buttons)
-→ UIChatInputReadyForNextMessage
-→ UIFileExplorerUpdated (shows new artifact files)
-```
-
-## 3. Open Existing Chat Flow
-
-### User Experience
-
-A user navigates to a previously created chat in the file explorer and clicks on it. The system loads the chat history and displays it in the main chat panel, ready for the user to continue the conversation from where they left off.
+A user navigates to any file in the explorer and clicks on it. The system loads the file content and displays it in the appropriate panel based on the file type.
 
 ### Core Event Flow
 
 ```
-# UI Interaction
-UIFileNodeClicked (chat file)
-→ UIFileNodeSelected
+UIFileClicked
 
 # Command and Response
 → ClientOpenFile {filePath}
 → ServerFileOpened {filePath, content, fileType}
 
-# Chat-specific Processing
-→ ServerChatInitialized {chatData}
+# Frontend Parsing (internal, no event)
+→ (Frontend parses content based on fileType)
 
 # UI Update
-→ UIChatPanelUpdated
-→ ClientChatReady
-```
-
-### UI Event Flow
-
-```
-UIFileExplorerNavigated
-→ UIFileNodeHovered
-  - UIFileInfoTooltipDisplayed (optional)
-→ UIFileNodeClicked
-→ UIFileNodeSelected (highlighted in explorer)
-→ UILoadingIndicatorDisplayed
-
-# Loading and initialization
-→ ClientOpenFile {filePath}
-→ UIMainContentAreaCleared
-→ UIChatPanelInitialized
-
-# Content population
-→ UIChatHistoryRendered
-  - UIMessageThreadPopulated (user and AI messages)
-  - UIArtifactLinksRendered (for any artifacts in history)
-→ UIChatScrollPositionAdjusted (scrolls to bottom)
-→ UIChatInputFocused
-→ UILoadingIndicatorRemoved
-→ UIChatReadyForInteraction
+→ UIChatPanelUpdated (for chat files)
+  or
+→ UIPreviewPanelUpdated (for other files)
 ```
 
 ---
 
 # 備註
 
-"UserChatMessage" vs "UserPrompt ?
+### "UserChatMessage" vs "UserPrompt ?
 
 - 考慮到事件流的命名約定和清晰度，我的建議是採用 "UserChatMessage"，這樣可以與其他聊天訊息（如 "AssistantChatMessage"）保持一致的命名模式，同時也明確表示這是在聊天上下文中使用者發送的訊息。
 
-在儲存 chat message 時，需要考慮到 #references 未來可能更動的情況，因為這會影響到事件流的 cache
+### 在儲存 chat message 時，需要考慮到 #references 未來可能更動的情況，因為這會影響到事件流的 cache
 
 - message 依然儲存成 #reference，同時加上每個檔案的MD5
   - 在重跑時，重新確認 #reference 的 MD5，有不同的話就等於 dependency 已經更新，需要重跑（無法用 cache）
 - #reference 路徑變更：這會直接找不到檔案，存成相對路徑或許比較好？或是說當使用者做資料夾移動時，可以提醒是否要更新 #references 路徑？
+
+### ServerChatFileUpdated 這個 event 可以如何應用？是純粹忽略？還是可以用於比較是否與當前的chat有所差異？
+
+1. **Save Confirmation**
+
+   - Show a subtle "Saved" indicator in the UI
+   - This provides users confidence their work is being preserved
+   - Example: Small checkmark or "Changes saved" text that appears briefly
+
+2. **Conflict Detection**
+
+   - Compare file timestamp/version with client's current state
+   - Alert users if the file was modified elsewhere (e.g., another device)
+   - This prevents data loss in collaborative scenarios
+
+3. **Offline/Sync Status**
+
+   - Track which chats have been successfully persisted
+   - Important for implementing offline capabilities later
+
+4. **Enable/Disable Actions**
+   - Enable actions that require saved state (sharing, exporting)
+   - Example: The "Share" button becomes active only after `ServerChatFileUpdated`
+
+---
 
 <!--  以下為 AI 生成，沒有檢視確認過，先忽略 -->
 
@@ -300,25 +202,6 @@ ServerChatError {chat_id, error_type, error_message}
 → ClientChatErrorReceived
 
 ```
-
-對於一個最基礎的 MVP 版本，我認為以下事件流程是必不可少的：
-
-1. 創建新聊天 (Create New Chat)
-2. 提交消息 (Submit Message)
-3. 開啟既有聊天 (Open Existing Chat)
-4. 錯誤處理 (Error Handling)
-
-其他如編輯已發送提示、摘要功能、"下一步"功能等可以在基礎功能穩定後逐步添加。
-
-在實現時，還需要考慮以下幾點：
-
-- 流式輸出 (Streaming Response) 以提供更好的用戶體驗
-- 對於長對話的記憶管理
-- 文件系統的監聽和更新機制
-
-這些基本事件流程應該能滿足您開發一個完整但精簡的聊天功能需求。
-
-<!---->
 
 ## 3. Summarize Feature Flow
 
@@ -387,6 +270,54 @@ ClientPromptEditRequested {chat_id, message_id, new_content}
 → (Continues with standard new chat flow)
 
 ```
+
+---
+
+# Key Design Principles for Event Flow
+
+1. **Command-driven approach**: Using `ClientOpenFile` as a command rather than a request creates a cleaner event pattern that aligns with the rest of the system.
+
+2. **Event reduction**: Simplifying the flow by eliminating redundant events (like separate request/response pairs) makes the system more maintainable.
+
+3. **Clear state transitions**: Each event represents a distinct state change in the system, making the flow easy to reason about.
+
+4. **Separation of concerns**:
+
+   - Generic file operations (`ClientOpenFile`, `ServerFileOpened`)
+   - Application-specific processing (`ServerChatInitialized`)
+   - UI updates (`UIChatPanelUpdated`)
+
+5. **Consistent naming conventions**: Following established patterns in the codebase improves readability and reduces cognitive load.
+
+6. **Progressive processing**: The flow moves logically from user interaction → command → server processing → client update.
+
+7. **Composable events**: The design allows for reuse of the file opening sequence for different file types, with type-specific processing added as needed.
+
+8. **Preservation of intent**: The event names clearly communicate what is happening at each step without implementation details.
+
+## Two-Layer Structure (User Story + Event Flow)
+
+```
+┌─────────────────────────────────────────┐
+│           User Story                    │
+│ Describes what the user wants to achieve│
+│ and the expected outcome                │
+└─────────────────────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────┐
+│           Event Flow                    │
+│ Sequence of technical events across     │
+│ UI, Client, and Server                  │
+└─────────────────────────────────────────┘
+```
+
+## 建議的精簡事件命名約定
+
+保留UI/Client/Server前綴，但確保事件名稱本身包含足夠的業務語義：
+
+- `UICreateTaskButtonClicked` → 用戶界面事件
+- `ClientTaskCreationRequested` → 前端業務邏輯請求
+- `ServerTaskCreated` → 後端處理結果，已包含業務狀態變化
 
 ---
 
@@ -582,6 +513,14 @@ Clone task folder, chat file
 - MVP不考慮
 - 要考慮到依賴這個檔案的chats, tasks => 是否要自動幫這些 chats 更新路徑，待決定
 - 在 vscode 上，修改檔名會提示是否要更新 import，但不會主動幫忙更新
+
+```
+
+```
+
+```
+
+```
 
 ```
 

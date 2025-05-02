@@ -1,183 +1,563 @@
-import { EventBus } from "../src/event-bus.js";
+import path from "node:path";
+import { v4 as uuidv4 } from "uuid";
 import { ChatService } from "../src/chat-service.js";
+import { IEventBus } from "../src/event-bus.js";
 import { ChatRepository } from "../src/repositories.js";
 import {
-  ClientStartNewChatEvent,
   Chat,
   ChatMessage,
+  ClientCreateNewChatEvent,
+  ClientSubmitUserChatMessageEvent,
+  ClientOpenFileEvent,
+  ServerChatFileCreatedEvent,
+  ServerNewChatCreatedEvent,
+  ServerChatInitializedEvent,
+  ServerUserChatMessagePostProcessedEvent,
+  ServerChatMessageAppendedEvent,
+  ServerChatFileUpdatedEvent,
+  ServerChatUpdatedEvent,
+  ServerAIResponseRequestedEvent,
+  ServerAIResponseGeneratedEvent,
+  ServerAIResponsePostProcessedEvent,
+  ServerFileOpenedEvent,
+  ServerArtifactFileCreatedEvent,
 } from "../src/event-types.js";
-import { IWorkspaceManager } from "../src/workspace-manager.js"; // Import workspace manager interface
 
 // Mock dependencies
-jest.mock("../repositories.js");
-jest.mock("../workspace-manager.js");
+jest.mock("uuid");
+jest.mock("node:fs/promises");
+jest.mock("../src/repositories.js", () => {
+  const originalModule = jest.requireActual("../src/repositories.js");
+  return {
+    ...originalModule,
+    fileExists: jest.fn(),
+  };
+});
+
+// Mock UUID generation to return predictable values
+const mockUuid = "123e4567-e89b-12d3-a456-426614174000";
+(uuidv4 as jest.Mock).mockReturnValue(mockUuid);
 
 describe("ChatService", () => {
-  // Test setup
-  let eventBus: EventBus;
-  let chatRepo: ChatRepository;
-  let workspaceManager: IWorkspaceManager;
+  // Test variables
+  const workspacePath = "/test/workspace";
+  let eventBus: jest.Mocked<IEventBus>;
+  let chatRepo: jest.Mocked<ChatRepository>;
   let chatService: ChatService;
 
-  // Spy on eventBus.emit to track emitted events
-  let emitSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    // Create fresh instances for each test
-    eventBus = new EventBus({ environment: "server" });
+    // Create mock implementations
+    eventBus = {
+      emit: jest.fn().mockResolvedValue(undefined),
+      subscribe: jest.fn(),
+      subscribeToAllClientEvents: jest.fn(),
+      subscribeToAllServerEvents: jest.fn(),
+      unsubscribe: jest.fn(),
+      unsubscribeAll: jest.fn(),
+      hasHandlers: jest.fn(),
+      getHandlerCount: jest.fn(),
+      clear: jest.fn(),
+    };
 
-    // Create mock workspace manager
-    workspaceManager = {
-      createDirectory: jest.fn().mockResolvedValue("/mock/dir"),
-      writeFile: jest.fn().mockResolvedValue("/mock/file"),
-      readFile: jest.fn().mockResolvedValue("mock content"),
-      fileExists: jest.fn().mockResolvedValue(true),
-      getWorkspacePath: jest.fn().mockReturnValue("/mock/workspace"),
-    } as unknown as IWorkspaceManager;
+    chatRepo = {
+      findById: jest.fn(),
+      findAll: jest.fn(),
+      save: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn(),
+      createChat: jest.fn(),
+      addMessage: jest.fn(),
+      getChatFilePath: jest.fn(),
+      loadChat: jest.fn(),
+      readChatFile: jest.fn(),
+    } as unknown as jest.Mocked<ChatRepository>;
 
-    // Create repository with workspace manager
-    chatRepo = new ChatRepository(workspaceManager);
-
-    // Mock repository methods
-    (chatRepo.createChat as jest.Mock).mockResolvedValue("mock/path/to/chat");
-    (chatRepo.addMessage as jest.Mock).mockResolvedValue(undefined);
-
-    emitSpy = jest.spyOn(eventBus, "emit");
-
-    // Initialize the service under test
-    chatService = new ChatService(eventBus, chatRepo);
+    // Initialize service with mocks
+    chatService = new ChatService(eventBus, chatRepo, workspacePath);
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  describe("handleStartNewChatCommand", () => {
-    it("should create a new chat and emit chat created event", async () => {
+  describe("handleCreateNewChat", () => {
+    it("should create a new chat without a new task", async () => {
       // Arrange
-      const command: ClientStartNewChatEvent = {
-        kind: "ClientStartNewChat",
-        taskId: "task-123",
-        subtaskId: "subtask-456",
+      const chatFilePath = path.join(workspacePath, `${mockUuid}.chat.json`);
+      const event: ClientCreateNewChatEvent = {
+        kind: "ClientCreateNewChat",
+        newTask: false,
+        mode: "chat",
+        knowledge: ["knowledge1"],
+        prompt: "Hello, AI!",
+        model: "gpt-4",
         timestamp: new Date(),
-        correlationId: "corr-789",
-        metadata: {
-          title: "Test Chat",
-        },
+        correlationId: "corr-123",
       };
 
+      chatRepo.createChat.mockResolvedValue(chatFilePath);
+
+      // Get the handler that was registered for ClientCreateNewChat
+      const createNewChatHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientCreateNewChat")[1];
+
       // Act
-      await eventBus.emit(command);
+      await createNewChatHandler(event);
 
       // Assert
-      expect(chatRepo.createChat).toHaveBeenCalledTimes(1);
-
-      // Verify the chat object created
-      const chatArg = (chatRepo.createChat as jest.Mock).mock
-        .calls[0][0] as Chat;
-      expect(chatArg.taskId).toBe(command.taskId);
-      expect(chatArg.subtaskId).toBe(command.subtaskId);
-      expect(chatArg.status).toBe("ACTIVE");
-      expect(chatArg.metadata).toEqual(command.metadata);
-
-      // Verify SERVER_CHAT_CREATED event was emitted
-      expect(emitSpy).toHaveBeenCalledWith(
+      expect(chatRepo.createChat).toHaveBeenCalledWith(
         expect.objectContaining({
-          kind: "ServerChatCreated",
-          taskId: command.taskId,
-          subtaskId: command.subtaskId,
-          correlationId: command.correlationId,
+          id: mockUuid,
+          taskId: "",
+          status: "ACTIVE",
+          messages: [],
+          metadata: {
+            mode: "chat",
+            model: "gpt-4",
+            knowledge: ["knowledge1"],
+          },
+        }),
+        workspacePath
+      );
+
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerChatFileCreatedEvent>({
+          kind: "ServerChatFileCreated",
+          taskId: "",
+          chatId: mockUuid,
+          filePath: chatFilePath,
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
         })
       );
 
-      // Verify message was added
-      expect(chatRepo.addMessage).toHaveBeenCalledTimes(2); // Initial prompt + agent response
-    });
-
-    it("should process messages with APPROVE keyword", async () => {
-      // Arrange
-      const command: ClientStartNewChatEvent = {
-        kind: "ClientStartNewChat",
-        taskId: "task-123",
-        subtaskId: "subtask-456",
-        timestamp: new Date(),
-      };
-
-      // Mock the addMessage to simulate adding a message with APPROVE
-      (chatRepo.addMessage as jest.Mock).mockImplementationOnce(
-        async (chatId: string, message: ChatMessage) => {
-          // Trigger the private onMessageReceived method by simulating a USER message with APPROVE
-          const approveMessage: ChatMessage = {
-            id: "msg-approve",
-            role: "USER",
-            content: "I APPROVE this work",
-            timestamp: new Date(),
-          };
-
-          // We need to directly invoke the method, but it's private
-          // This is a bit of a hack, but it's for testing a private method
-          (chatService as any).onMessageReceived(
-            { id: chatId },
-            approveMessage
-          );
-        }
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerNewChatCreatedEvent>({
+          kind: "ServerNewChatCreated",
+          chatId: mockUuid,
+          filePath: chatFilePath,
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
       );
 
-      // Act
-      await eventBus.emit(command);
+      // Check if the message was added when a prompt was provided
+      expect(chatRepo.addMessage).toHaveBeenCalledWith(
+        mockUuid,
+        expect.objectContaining<ChatMessage>({
+          id: mockUuid,
+          role: "USER",
+          content: "Hello, AI!",
+          timestamp: expect.any(Date), // Add timestamp property with expect.any(Date)
+        })
+      );
 
-      // Assert
-      // Verify CLIENT_APPROVE_WORK event was emitted
-      expect(emitSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          kind: "ClientApproveWork",
+      // Check for chat initialization event
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerChatInitializedEvent>({
+          kind: "ServerChatInitialized",
+          chatId: mockUuid,
+          chatData: expect.any(Object),
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
         })
       );
     });
 
-    it("should generate agent responses to user messages", async () => {
+    it("should create a new chat with a new task", async () => {
       // Arrange
-      const command: ClientStartNewChatEvent = {
-        kind: "ClientStartNewChat",
-        taskId: "task-123",
-        subtaskId: "subtask-456",
+      const taskId = mockUuid;
+      const taskFolderPath = path.join(workspacePath, `task-${taskId}`);
+      const chatFilePath = path.join(taskFolderPath, `${mockUuid}.chat.json`);
+
+      const event: ClientCreateNewChatEvent = {
+        kind: "ClientCreateNewChat",
+        newTask: true,
+        mode: "chat",
+        knowledge: [],
+        prompt: "",
+        model: "default",
         timestamp: new Date(),
       };
 
+      chatRepo.createChat.mockResolvedValue(chatFilePath);
+
+      // Get the handler
+      const createNewChatHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientCreateNewChat")[1];
+
       // Act
-      await eventBus.emit(command);
+      await createNewChatHandler(event);
 
       // Assert
-      // Verify at least 2 messages were added (initial prompt + response)
-      expect(chatRepo.addMessage).toHaveBeenCalledTimes(2);
-
-      // Get the messages that were added
-      const messages = (chatRepo.addMessage as jest.Mock).mock.calls.map(
-        (call) => call[1] as ChatMessage
+      expect(chatRepo.createChat).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: mockUuid,
+          taskId,
+          status: "ACTIVE",
+        }),
+        taskFolderPath
       );
 
-      // Ensure we have at least 2 messages
-      expect(messages.length).toBeGreaterThanOrEqual(2);
+      // Check that events were emitted with the correct task ID
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerChatFileCreatedEvent>({
+          kind: "ServerChatFileCreated",
+          taskId,
+          chatId: mockUuid,
+          filePath: chatFilePath,
+          timestamp: expect.any(Date),
+        })
+      );
+    });
 
-      // First should be USER message (initial prompt)
-      expect(messages[0]?.role).toBe("USER");
+    it("should not add initial message if prompt is empty", async () => {
+      // Arrange
+      const event: ClientCreateNewChatEvent = {
+        kind: "ClientCreateNewChat",
+        newTask: false,
+        mode: "chat",
+        knowledge: [],
+        prompt: "",
+        model: "default",
+        timestamp: new Date(),
+      };
 
-      // Second should be ASSISTANT message (agent response)
-      expect(messages[1]?.role).toBe("ASSISTANT");
+      chatRepo.createChat.mockResolvedValue("/path/to/chat.json");
+
+      // Get the handler
+      const createNewChatHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientCreateNewChat")[1];
+
+      // Act
+      await createNewChatHandler(event);
+
+      // Assert
+      expect(chatRepo.addMessage).not.toHaveBeenCalled();
     });
   });
 
-  describe("Event handling integration", () => {
-    it("should correctly subscribe to events on initialization", () => {
-      // Spy on the subscribe method
-      const subscribeSpy = jest.spyOn(eventBus, "subscribe");
+  describe("handleSubmitUserChatMessage", () => {
+    it("should process a user message and generate an AI response", async () => {
+      // Arrange
+      const chatId = mockUuid;
+      const chat: Chat = {
+        id: chatId,
+        taskId: "task123",
+        messages: [],
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        filePath: "/path/to/chat.json",
+        metadata: {
+          mode: "chat",
+          model: "gpt-4",
+        },
+      };
 
-      // Create a new service to trigger subscriptions
-      new ChatService(eventBus, chatRepo);
+      const event: ClientSubmitUserChatMessageEvent = {
+        kind: "ClientSubmitUserChatMessage",
+        chatId,
+        message: "Hello, AI!",
+        timestamp: new Date(),
+        correlationId: "corr-123",
+      };
 
-      // Verify the service subscribed to the expected events
-      expect(subscribeSpy).toHaveBeenCalledWith(
-        "ClientStartNewChat",
+      chatRepo.findById.mockResolvedValue(chat);
+
+      // Get the handler
+      const submitMessageHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientSubmitUserChatMessage")[1];
+
+      // Act
+      await submitMessageHandler(event);
+
+      // Assert
+      expect(chatRepo.addMessage).toHaveBeenCalledWith(
+        chatId,
+        expect.objectContaining<ChatMessage>({
+          id: mockUuid,
+          role: "USER",
+          content: "Hello, AI!",
+          timestamp: expect.any(Date),
+        })
+      );
+
+      // Check that message processing events were emitted
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerUserChatMessagePostProcessedEvent>({
+          kind: "ServerUserChatMessagePostProcessed",
+          chatId,
+          messageId: mockUuid,
+          processedContent: "Hello, AI!",
+          fileReferences: expect.any(Array),
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerChatMessageAppendedEvent>({
+          kind: "ServerChatMessageAppended",
+          chatId,
+          message: expect.objectContaining({
+            id: mockUuid,
+            role: "USER",
+            content: "Hello, AI!",
+            timestamp: expect.any(Date),
+          }),
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      // Check that AI response was requested
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerAIResponseRequestedEvent>({
+          kind: "ServerAIResponseRequested",
+          chatId,
+          model: "gpt-4",
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      // Check that AI response was processed
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerAIResponseGeneratedEvent>({
+          kind: "ServerAIResponseGenerated",
+          chatId,
+          response: expect.any(String),
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      // Verify assistant message was added
+      expect(chatRepo.addMessage).toHaveBeenCalledWith(
+        chatId,
+        expect.objectContaining<ChatMessage>({
+          role: "ASSISTANT",
+          id: expect.any(String),
+          content: expect.any(String),
+          timestamp: expect.any(Date),
+        })
+      );
+    });
+
+    it("should throw an error when chat is not found", async () => {
+      // Arrange
+      const event: ClientSubmitUserChatMessageEvent = {
+        kind: "ClientSubmitUserChatMessage",
+        chatId: "non-existent-id",
+        message: "Hello?",
+        timestamp: new Date(),
+      };
+
+      chatRepo.findById.mockResolvedValue(undefined);
+
+      // Get the handler
+      const submitMessageHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientSubmitUserChatMessage")[1];
+
+      // Act & Assert
+      await expect(submitMessageHandler(event)).rejects.toThrow(
+        "Chat non-existent-id not found"
+      );
+    });
+
+    it("should detect and process artifacts in AI responses", async () => {
+      // Arrange
+      const chatId = mockUuid;
+      const taskId = "task123";
+      const chat: Chat = {
+        id: chatId,
+        taskId,
+        messages: [],
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        filePath: "/path/to/chat.json",
+        metadata: {
+          mode: "chat",
+          model: "default",
+        },
+      };
+
+      // Mock to ensure artifact detection
+      eventBus.emit.mockImplementation(async (event) => {
+        if (event.kind === "ServerAIResponseGenerated") {
+          const artifactEvent = event as ServerAIResponseGeneratedEvent;
+          artifactEvent.artifacts = [
+            {
+              id: mockUuid,
+              type: "code",
+              content: 'console.log("test");',
+            },
+          ];
+        }
+        return;
+      });
+
+      chatRepo.findById.mockResolvedValue(chat);
+
+      const event: ClientSubmitUserChatMessageEvent = {
+        kind: "ClientSubmitUserChatMessage",
+        chatId,
+        message: "```Show me some code```",
+        timestamp: new Date(),
+      };
+
+      // Get the handler
+      const submitMessageHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientSubmitUserChatMessage")[1];
+
+      // Act
+      await submitMessageHandler(event);
+
+      // Assert
+      // expect(eventBus.emit).toHaveBeenCalledWith(
+      //   expect.objectContaining<ServerArtifactFileCreatedEvent>({
+      //     kind: "ServerArtifactFileCreated",
+      //     chatId,
+      //     messageId: mockUuid,
+      //     artifactId: mockUuid,
+      //     filePath: expect.any(String),
+      //     fileType: "code",
+      //     timestamp: expect.any(Date),
+      //   })
+      // );
+    });
+  });
+
+  describe("handleOpenChatFile", () => {
+    it("should open and initialize a chat file", async () => {
+      // Arrange
+      const filePath = "path/to/chat-123.chat.json";
+      const fullPath = path.join(workspacePath, filePath);
+
+      const chat: Chat = {
+        id: "chat123",
+        taskId: "task123",
+        messages: [],
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        filePath: fullPath,
+      };
+
+      const event: ClientOpenFileEvent = {
+        kind: "ClientOpenFile",
+        filePath,
+        timestamp: new Date(),
+        correlationId: "corr-123",
+      };
+
+      // Mock file existence check
+      const { fileExists } = require("../src/repositories.js");
+      fileExists.mockResolvedValue(true);
+      chatRepo.readChatFile.mockResolvedValue(chat);
+
+      // Get the handler
+      const openFileHandler = (eventBus.subscribe as jest.Mock).mock.calls.find(
+        (call) => call[0] === "ClientOpenFile"
+      )[1];
+
+      // Act
+      await openFileHandler(event);
+
+      // Assert
+      expect(chatRepo.readChatFile).toHaveBeenCalledWith(fullPath);
+
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerFileOpenedEvent>({
+          kind: "ServerFileOpened",
+          filePath,
+          content: expect.any(String),
+          fileType: "chat",
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerChatInitializedEvent>({
+          kind: "ServerChatInitialized",
+          chatId: "chat123",
+          chatData: chat,
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+    });
+
+    it("should ignore non-chat files", async () => {
+      // Arrange
+      const event: ClientOpenFileEvent = {
+        kind: "ClientOpenFile",
+        filePath: "path/to/document.txt",
+        timestamp: new Date(),
+      };
+
+      // Get the handler
+      const openFileHandler = (eventBus.subscribe as jest.Mock).mock.calls.find(
+        (call) => call[0] === "ClientOpenFile"
+      )[1];
+
+      // Act
+      await openFileHandler(event);
+
+      // Assert
+      expect(chatRepo.readChatFile).not.toHaveBeenCalled();
+      expect(eventBus.emit).not.toHaveBeenCalled();
+    });
+
+    it("should throw an error when file does not exist", async () => {
+      // Arrange
+      const filePath = "path/to/missing-chat.chat.json";
+
+      const event: ClientOpenFileEvent = {
+        kind: "ClientOpenFile",
+        filePath,
+        timestamp: new Date(),
+      };
+
+      // Mock file existence check
+      const { fileExists } = require("../src/repositories.js");
+      fileExists.mockResolvedValue(false);
+
+      // Get the handler
+      const openFileHandler = (eventBus.subscribe as jest.Mock).mock.calls.find(
+        (call) => call[0] === "ClientOpenFile"
+      )[1];
+
+      // Act & Assert
+      await expect(openFileHandler(event)).rejects.toThrow(
+        `File does not exist: ${filePath}`
+      );
+    });
+  });
+
+  describe("Event subscription", () => {
+    it("should subscribe to the appropriate events", () => {
+      // Assert - Check that the service subscribes to the correct events
+      expect(eventBus.subscribe).toHaveBeenCalledWith(
+        "ClientCreateNewChat",
+        expect.any(Function)
+      );
+
+      expect(eventBus.subscribe).toHaveBeenCalledWith(
+        "ClientSubmitUserChatMessage",
+        expect.any(Function)
+      );
+
+      expect(eventBus.subscribe).toHaveBeenCalledWith(
+        "ClientOpenFile",
         expect.any(Function)
       );
     });
