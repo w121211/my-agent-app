@@ -1,4 +1,4 @@
-import { AIAdapter, GenerateResponseOptions } from "../src/ai-adapter.js"
+import { AIService, GenerateResponseOptions } from "../src/ai-adapter.js"
 import { generateText } from "ai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { AIMessage } from "../src/event-types.js"
@@ -14,7 +14,7 @@ jest.mock("@openrouter/ai-sdk-provider", () => ({
   }),
 }))
 
-describe("AIAdapter", () => {
+describe("AIService", () => {
   // Test configuration
   const mockConfig = {
     openRouterApiKey: "test-api-key",
@@ -30,7 +30,7 @@ describe("AIAdapter", () => {
 
   describe("constructor", () => {
     it("should initialize with default model when valid config provided", () => {
-      const adapter = new AIAdapter(mockConfig)
+      const adapter = new AIService(mockConfig)
 
       // Verify OpenRouter was initialized with correct API key
       expect(createOpenRouter).toHaveBeenCalledWith({
@@ -47,17 +47,17 @@ describe("AIAdapter", () => {
       // Mock the case where no models are enabled
       jest.spyOn(Array.prototype, "filter").mockReturnValueOnce([])
 
-      expect(() => new AIAdapter(mockConfig)).toThrow(
+      expect(() => new AIService(mockConfig)).toThrow(
         "No enabled models available"
       )
     })
   })
 
   describe("generateResponse", () => {
-    let adapter: AIAdapter
+    let adapter: AIService
 
     beforeEach(() => {
-      adapter = new AIAdapter(mockConfig)
+      adapter = new AIService(mockConfig)
     })
 
     it("should generate text with default model when no model specified", async () => {
@@ -165,7 +165,7 @@ describe("AIAdapter", () => {
 
   describe("getAvailableModels", () => {
     it("should return only enabled models with id and displayName", () => {
-      const adapter = new AIAdapter(mockConfig)
+      const adapter = new AIService(mockConfig)
       const models = adapter.getAvailableModels()
 
       // Check if returned models have the expected properties

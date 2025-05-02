@@ -53,7 +53,7 @@ const AVAILABLE_MODELS: ModelConfig[] = [
   // Add more models here in the future as needed
 ]
 
-export interface AIAdapterConfig {
+export interface AIServiceConfig {
   openRouterApiKey: string
   //   customHeaders?: Record<string, string>
 }
@@ -70,14 +70,14 @@ export interface GenerateResponseOptions {
 /**
  * Service for generating text using AI models via OpenRouter
  */
-export class AIAdapter {
+export class AIService {
   private readonly logger: Logger<ILogObj>
   private readonly openRouter
   private readonly enabledModels: ModelConfig[]
   private readonly defaultModelId: string
 
-  constructor(config: AIAdapterConfig) {
-    this.logger = new Logger({ name: "AIAdapter" })
+  constructor(config: AIServiceConfig) {
+    this.logger = new Logger({ name: "AIService" })
 
     // Initialize OpenRouter with provided API key and optional custom headers
     this.openRouter = createOpenRouter({
@@ -100,25 +100,9 @@ export class AIAdapter {
     this.defaultModelId = defaultModel.id
 
     this.logger.info(
-      `AIAdapter initialized with default model: ${defaultModel.displayName}`
+      `AIService initialized with default model: ${defaultModel.displayName}`
     )
   }
-
-  /**
-   * Converts ChatMessage objects to the format expected by Vercel AI SDK
-   */
-  // prettier-ignore
-  //   private convertMessagesToAIFormat(messages: AIMessage[]) {
-  //     return messages.map((message) => {
-  //       const role: "user" | "assistant" | "system" =
-  //         message.role === "USER" ? "user" : message.role === "ASSISTANT" ? "assistant" : "system"
-
-  //       return {
-  //         role,
-  //         content: message.content,
-  //       }
-  //     })
-  //   }
 
   /**
    * Finds a model configuration by ID
