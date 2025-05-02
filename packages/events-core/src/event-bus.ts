@@ -73,7 +73,7 @@ export class EventBus implements IEventBus {
     const handlers = this.handlers.get(eventKind)!;
     handlers.add(handler);
 
-    this.logger.debug(`Subscribed handler to ${eventKind}`);
+    // this.logger.debug(`Subscribed handler to ${eventKind}`);
 
     return () => this.unsubscribe(eventKind, handler);
   }
@@ -155,7 +155,7 @@ export class EventBus implements IEventBus {
     const eventKind = event.kind;
     const handlers = this.handlers.get(eventKind);
 
-    this.logger.debug(`Emitting event ${eventKind}`, event);
+    // this.logger.debug(`Emitting event ${eventKind}`, event);
 
     if (!handlers || handlers.size === 0) {
       this.logger.warn(

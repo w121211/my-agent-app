@@ -4,6 +4,7 @@ import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 import { IEventBus } from "./event-bus.js";
 import { ChatRepository, fileExists } from "./repositories.js";
+import { TaskService } from "./task-service.js";
 import {
   Chat,
   ChatMessage,
@@ -29,16 +30,19 @@ export class ChatService {
   private readonly eventBus: IEventBus;
   private readonly chatRepo: ChatRepository;
   private readonly workspacePath: string;
+  private readonly taskService: TaskService;
 
   constructor(
     eventBus: IEventBus,
     chatRepo: ChatRepository,
-    workspacePath: string
+    workspacePath: string,
+    taskService: TaskService
   ) {
     this.logger = new Logger({ name: "ChatService" });
     this.eventBus = eventBus;
     this.chatRepo = chatRepo;
     this.workspacePath = workspacePath;
+    this.taskService = taskService;
 
     this.eventBus.subscribe<ClientCreateNewChatEvent>(
       "ClientCreateNewChat",
@@ -62,15 +66,18 @@ export class ChatService {
     const chatId = uuidv4();
     const now = new Date();
 
-    // Create task if requested (simplified for MVP)
-    // TODO: Should use repository to create task
+    // Create task if requested (using TaskService)
     let taskId = "";
     let taskFolderPath = this.workspacePath;
 
     if (event.newTask) {
-      taskId = uuidv4();
-      taskFolderPath = path.join(this.workspacePath, `task-${taskId}`);
-      await fs.mkdir(taskFolderPath, { recursive: true });
+      const result = await this.taskService.createTask(
+        "New Chat Task",
+        {}, // Default empty config
+        event.correlationId
+      );
+      taskId = result.taskId;
+      taskFolderPath = result.folderPath;
     }
 
     const chat: Chat = {
@@ -119,14 +126,6 @@ export class ChatService {
       await this.chatRepo.addMessage(chatId, message);
       await this.processUserMessage(chat, message, event.correlationId);
     }
-
-    await this.eventBus.emit<ServerChatInitializedEvent>({
-      kind: "ServerChatInitialized",
-      chatId,
-      chatData: chat,
-      timestamp: new Date(),
-      correlationId: event.correlationId,
-    });
   }
 
   private async handleSubmitUserChatMessage(

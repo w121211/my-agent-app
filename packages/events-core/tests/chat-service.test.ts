@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { ChatService } from "../src/chat-service.js";
 import { IEventBus } from "../src/event-bus.js";
 import { ChatRepository } from "../src/repositories.js";
+import { TaskService } from "../src/task-service.js";
 import {
   Chat,
   ChatMessage,
@@ -43,6 +44,7 @@ describe("ChatService", () => {
   const workspacePath = "/test/workspace";
   let eventBus: jest.Mocked<IEventBus>;
   let chatRepo: jest.Mocked<ChatRepository>;
+  let taskService: jest.Mocked<TaskService>;
   let chatService: ChatService;
 
   beforeEach(() => {
@@ -71,8 +73,20 @@ describe("ChatService", () => {
       readChatFile: jest.fn(),
     } as unknown as jest.Mocked<ChatRepository>;
 
-    // Initialize service with mocks
-    chatService = new ChatService(eventBus, chatRepo, workspacePath);
+    taskService = {
+      createTask: jest.fn().mockResolvedValue({
+        taskId: mockUuid,
+        folderPath: path.join(workspacePath, `task-${mockUuid}`),
+      }),
+    } as unknown as jest.Mocked<TaskService>;
+
+    // Initialize service with mocks including TaskService
+    chatService = new ChatService(
+      eventBus,
+      chatRepo,
+      workspacePath,
+      taskService
+    );
   });
 
   afterEach(() => {
@@ -105,6 +119,8 @@ describe("ChatService", () => {
       await createNewChatHandler(event);
 
       // Assert
+      expect(taskService.createTask).not.toHaveBeenCalled();
+
       expect(chatRepo.createChat).toHaveBeenCalledWith(
         expect.objectContaining({
           id: mockUuid,
@@ -148,18 +164,7 @@ describe("ChatService", () => {
           id: mockUuid,
           role: "USER",
           content: "Hello, AI!",
-          timestamp: expect.any(Date), // Add timestamp property with expect.any(Date)
-        })
-      );
-
-      // Check for chat initialization event
-      expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining<ServerChatInitializedEvent>({
-          kind: "ServerChatInitialized",
-          chatId: mockUuid,
-          chatData: expect.any(Object),
           timestamp: expect.any(Date),
-          correlationId: "corr-123",
         })
       );
     });
@@ -178,9 +183,14 @@ describe("ChatService", () => {
         prompt: "",
         model: "default",
         timestamp: new Date(),
+        correlationId: "corr-123",
       };
 
       chatRepo.createChat.mockResolvedValue(chatFilePath);
+      taskService.createTask.mockResolvedValue({
+        taskId,
+        folderPath: taskFolderPath,
+      });
 
       // Get the handler
       const createNewChatHandler = (
@@ -191,11 +201,22 @@ describe("ChatService", () => {
       await createNewChatHandler(event);
 
       // Assert
+      expect(taskService.createTask).toHaveBeenCalledWith(
+        "New Chat Task",
+        {},
+        event.correlationId
+      );
+
       expect(chatRepo.createChat).toHaveBeenCalledWith(
         expect.objectContaining({
           id: mockUuid,
           taskId,
           status: "ACTIVE",
+          metadata: {
+            mode: "chat",
+            model: "default",
+            knowledge: [],
+          },
         }),
         taskFolderPath
       );
@@ -208,6 +229,17 @@ describe("ChatService", () => {
           chatId: mockUuid,
           filePath: chatFilePath,
           timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerNewChatCreatedEvent>({
+          kind: "ServerNewChatCreated",
+          chatId: mockUuid,
+          filePath: chatFilePath,
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
         })
       );
     });
@@ -421,6 +453,8 @@ describe("ChatService", () => {
       await submitMessageHandler(event);
 
       // Assert
+      // Artifact processing would normally trigger ServerArtifactFileCreatedEvent
+      // But we're keeping this commented as in the original test
       // expect(eventBus.emit).toHaveBeenCalledWith(
       //   expect.objectContaining<ServerArtifactFileCreatedEvent>({
       //     kind: "ServerArtifactFileCreated",

@@ -3,11 +3,13 @@ import { inject, injectable } from "tsyringe";
 
 import { type IEventBus } from "@repo/events-core/event-bus";
 import {
-  ServerFileWatcherEvent,
-  ChokidarFsEventData,
-  ServerWorkspaceFolderTreeResponsedEvent,
   FolderTreeNode as ServerFolderTreeNode,
+  ChokidarFsEventData,
+  ServerFileWatcherEvent,
+  ServerWorkspaceFolderTreeResponsedEvent,
   ServerFileOpenedEvent,
+  ServerChatFileCreatedEvent,
+  ServerNewChatCreatedEvent,
 } from "@repo/events-core/event-types";
 import { DI_TOKENS } from "../../lib/di/di-tokens";
 import {
@@ -40,7 +42,6 @@ export class WorkspaceTreeService {
     this.logger =
       logger || new Logger<ILogObj>({ name: "WorkspaceTreeService" });
     this.registerEventHandlers();
-    this.logger.debug("WorkspaceTreeService initialized");
   }
 
   private registerEventHandlers(): void {
@@ -60,6 +61,18 @@ export class WorkspaceTreeService {
     this.eventBus.subscribe<ServerFileOpenedEvent>(
       "ServerFileOpened",
       (event) => this.handleFileOpenedEvent(event)
+    );
+
+    // Subscribe to chat file created events
+    this.eventBus.subscribe<ServerChatFileCreatedEvent>(
+      "ServerChatFileCreated",
+      (event) => this.handleChatFileCreated(event)
+    );
+
+    // Subscribe to new chat created events
+    this.eventBus.subscribe<ServerNewChatCreatedEvent>(
+      "ServerNewChatCreated",
+      (event) => this.handleNewChatCreated(event)
     );
   }
 
@@ -430,6 +443,26 @@ export class WorkspaceTreeService {
     }
   }
 
+  private handleChatFileCreated(event: ServerChatFileCreatedEvent): void {
+    const { filePath, chatId } = event;
+
+    this.logger.info(`Chat file created: ${chatId} at ${filePath}`);
+
+    // Add the file to the tree immediately
+    this.handleAddEvent(filePath, false);
+  }
+
+  private handleNewChatCreated(event: ServerNewChatCreatedEvent): void {
+    const { filePath, chatId } = event;
+
+    this.logger.info(
+      `Auto-opening newly created chat: ${chatId} at ${filePath}`
+    );
+
+    // Use the existing openFile method to open the newly created chat file
+    this.openFile(filePath);
+  }
+
   // Public methods for UI components
 
   /**
@@ -451,6 +484,8 @@ export class WorkspaceTreeService {
    * Opens a file by emitting a ClientOpenFile event
    */
   public openFile(path: string): void {
+    this.logger.debug(`Opening file: ${path}`);
+
     const store = useWorkspaceTreeStore.getState();
     const node = store.findNodeByPath(path);
 

@@ -34,18 +34,20 @@ export class TaskService {
     );
   }
 
-  private async handleCreateTaskCommand(
-    event: ClientCreateTaskEvent
-  ): Promise<void> {
+  async createTask(
+    taskName: string,
+    taskConfig: Record<string, unknown>,
+    correlationId?: string
+  ): Promise<{ taskId: string; folderPath: string }> {
     const taskId = uuidv4();
     const now = new Date();
 
     const task: Task = {
       id: taskId,
       seqNumber: 0,
-      title: event.taskName,
+      title: taskName,
       status: "CREATED",
-      config: event.taskConfig,
+      config: taskConfig,
       createdAt: now,
       updatedAt: now,
     };
@@ -58,16 +60,16 @@ export class TaskService {
       taskId,
       folderPath,
       timestamp: new Date(),
-      correlationId: event.correlationId,
+      correlationId,
     });
 
     await this.eventBus.emit<ServerTaskConfigFileCreatedEvent>({
       kind: "ServerTaskConfigFileCreated",
       taskId,
       filePath: `${folderPath}/task.json`,
-      config: event.taskConfig,
+      config: taskConfig,
       timestamp: new Date(),
-      correlationId: event.correlationId,
+      correlationId,
     });
 
     await this.taskRepo.save(task);
@@ -75,11 +77,23 @@ export class TaskService {
     await this.eventBus.emit<ServerTaskCreatedEvent>({
       kind: "ServerTaskCreated",
       taskId,
-      taskName: event.taskName,
-      config: event.taskConfig,
+      taskName,
+      config: taskConfig,
       timestamp: new Date(),
-      correlationId: event.correlationId,
+      correlationId,
     });
+
+    return { taskId, folderPath };
+  }
+
+  private async handleCreateTaskCommand(
+    event: ClientCreateTaskEvent
+  ): Promise<void> {
+    await this.createTask(
+      event.taskName,
+      event.taskConfig,
+      event.correlationId
+    );
   }
 
   private async handleStartTaskCommand(

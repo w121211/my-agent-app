@@ -1,3 +1,4 @@
+// chat-panel-service.ts
 import { ILogObj, Logger } from "tslog";
 import { inject, injectable } from "tsyringe";
 
@@ -9,6 +10,7 @@ import {
   ServerChatUpdatedEvent,
   ServerAIResponseRequestedEvent,
   ServerAIResponseGeneratedEvent,
+  ServerNewChatCreatedEvent,
   Chat,
 } from "@repo/events-core/event-types";
 import { DI_TOKENS } from "../../lib/di/di-tokens";
@@ -62,6 +64,33 @@ export class ChatPanelService {
       "ServerAIResponseGenerated",
       (event) => this.handleAIResponseGeneratedEvent(event)
     );
+
+    // Subscribe to new chat created events
+    this.eventBus.subscribe<ServerNewChatCreatedEvent>(
+      "ServerNewChatCreated",
+      (event) => this.handleNewChatCreatedEvent(event)
+    );
+  }
+
+  private handleNewChatCreatedEvent(event: ServerNewChatCreatedEvent): void {
+    const { filePath, chatId } = event;
+
+    this.logger.info(
+      `Auto-opening newly created chat: ${chatId} at ${filePath}`
+    );
+
+    // Directly emit ClientOpenFile event
+    this.eventBus
+      .emit({
+        kind: "ClientOpenFile",
+        timestamp: new Date(),
+        correlationId: `chat-open-${Date.now()}`,
+        filePath: filePath,
+      })
+      .catch((error) => {
+        this.logger.error(`Error opening new chat file: ${error}`);
+        throw error;
+      });
   }
 
   private handleFileOpenedEvent(event: ServerFileOpenedEvent): void {

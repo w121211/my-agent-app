@@ -40,7 +40,13 @@ async function setupDemo() {
 
   // Initialize services
   const taskService = new TaskService(eventBus, taskRepo);
-  const chatService = new ChatService(eventBus, chatRepo, workspacePath);
+  // Updated ChatService constructor with taskService parameter
+  const chatService = new ChatService(
+    eventBus,
+    chatRepo,
+    workspacePath,
+    taskService
+  );
   const fileService = new FileService(eventBus, workspacePath);
   const fileWatcherService = new FileWatcherService(eventBus, workspacePath);
 
