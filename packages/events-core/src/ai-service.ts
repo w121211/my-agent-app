@@ -1,22 +1,22 @@
 import { generateText } from "ai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { Logger, ILogObj } from "tslog"
-import { AIMessage } from "./event-types.js"
+import { AIMessage, ServerAIResponseGeneratedEvent } from "./event-types.js"
+import { IEventBus } from "./event-bus.js"
 
 /**
  * Model configuration interface
  */
 export interface ModelConfig {
-  id: string // Internal ID used for selection
-  displayName: string // Name shown to users
-  apiIdentifier: string // Model name used with OpenRouter
-  isEnabled: boolean // Whether this model is available for selection
-  isDefault?: boolean // Whether this is the default model
+  id: string
+  displayName: string
+  apiIdentifier: string
+  isEnabled: boolean
+  isDefault?: boolean
 }
 
 /**
- * Full list of potential models - for MVP, only the first one is enabled
- * To add more models in the future, just mark them as enabled (isEnabled: true)
+ * Full list of potential models
  */
 const AVAILABLE_MODELS: ModelConfig[] = [
   {
@@ -50,15 +50,14 @@ const AVAILABLE_MODELS: ModelConfig[] = [
     apiIdentifier: "mistral/mistral-large-latest",
     isEnabled: false,
   },
-  // Add more models here in the future as needed
 ]
 
 export interface AIServiceConfig {
   openRouterApiKey: string
-  //   customHeaders?: Record<string, string>
 }
 
 export interface GenerateResponseOptions {
+  chatId: string
   modelId?: string
   systemPrompt?: string
   messageHistory?: AIMessage[]
@@ -75,17 +74,18 @@ export class AIService {
   private readonly openRouter
   private readonly enabledModels: ModelConfig[]
   private readonly defaultModelId: string
+  private readonly eventBus: IEventBus
 
-  constructor(config: AIServiceConfig) {
+  constructor(config: AIServiceConfig, eventBus: IEventBus) {
     this.logger = new Logger({ name: "AIService" })
+    this.eventBus = eventBus
 
-    // Initialize OpenRouter with provided API key and optional custom headers
+    // Initialize OpenRouter with provided API key
     this.openRouter = createOpenRouter({
       apiKey: config.openRouterApiKey,
-      //   headers: config.customHeaders,
     })
 
-    // For MVP: Filter to only use enabled models
+    // Filter to only use enabled models
     this.enabledModels = AVAILABLE_MODELS.filter((model) => model.isEnabled)
 
     // Find default model or use first available
@@ -116,10 +116,11 @@ export class AIService {
    */
   public async generateResponse(
     userPrompt: string,
-    options: GenerateResponseOptions = {}
+    options: GenerateResponseOptions
   ): Promise<string> {
     // Use provided model ID or fall back to default
     const modelId = options.modelId || this.defaultModelId
+    const chatId = options.chatId
 
     // Get model info - defaulting to the default model if the requested one doesn't exist
     const model = this.findModel(modelId)
@@ -130,11 +131,16 @@ export class AIService {
       )
     }
 
+    if (!options.chatId) {
+      throw new Error("chatId is required for generating responses")
+    }
+
     this.logger.debug(`Generating response with model: ${model.displayName}`)
 
     const openRouterModel = this.openRouter(model.apiIdentifier)
-    const messageHistory = options.messageHistory || []
-    // const formattedMessages = this.convertMessagesToAIFormat(messages)
+    const messageHistory = options.messageHistory
+      ? options.messageHistory.filter((msg) => msg.role !== "system")
+      : []
 
     // Add system prompt if provided
     if (options.systemPrompt) {
@@ -150,18 +156,34 @@ export class AIService {
       content: userPrompt,
     })
 
-    // Generate text using Vercel AI SDK
-    const { text } = await generateText({
-      model: openRouterModel,
-      messages: messageHistory,
-      maxTokens: options.maxTokens,
-      temperature: options.temperature,
-      topP: options.topP,
-    })
+    // Generate text using Vercel AI SDK and handle errors
+    try {
+      const { text } = await generateText({
+        model: openRouterModel,
+        messages: messageHistory,
+        maxTokens: options.maxTokens,
+        temperature: options.temperature,
+        topP: options.topP,
+      })
+      // Emit ServerAIResponseGenerated event
 
-    return text
+      await this.eventBus.emit<ServerAIResponseGeneratedEvent>({
+        kind: "ServerAIResponseGenerated",
+        timestamp: new Date(),
+        chatId,
+        response: text,
+      })
+
+      return text
+    } catch (error) {
+      this.logger.error(
+        `Error generating text with model ${model.displayName}: ${error}`
+      )
+      throw new Error(
+        `Error generating text with model ${model.displayName}: ${error}`
+      )
+    }
   }
-
   /**
    * Gets available models for UI display
    */
