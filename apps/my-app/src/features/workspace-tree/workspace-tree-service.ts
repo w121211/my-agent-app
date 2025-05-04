@@ -8,10 +8,10 @@ import {
   ServerFileWatcherEvent,
   ServerWorkspaceFolderTreeResponsedEvent,
   ServerFileOpenedEvent,
-  ServerChatFileCreatedEvent,
-  ServerNewChatCreatedEvent,
 } from "@repo/events-core/event-types";
 import { DI_TOKENS } from "../../lib/di/di-tokens";
+import { UIWorkspaceTreeNodeSelectedEvent } from "../../lib/ui-event-types";
+import { isChatFile } from "../../lib/file-helpers";
 import {
   useWorkspaceTreeStore,
   TreeNode,
@@ -62,56 +62,31 @@ export class WorkspaceTreeService {
       "ServerFileOpened",
       (event) => this.handleFileOpenedEvent(event)
     );
-
-    // Subscribe to chat file created events
-    this.eventBus.subscribe<ServerChatFileCreatedEvent>(
-      "ServerChatFileCreated",
-      (event) => this.handleChatFileCreated(event)
-    );
-
-    // Subscribe to new chat created events
-    this.eventBus.subscribe<ServerNewChatCreatedEvent>(
-      "ServerNewChatCreated",
-      (event) => this.handleNewChatCreated(event)
-    );
   }
 
   /**
    * Handles file opened events from the server
-   * Identifies file type and selects the node in the tree
    */
   private handleFileOpenedEvent(event: ServerFileOpenedEvent): void {
-    const { filePath, fileType, content } = event;
+    const { filePath, fileType } = event;
 
     // Select the node in the tree
     this.selectNode(filePath);
 
-    // Determine if this is a chat file
-    const isChatFile = this.isChatFile(filePath, fileType);
+    // Determine if this is a chat file using both content type and file path
+    const isChatFileType = this.isChatFileType(fileType);
+    const isPathChatFile = isChatFile(filePath);
 
     this.logger.info(
-      `File opened: ${filePath}, type: ${fileType}, isChatFile: ${isChatFile}`
+      `File opened: ${filePath}, type: ${fileType}, isChatFile: ${isChatFileType || isPathChatFile}`
     );
-
-    // Note: Other services will be listening for ServerFileOpened events
-    // and will handle displaying the content in the appropriate panel
   }
 
   /**
-   * Determines if a file is a chat file based on fileType and path
+   * Determines if a file type indicates a chat file
    */
-  private isChatFile(filePath: string, fileType: string): boolean {
-    // Check if file is a chat file based on fileType
-    if (fileType === "chat" || fileType === "application/json") {
-      // Further check file extension or path patterns for chat files
-      return (
-        filePath.endsWith(".chat.json") ||
-        filePath.includes("/chats/") ||
-        filePath.endsWith(".v1.json") ||
-        filePath.endsWith(".v2.json")
-      );
-    }
-    return false;
+  private isChatFileType(fileType: string): boolean {
+    return fileType === "chat" || fileType === "application/json";
   }
 
   private handleFileWatcherEvent(event: ServerFileWatcherEvent): void {
@@ -443,26 +418,6 @@ export class WorkspaceTreeService {
     }
   }
 
-  private handleChatFileCreated(event: ServerChatFileCreatedEvent): void {
-    const { filePath, chatId } = event;
-
-    this.logger.info(`Chat file created: ${chatId} at ${filePath}`);
-
-    // Add the file to the tree immediately
-    this.handleAddEvent(filePath, false);
-  }
-
-  private handleNewChatCreated(event: ServerNewChatCreatedEvent): void {
-    const { filePath, chatId } = event;
-
-    this.logger.info(
-      `Auto-opening newly created chat: ${chatId} at ${filePath}`
-    );
-
-    // Use the existing openFile method to open the newly created chat file
-    this.openFile(filePath);
-  }
-
   // Public methods for UI components
 
   /**
@@ -502,7 +457,7 @@ export class WorkspaceTreeService {
     // Select the node in the tree
     this.selectNode(path);
 
-    // Emit the ClientOpenFile event
+    // Emit the ClientOpenFile event for backend processing
     this.logger.debug(`Emitting ClientOpenFile event for ${path}`);
     this.eventBus
       .emit({
@@ -518,9 +473,8 @@ export class WorkspaceTreeService {
 
   /**
    * Handles node click events from the UI
-   * Routes to appropriate handler based on node type
    */
-  public handleNodeClick(path: string): void {
+  public async handleNodeClick(path: string): Promise<void> {
     const store = useWorkspaceTreeStore.getState();
     const node = store.findNodeByPath(path);
 
@@ -531,6 +485,15 @@ export class WorkspaceTreeService {
 
     // Select the node
     this.selectNode(path);
+
+    // Emit UIWorkspaceTreeNodeSelected event for both file and folder nodes
+    await this.eventBus.emit<UIWorkspaceTreeNodeSelectedEvent>({
+      kind: "UIWorkspaceTreeNodeSelected",
+      timestamp: new Date(),
+      correlationId: `ui-file-selected-${Date.now()}`,
+      path: path,
+      nodeType: node.type,
+    });
 
     // If it's a file, open it
     if (node.type === "file") {
@@ -571,7 +534,7 @@ export class WorkspaceTreeService {
   }
 
   // Request workspace tree with retry mechanism
-  public requestWorkspaceTree(path?: string): void {
+  public async requestWorkspaceTree(path?: string): Promise<void> {
     if (this.pendingTreeResponse) {
       this.logger.warn("Tree request already in progress, skipping");
       return;
@@ -585,8 +548,8 @@ export class WorkspaceTreeService {
   }
 
   // Send the actual tree request
-  private sendTreeRequest(path?: string): void {
-    this.eventBus
+  private async sendTreeRequest(path?: string): Promise<void> {
+    await this.eventBus
       .emit({
         kind: "ClientRequestWorkspaceFolderTree",
         timestamp: new Date(),
@@ -611,9 +574,9 @@ export class WorkspaceTreeService {
         `Retrying workspace tree request in ${delay}ms (Attempt ${this.retryCount}/${this.maxRetries})`
       );
 
-      this.retryTimeout = window.setTimeout(() => {
+      this.retryTimeout = window.setTimeout(async () => {
         this.pendingTreeResponse = true;
-        this.sendTreeRequest(path);
+        await this.sendTreeRequest(path);
       }, delay);
     } else {
       this.logger.error(

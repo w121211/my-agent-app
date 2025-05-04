@@ -8,9 +8,10 @@ import {
   isEventKind,
   ServerTestPingEvent,
 } from "@repo/events-core/event-types";
-import { TaskRepository, ChatRepository } from "@repo/events-core/repositories";
+import { TaskRepository } from "@repo/events-core/repositories";
 import { TaskService } from "@repo/events-core/task-service";
 import { ChatService } from "@repo/events-core/chat-service";
+import { ChatFileService } from "@repo/events-core/chat-file-service";
 import { FileService } from "@repo/events-core/file-service";
 import { FileWatcherService } from "@repo/events-core/file-watcher-service";
 import { createWebSocketEventServer } from "../src/websocket-event-server.js";
@@ -28,12 +29,12 @@ class EventServer {
   private readonly workspacePath: string;
   private readonly port: number;
 
-  // Repositories
+  // Repository
   private readonly taskRepo: TaskRepository;
-  private readonly chatRepo: ChatRepository;
 
   // Services
   private readonly taskService: TaskService;
+  private readonly chatFileService: ChatFileService;
   private readonly chatService: ChatService;
   private readonly fileService: FileService;
   private readonly fileWatcherService: FileWatcherService;
@@ -53,15 +54,18 @@ class EventServer {
       logger: this.logger,
     });
 
-    // Initialize repositories
+    // Initialize repository
     this.taskRepo = new TaskRepository(this.workspacePath);
-    this.chatRepo = new ChatRepository(this.workspacePath);
 
     // Initialize services
+    this.chatFileService = new ChatFileService(
+      this.workspacePath,
+      this.eventBus
+    );
     this.taskService = new TaskService(this.eventBus, this.taskRepo);
     this.chatService = new ChatService(
       this.eventBus,
-      this.chatRepo,
+      this.chatFileService,
       this.workspacePath,
       this.taskService
     );
@@ -97,10 +101,6 @@ class EventServer {
 
     // Log all server events for monitoring
     this.eventBus.subscribeToAllServerEvents((event) => {
-      //   this.logger.debug(`Server event: ${event.kind}`, {
-      //     timestamp: event.timestamp,
-      //     correlationId: event.correlationId,
-      //   });
       this.logger.debug(`Server event: ${event.kind}`);
     });
   }
@@ -110,9 +110,6 @@ class EventServer {
 
     // Ensure workspace exists
     await fs.mkdir(this.workspacePath, { recursive: true });
-
-    // Load existing data
-    await this.taskRepo.loadWorkspace();
 
     // Start services
     this.wsEventServer.start();
@@ -145,7 +142,10 @@ function runEventServer(): void {
     logger,
   });
 
-  server.start();
+  server.start().catch((error) => {
+    logger.error("Failed to start server:", error);
+    process.exit(1);
+  });
 
   // Handle process termination
   process.on("SIGINT", () => {

@@ -1,42 +1,60 @@
 import { create } from "zustand";
 import { Logger } from "tslog";
-import { Chat, ChatMessage, ChatMetadata } from "@repo/events-core/event-types";
+import { Chat, ChatUpdateData } from "@repo/events-core/event-types";
 
 const logger = new Logger({ name: "chat-panel-store" });
 
 interface ChatPanelState {
   currentChat: Chat | null;
+  currentChatFilePath: string | null;
   isLoading: boolean;
   isResponding: boolean;
   messageInput: string;
   error: string | null;
 
   // Actions
+  setCurrentChatFilePath: (filePath: string | null) => void;
   setCurrentChat: (chat: Chat) => void;
   clearCurrentChat: () => void;
   setLoading: (isLoading: boolean) => void;
   setResponding: (isResponding: boolean) => void;
   setMessageInput: (text: string) => void;
   setError: (error: string | null) => void;
-  appendMessage: (message: ChatMessage) => void;
-  updateMetadata: (metadata: Partial<ChatMetadata>) => void;
+  handleChatUpdate: (chat: Chat, update: ChatUpdateData) => void;
+  isChatFilePathCurrent: (filePath: string) => boolean;
+  isChatIdCurrent: (chatId: string) => boolean;
 }
 
 export const useChatPanelStore = create<ChatPanelState>((set, get) => ({
   currentChat: null,
+  currentChatFilePath: null,
   isLoading: false,
   isResponding: false,
   messageInput: "",
   error: null,
 
+  setCurrentChatFilePath: (filePath) => {
+    logger.debug(`Setting current chat file path: ${filePath}`);
+    set({ currentChatFilePath: filePath });
+  },
+
   setCurrentChat: (chat) => {
-    logger.debug(`Setting current chat: ${chat.id}`);
-    set({ currentChat: chat, error: null });
+    logger.debug(
+      `Setting current chat: ${chat.id} with file path ${chat.filePath}`
+    );
+    set({
+      currentChat: chat,
+      currentChatFilePath: chat.filePath,
+      error: null,
+    });
   },
 
   clearCurrentChat: () => {
     logger.debug("Clearing current chat");
-    set({ currentChat: null });
+    set({
+      currentChat: null,
+      currentChatFilePath: null,
+    });
   },
 
   setLoading: (isLoading) => set({ isLoading }),
@@ -52,67 +70,59 @@ export const useChatPanelStore = create<ChatPanelState>((set, get) => ({
     set({ error });
   },
 
-  appendMessage: (message) => {
-    const currentChat = get().currentChat;
-    if (!currentChat) {
-      logger.warn("Cannot append message: no current chat");
+  handleChatUpdate: (chat, update) => {
+    // Only update if this is the current chat
+    if (get().currentChatFilePath !== chat.filePath) {
+      logger.debug(
+        `Ignoring update for non-current chat file. Current: ${get().currentChatFilePath}, Update for: ${chat.filePath}`
+      );
       return;
     }
 
     logger.debug(
-      `Appending message to chat ${currentChat.id} from ${message.role}`
+      `Handling update of type: ${update.kind} for current chat ${chat.id}`
     );
 
-    set({
-      currentChat: {
-        ...currentChat,
-        messages: [...currentChat.messages, message],
-        updatedAt: new Date(),
-      },
-    });
-  },
-
-  updateMetadata: (metadata) => {
-    const currentChat = get().currentChat;
-    if (!currentChat) {
-      logger.warn("Cannot update metadata: no current chat");
-      return;
+    switch (update.kind) {
+      case "MESSAGE_ADDED":
+        logger.debug(`Message added from ${update.message?.role}`);
+        break;
+      case "ARTIFACT_ADDED":
+        logger.debug(`Artifact added: ${update.artifact?.id}`);
+        break;
+      case "METADATA_UPDATED":
+        logger.debug("Chat metadata updated");
+        break;
     }
 
-    set({
-      currentChat: {
-        ...currentChat,
-        metadata: {
-          ...currentChat.metadata,
-          ...metadata,
-        },
-        updatedAt: new Date(),
-      },
-    });
+    set({ currentChat: chat });
+  },
+
+  isChatFilePathCurrent: (filePath) => {
+    return get().currentChatFilePath === filePath;
+  },
+
+  isChatIdCurrent: (chatId) => {
+    return get().currentChat?.id === chatId;
   },
 }));
 
-// Helper functions for working with the chat store
+// Helper functions
 export const ChatPanelStoreHelpers = {
-  /**
-   * Get the current chat ID from the store
-   */
   getCurrentChatId: (): string | null => {
     const currentChat = useChatPanelStore.getState().currentChat;
     return currentChat?.id || null;
   },
 
-  /**
-   * Check if the current chat is active
-   */
+  getCurrentChatFilePath: (): string | null => {
+    return useChatPanelStore.getState().currentChatFilePath;
+  },
+
   isCurrentChatActive: (): boolean => {
     const currentChat = useChatPanelStore.getState().currentChat;
     return currentChat?.status === "ACTIVE";
   },
 
-  /**
-   * Get the current chat mode (chat or agent)
-   */
   getCurrentChatMode: (): string | null => {
     const currentChat = useChatPanelStore.getState().currentChat;
     return currentChat?.metadata?.mode || null;

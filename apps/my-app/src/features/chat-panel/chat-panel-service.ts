@@ -1,19 +1,19 @@
-// chat-panel-service.ts
 import { ILogObj, Logger } from "tslog";
 import { inject, injectable } from "tsyringe";
 
 import { type IEventBus } from "@repo/events-core/event-bus";
 import {
-  ServerFileOpenedEvent,
-  ServerChatMessageAppendedEvent,
-  ServerChatInitializedEvent,
   ServerChatUpdatedEvent,
   ServerAIResponseRequestedEvent,
   ServerAIResponseGeneratedEvent,
   ServerNewChatCreatedEvent,
-  Chat,
+  ServerChatFileOpenedEvent,
+  ServerFileTypeDetectedEvent,
+  ChatMode,
 } from "@repo/events-core/event-types";
+import { UIWorkspaceTreeNodeSelectedEvent } from "../../lib/ui-event-types";
 import { DI_TOKENS } from "../../lib/di/di-tokens";
+import { isChatFile } from "../../lib/file-helpers";
 import { useChatPanelStore } from "./chat-panel-store";
 
 @injectable()
@@ -30,31 +30,36 @@ export class ChatPanelService {
   }
 
   private registerEventHandlers(): void {
-    // Subscribe to file opened events to handle chat files
-    this.eventBus.subscribe<ServerFileOpenedEvent>(
-      "ServerFileOpened",
-      (event) => this.handleFileOpenedEvent(event)
+    // Subscribe to UIFileSelected event
+    this.eventBus.subscribe<UIWorkspaceTreeNodeSelectedEvent>(
+      "UIWorkspaceTreeNodeSelected",
+      (event) => this.handleUIWorkspaceTreeNodeSelectedEvent(event)
     );
 
-    // Subscribe to chat initialization events
-    this.eventBus.subscribe<ServerChatInitializedEvent>(
-      "ServerChatInitialized",
-      (event) => this.handleChatInitializedEvent(event)
+    // Chat creation and initialization
+    this.eventBus.subscribe<ServerNewChatCreatedEvent>(
+      "ServerNewChatCreated",
+      (event) => this.handleNewChatCreatedEvent(event)
     );
 
-    // Subscribe to chat message events
-    this.eventBus.subscribe<ServerChatMessageAppendedEvent>(
-      "ServerChatMessageAppended",
-      (event) => this.handleChatMessageAppendedEvent(event)
+    // File operations
+    this.eventBus.subscribe<ServerChatFileOpenedEvent>(
+      "ServerChatFileOpened",
+      (event) => this.handleChatFileOpenedEvent(event)
     );
 
-    // Subscribe to chat update events
+    this.eventBus.subscribe<ServerFileTypeDetectedEvent>(
+      "ServerFileTypeDetected",
+      (event) => this.handleFileTypeDetectedEvent(event)
+    );
+
+    // Chat updates
     this.eventBus.subscribe<ServerChatUpdatedEvent>(
       "ServerChatUpdated",
       (event) => this.handleChatUpdatedEvent(event)
     );
 
-    // Subscribe to AI response events
+    // AI response states
     this.eventBus.subscribe<ServerAIResponseRequestedEvent>(
       "ServerAIResponseRequested",
       (event) => this.handleAIResponseRequestedEvent(event)
@@ -64,101 +69,71 @@ export class ChatPanelService {
       "ServerAIResponseGenerated",
       (event) => this.handleAIResponseGeneratedEvent(event)
     );
-
-    // Subscribe to new chat created events
-    this.eventBus.subscribe<ServerNewChatCreatedEvent>(
-      "ServerNewChatCreated",
-      (event) => this.handleNewChatCreatedEvent(event)
-    );
   }
 
-  private handleNewChatCreatedEvent(event: ServerNewChatCreatedEvent): void {
-    const { filePath, chatId } = event;
+  /**
+   * Handles UI workspace tree node selected event
+   */
+  private handleUIWorkspaceTreeNodeSelectedEvent(
+    event: UIWorkspaceTreeNodeSelectedEvent
+  ): void {
+    const { path: filePath, nodeType } = event;
 
-    this.logger.info(
-      `Auto-opening newly created chat: ${chatId} at ${filePath}`
-    );
-
-    // Directly emit ClientOpenFile event
-    this.eventBus
-      .emit({
-        kind: "ClientOpenFile",
-        timestamp: new Date(),
-        correlationId: `chat-open-${Date.now()}`,
-        filePath: filePath,
-      })
-      .catch((error) => {
-        this.logger.error(`Error opening new chat file: ${error}`);
-        throw error;
-      });
-  }
-
-  private handleFileOpenedEvent(event: ServerFileOpenedEvent): void {
-    const { filePath, content, fileType } = event;
-
-    // Only handle chat files
-    if (!this.isChatFile(filePath, fileType)) {
+    // Only process file nodes
+    if (nodeType !== "file") {
       return;
     }
 
-    this.logger.info(`Chat panel handling file: ${filePath}`);
+    // Check if this is a chat file using the shared helper
+    if (isChatFile(filePath)) {
+      this.logger.debug(`Chat file selected: ${filePath}`);
+      this.openChatFile(filePath);
+    }
+  }
 
+  private handleNewChatCreatedEvent(event: ServerNewChatCreatedEvent): void {
+    const { chatId, chatObject } = event;
     const store = useChatPanelStore.getState();
-    store.setLoading(true);
 
-    try {
-      // Parse the chat file content
-      const chatData = this.parseChatFileContent(content, fileType);
+    this.logger.info(`New chat created: ${chatId} at ${chatObject.filePath}`);
+    store.setCurrentChat(chatObject);
+    store.setLoading(false);
+  }
 
-      if (chatData) {
-        // Add the file path if it's not already in the data
-        if (!chatData.filePath) {
-          chatData.filePath = filePath;
-        }
+  private handleChatFileOpenedEvent(event: ServerChatFileOpenedEvent): void {
+    const { filePath, chat } = event;
+    const store = useChatPanelStore.getState();
 
-        store.setCurrentChat(chatData);
-      } else {
-        throw new Error("Invalid chat file format");
-      }
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      store.setError(`Failed to process chat file: ${errorMessage}`);
-    } finally {
+    // Only update if this is the file path we're expecting
+    if (store.isChatFilePathCurrent(filePath)) {
+      this.logger.info(`Chat file opened: ${filePath}`);
+      store.setCurrentChat(chat);
       store.setLoading(false);
+    } else {
+      this.logger.debug(
+        `Ignoring chat file opened event for non-current file path: ${filePath}`
+      );
     }
   }
 
-  private handleChatInitializedEvent(event: ServerChatInitializedEvent): void {
-    const { chatData } = event;
-    const store = useChatPanelStore.getState();
-
-    // Only update if this is for the current chat or there is no current chat
-    const currentChat = store.currentChat;
-    if (!currentChat || currentChat.id === chatData.id) {
-      store.setCurrentChat(chatData);
-    }
-  }
-
-  private handleChatMessageAppendedEvent(
-    event: ServerChatMessageAppendedEvent
+  private handleFileTypeDetectedEvent(
+    event: ServerFileTypeDetectedEvent
   ): void {
-    const { chatId, message } = event;
-    const store = useChatPanelStore.getState();
-
-    // Only update if this is for the current chat
-    if (store.currentChat?.id === chatId) {
-      store.appendMessage(message);
-    }
+    const { filePath, fileType } = event;
+    this.logger.debug(`File type detected for ${filePath}: ${fileType}`);
   }
 
   private handleChatUpdatedEvent(event: ServerChatUpdatedEvent): void {
-    const { chatId, chat } = event;
+    const { chatId, chat, update } = event;
     const store = useChatPanelStore.getState();
 
     // Only update if this is for the current chat
-    if (store.currentChat?.id === chatId) {
-      store.setCurrentChat(chat);
+    if (store.isChatIdCurrent(chatId)) {
+      store.handleChatUpdate(chat, update);
+    } else {
+      this.logger.debug(
+        `Ignoring chat update event for non-current chat: ${chatId}`
+      );
     }
   }
 
@@ -169,7 +144,7 @@ export class ChatPanelService {
     const store = useChatPanelStore.getState();
 
     // Only update if this is for the current chat
-    if (store.currentChat?.id === chatId) {
+    if (store.isChatIdCurrent(chatId)) {
       store.setResponding(true);
     }
   }
@@ -181,71 +156,11 @@ export class ChatPanelService {
     const store = useChatPanelStore.getState();
 
     // Only update if this is for the current chat
-    if (store.currentChat?.id === chatId) {
+    if (store.isChatIdCurrent(chatId)) {
       store.setResponding(false);
-
-      // The actual message will be added by ServerChatMessageAppended event
     }
   }
 
-  /**
-   * Determines if a file is a chat file based on fileType and path
-   */
-  private isChatFile(filePath: string, fileType: string): boolean {
-    if (fileType === "chat" || fileType === "application/json") {
-      return filePath.endsWith(".chat.json");
-    }
-    return false;
-  }
-
-  /**
-   * Parses chat file content based on file type
-   */
-  private parseChatFileContent(content: string, fileType: string): Chat | null {
-    try {
-      if (fileType === "application/json" || fileType === "chat") {
-        const chatData = JSON.parse(content);
-
-        // Basic validation to ensure it's a chat file
-        if (
-          typeof chatData !== "object" ||
-          !chatData ||
-          !Array.isArray(chatData.messages)
-        ) {
-          this.logger.warn("Invalid chat file format");
-          return null;
-        }
-
-        // Ensure proper date objects for timestamps
-        if (chatData.createdAt) {
-          chatData.createdAt = new Date(chatData.createdAt);
-        }
-        if (chatData.updatedAt) {
-          chatData.updatedAt = new Date(chatData.updatedAt);
-        }
-
-        // Process message timestamps
-        if (chatData.messages) {
-          chatData.messages = chatData.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-          }));
-        }
-
-        return chatData as Chat;
-      }
-
-      this.logger.warn(`Unsupported chat file type: ${fileType}`);
-      return null;
-    } catch (error) {
-      this.logger.error(`Error parsing chat file: ${error}`);
-      return null;
-    }
-  }
-
-  /**
-   * Submits a user message to the current chat
-   */
   public submitUserMessage(
     message: string,
     attachments?: Array<{ fileName: string; content: string }>
@@ -269,7 +184,6 @@ export class ChatPanelService {
     // Clear the input field immediately for better UX
     store.setMessageInput("");
 
-    // Emit the client event
     this.eventBus
       .emit({
         kind: "ClientSubmitUserChatMessage",
@@ -282,20 +196,15 @@ export class ChatPanelService {
       .catch((error) => {
         this.logger.error(`Error submitting message: ${error}`);
         store.setError(`Failed to send message: ${error}`);
-
-        // Restore the message input if sending failed
         store.setMessageInput(message);
       });
   }
 
-  /**
-   * Creates a new chat
-   */
   public createNewChat(
     prompt: string,
     options: {
       newTask: boolean;
-      mode: "chat" | "agent";
+      mode: ChatMode;
       knowledge: string[];
       model: string;
     }
@@ -306,6 +215,9 @@ export class ChatPanelService {
 
     const store = useChatPanelStore.getState();
     store.setLoading(true);
+
+    // Clear any current chat since we're creating a new one
+    store.clearCurrentChat();
 
     this.eventBus
       .emit({
@@ -325,9 +237,31 @@ export class ChatPanelService {
       });
   }
 
-  /**
-   * Summarizes the current chat
-   */
+  public openChatFile(filePath: string): void {
+    this.logger.info(`Opening chat file: ${filePath}`);
+
+    const store = useChatPanelStore.getState();
+
+    // Set the current chat file path before we start loading
+    // This ensures we only accept updates for this specific file path
+    store.setCurrentChatFilePath(filePath);
+    store.setLoading(true);
+
+    this.eventBus
+      .emit({
+        kind: "ClientOpenChatFile",
+        timestamp: new Date(),
+        correlationId: `open-chat-${Date.now()}`,
+        filePath,
+      })
+      .catch((error) => {
+        this.logger.error(`Error opening chat file ${filePath}: ${error}`);
+        store.setError(`Failed to open chat file: ${error}`);
+        store.setLoading(false);
+        store.setCurrentChatFilePath(null);
+      });
+  }
+
   public summarizeChat(): void {
     const store = useChatPanelStore.getState();
     const currentChat = store.currentChat;
@@ -340,7 +274,7 @@ export class ChatPanelService {
 
     this.logger.info(`Requesting summarization for chat ${currentChat.id}`);
 
-    // For MVP, we'll handle this with a special user message
+    // For MVP, handle with a special user message
     this.submitUserMessage("/summarize");
   }
 }

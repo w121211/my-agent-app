@@ -2,11 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import { Logger } from "tslog";
 import { useChatPanelStore } from "../../features/chat-panel/chat-panel-store";
 import { useChatPanelService } from "../../lib/di/di-provider";
-import { ChatMessage, ChatMode } from "@repo/events-core/event-types";
+import { ChatMessage, ChatMode, Role } from "@repo/events-core/event-types";
 
 const logger = new Logger({ name: "chat-panel" });
 
-// Component for rendering a single chat message
 interface ChatMessageItemProps {
   message: ChatMessage;
 }
@@ -47,7 +46,6 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({ message }) => {
   );
 };
 
-// Modal component for Next Step functionality
 interface NextStepModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -62,10 +60,10 @@ const NextStepModal: React.FC<NextStepModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState<string>("");
   const [mode, setMode] = useState<ChatMode>("chat");
-  const [createNewTask, setCreateNewTask] = useState(true);
-  const [model, setModel] = useState("Claude 3.7");
+  const [createNewTask, setCreateNewTask] = useState<boolean>(true);
+  const [model, setModel] = useState<string>("Claude 3.7");
 
   if (!isOpen) return null;
 
@@ -165,9 +163,10 @@ const ChatPanel: React.FC = () => {
   } = useChatPanelStore();
   const chatPanelService = useChatPanelService();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [isNextStepModalOpen, setIsNextStepModalOpen] = useState(false);
+  const [isNextStepModalOpen, setIsNextStepModalOpen] =
+    useState<boolean>(false);
   const [chatMode, setChatMode] = useState<ChatMode>("chat");
-  const [selectedModel, setSelectedModel] = useState("Claude 3.7");
+  const [selectedModel, setSelectedModel] = useState<string>("Claude 3.7");
 
   // Scroll to bottom of messages when new messages are added
   useEffect(() => {
@@ -186,21 +185,21 @@ const ChatPanel: React.FC = () => {
   }, [currentChat]);
 
   // Handle send message
-  const handleSendMessage = () => {
+  const handleSendMessage = (): void => {
     if (!messageInput.trim() || !chatPanelService) return;
 
     chatPanelService.submitUserMessage(messageInput);
   };
 
   // Handle summarize
-  const handleSummarize = () => {
+  const handleSummarize = (): void => {
     if (!chatPanelService) return;
 
     chatPanelService.summarizeChat();
   };
 
   // Handle attachment button
-  const handleAttachment = () => {
+  const handleAttachment = (): void => {
     logger.debug("Attachment feature not implemented in MVP");
   };
 
@@ -208,7 +207,7 @@ const ChatPanel: React.FC = () => {
   const handleNextStepSubmit = (
     prompt: string,
     options: { mode: ChatMode; createNewTask: boolean; model: string }
-  ) => {
+  ): void => {
     if (!chatPanelService) return;
 
     chatPanelService.createNewChat(prompt, {
@@ -259,15 +258,13 @@ const ChatPanel: React.FC = () => {
       <div className="p-4 border-b">
         <div className="text-sm text-gray-500">
           🏠 Home &gt; 👥 Workspace
-          {currentChat.taskId && <> &gt; 📋 {currentChat.taskId}</>}
+          {currentChat.metadata?.title && (
+            <> &gt; 📋 {currentChat.metadata.title}</>
+          )}
           {currentChat.filePath && (
             <> &gt; {currentChat.filePath.split("/").pop()}</>
           )}
         </div>
-        <h2 className="text-lg font-medium mt-1">
-          {currentChat.metadata?.title ||
-            `Chat - ${new Date(currentChat.createdAt).toLocaleString()}`}
-        </h2>
       </div>
 
       {/* Task knowledge section */}
@@ -298,7 +295,10 @@ const ChatPanel: React.FC = () => {
       {/* Messages area */}
       <div className="flex-grow overflow-y-auto p-4">
         {currentChat.messages.map((message, index) => (
-          <ChatMessageItem key={`${message.id || index}`} message={message} />
+          <ChatMessageItem
+            key={message.id || `msg-${index}`}
+            message={message}
+          />
         ))}
 
         {isResponding && (
@@ -362,28 +362,26 @@ const ChatPanel: React.FC = () => {
                 <option value="Claude 3.5">Claude 3.5</option>
                 <option value="Claude 3">Claude 3</option>
               </select>
-            </div>
 
-            <div className="flex gap-2">
               <button
                 onClick={handleAttachment}
                 className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-sm"
               >
                 📎 Attach
               </button>
-
-              <button
-                onClick={handleSendMessage}
-                disabled={!messageInput.trim() || isResponding}
-                className={`px-3 py-1 rounded text-sm ${
-                  !messageInput.trim() || isResponding
-                    ? "bg-blue-300 text-white cursor-not-allowed"
-                    : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Send ➤
-              </button>
             </div>
+
+            <button
+              onClick={handleSendMessage}
+              disabled={!messageInput.trim() || isResponding}
+              className={`px-3 py-1 rounded text-sm ${
+                !messageInput.trim() || isResponding
+                  ? "bg-blue-300 text-white cursor-not-allowed"
+                  : "bg-blue-500 text-white hover:bg-blue-600"
+              }`}
+            >
+              Send ➤
+            </button>
           </div>
         </div>
       </div>

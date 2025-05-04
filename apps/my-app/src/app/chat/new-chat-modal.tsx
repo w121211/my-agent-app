@@ -12,15 +12,15 @@ interface NewChatModalProps {
 
 const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) => {
   const chatPanelService = useChatPanelService();
-  const [prompt, setPrompt] = useState("Hello world");
-  const [createNewTask, setCreateNewTask] = useState(false);
+  const [prompt, setPrompt] = useState<string>("Hello world");
+  const [createNewTask, setCreateNewTask] = useState<boolean>(false);
   const [mode, setMode] = useState<ChatMode>("chat");
-  const [model, setModel] = useState("Claude 3.7");
-  const [knowledge, setKnowledge] = useState("");
+  const [model, setModel] = useState<string>("Claude 3.7");
+  const [knowledge, setKnowledge] = useState<string>("");
 
   if (!isOpen) return null;
 
-  const handleSubmit = () => {
+  const handleSubmit = (): void => {
     if (!prompt.trim() || !chatPanelService) {
       logger.warn(
         "Cannot create new chat: empty prompt or service unavailable"
@@ -31,7 +31,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) => {
     // Parse knowledge references from the input
     const knowledgeArray = knowledge
       .split(/\s+/)
-      .filter((k) => k.trim())
+      .filter(Boolean)
       .map((k) => (k.startsWith("#") ? k.substring(1) : k));
 
     logger.info(
@@ -66,8 +66,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) => {
               value={knowledge}
               onChange={(e) => setKnowledge(e.target.value)}
             />
-            &lt;/task_knowledge&gt; &lt;task_instruction&gt; ...
-            &lt;/task_instruction&gt;
+            &lt;/task_knowledge&gt; &lt;task_instruction /&gt;
           </div>
 
           <textarea
