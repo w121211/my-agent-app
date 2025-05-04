@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, FileText, Folder } from "lucide-react";
-import { ILogObj, Logger } from "tslog";
+import { Logger } from "tslog";
 import {
   useWorkspaceTreeStore,
   TreeNode,
@@ -9,30 +9,30 @@ import {
 } from "../../features/workspace-tree/workspace-tree-store";
 import { useWorkspaceTreeService } from "../../lib/di/di-provider";
 
-const logger = new Logger<ILogObj>({ name: "tree-components" });
+const logger = new Logger({ name: "tree-components" });
 
-export const FileNodeComponent = ({
-  node,
-  level,
-}: {
+interface FileNodeProps {
   node: FileTreeNode;
   level: number;
-}) => {
+}
+
+export const FileNodeComponent = ({ node, level }: FileNodeProps) => {
   const { selectedNode } = useWorkspaceTreeStore();
   const workspaceTreeService = useWorkspaceTreeService();
   const paddingLeft = `${level * 16}px`;
 
   const handleClick = () => {
-    // Use the WorkspaceTreeService to handle file clicks
     if (workspaceTreeService) {
       workspaceTreeService.handleNodeClick(node.path);
-      logger.debug(`Handled file click: ${node.path}`);
     } else {
       logger.warn("WorkspaceTreeService not available");
     }
   };
 
-  const isSelected = selectedNode?.id === node.id;
+  const isSelected = selectedNode?.path === node.path;
+
+  // Determine if this is a chat file based on extension
+  const isChatFile = node.name.endsWith(".json");
 
   return (
     <div
@@ -42,32 +42,34 @@ export const FileNodeComponent = ({
       }`}
       style={{ paddingLeft }}
     >
-      <FileText className="w-4 h-4 mr-1" />
-      <span className="flex-grow truncate">{node.name}</span>
-      {node.lastModified && (
-        <span className="text-xs text-gray-500">
-          {node.lastModified.toLocaleDateString()}
-        </span>
+      {isChatFile ? (
+        <span className="mr-1">💬</span>
+      ) : (
+        <FileText className="w-4 h-4 mr-1" />
       )}
+      <span className="flex-grow truncate">{node.name}</span>
     </div>
   );
 };
 
-export const FolderNodeComponent = ({
-  node,
-  level = 0,
-}: {
+interface FolderNodeProps {
   node: FolderTreeNode;
   level?: number;
-}) => {
+}
+
+export const FolderNodeComponent = ({ node, level = 0 }: FolderNodeProps) => {
   const workspaceTreeService = useWorkspaceTreeService();
-  const expanded = workspaceTreeService?.isExpanded(node.path) || false;
+  const { expandedFolders } = useWorkspaceTreeStore();
   const paddingLeft = `${level * 16}px`;
+
+  // Check if this is a task folder (starts with t + digits)
+  const isTaskFolder = node.name.match(/^t\d+/);
+
+  const expanded = expandedFolders.has(node.path);
 
   const handleToggle = () => {
     if (workspaceTreeService) {
       workspaceTreeService.handleNodeClick(node.path);
-      logger.debug(`Handled folder click: ${node.path}`);
     } else {
       logger.warn("WorkspaceTreeService not available");
     }
@@ -87,37 +89,48 @@ export const FolderNodeComponent = ({
             <ChevronRight className="w-4 h-4" />
           )}
         </span>
-        <Folder className="w-4 h-4 mr-1" />
+
+        {isTaskFolder ? (
+          <span className="mr-1">📋</span>
+        ) : (
+          <Folder className="w-4 h-4 mr-1" />
+        )}
+
         <span className="flex-grow truncate">{node.name}</span>
+
+        {isTaskFolder && <span className="ml-1 text-xs text-gray-500">🏃</span>}
       </div>
 
-      {expanded && node.children.length > 0 && (
+      {expanded && (
         <div>
-          {node.children.map((child) => (
-            <TreeNodeComponent key={child.id} node={child} level={level + 1} />
-          ))}
-        </div>
-      )}
-
-      {expanded && node.children.length === 0 && (
-        <div
-          className="text-gray-400 px-2 py-1"
-          style={{ paddingLeft: `${(level + 1) * 16}px` }}
-        >
-          (Empty folder)
+          {node.children.length > 0 ? (
+            node.children.map((child) => (
+              <TreeNodeComponent
+                key={child.id}
+                node={child}
+                level={level + 1}
+              />
+            ))
+          ) : (
+            <div
+              className="text-gray-400 px-2 py-1"
+              style={{ paddingLeft: `${(level + 1) * 16}px` }}
+            >
+              (Empty folder)
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-export const TreeNodeComponent = ({
-  node,
-  level = 0,
-}: {
+interface TreeNodeProps {
   node: TreeNode;
   level?: number;
-}) => {
+}
+
+export const TreeNodeComponent = ({ node, level = 0 }: TreeNodeProps) => {
   if (isFolderNode(node)) {
     return <FolderNodeComponent node={node} level={level} />;
   }

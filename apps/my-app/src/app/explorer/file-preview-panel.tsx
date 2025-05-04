@@ -8,7 +8,11 @@ import {
 
 const logger = new Logger({ name: "file-preview-panel" });
 
-const FilePreviewPanel = () => {
+interface FilePreviewPanelProps {
+  onClose?: () => void;
+}
+
+const FilePreviewPanel = ({ onClose }: FilePreviewPanelProps) => {
   const { selectedNode } = useWorkspaceTreeStore();
   const { currentFile, isLoading, error } = usePreviewPanelStore();
   const [isEditing, setIsEditing] = useState(false);
@@ -16,22 +20,30 @@ const FilePreviewPanel = () => {
 
   // Update edit content when current file changes
   useEffect(() => {
-    if (currentFile) {
+    if (currentFile?.content) {
       setEditContent(currentFile.content);
       setIsEditing(false);
     }
   }, [currentFile]);
 
-  // Render placeholder when no file is selected or it's a folder
-  if (!selectedNode || isFolderNode(selectedNode)) {
+  if (!selectedNode) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
-        Select a file to view its content
+        Select a file to preview
       </div>
     );
   }
 
-  // Render loading state
+  // Don't show preview for folders
+  if (isFolderNode(selectedNode)) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-400">
+        Selected item is a folder
+      </div>
+    );
+  }
+
+  // Show loading state
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
@@ -40,7 +52,7 @@ const FilePreviewPanel = () => {
     );
   }
 
-  // Render error state
+  // Show error state
   if (error) {
     return (
       <div className="flex items-center justify-center h-full text-red-500">
@@ -49,18 +61,17 @@ const FilePreviewPanel = () => {
     );
   }
 
-  // If we have a selected node but no current file yet, show a loading message
+  // If we have a selected node but no current file yet
   if (!currentFile) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
-        Loading content for: {selectedNode.path}...
+        Loading content for: {selectedNode.name}...
       </div>
     );
   }
 
-  // Get file extension and determine syntax highlighting language
-  const fileName = selectedNode.name;
-  const fileExtension = fileName.split(".").pop()?.toLowerCase() || "";
+  // Get file extension for syntax highlighting
+  const fileExtension = selectedNode.name.split(".").pop()?.toLowerCase() || "";
 
   const getLanguage = (ext: string): string => {
     const languageMap: Record<string, string> = {
@@ -73,41 +84,35 @@ const FilePreviewPanel = () => {
       json: "json",
       html: "html",
       css: "css",
-      scss: "scss",
-      less: "less",
     };
-
     return languageMap[ext] || "plaintext";
   };
 
-  const language =
-    currentFile.fileType === "plaintext"
-      ? getLanguage(fileExtension)
-      : currentFile.fileType;
+  const language = getLanguage(fileExtension);
 
-  // Get path display
-  const getPathDisplay = () => {
+  // Create breadcrumb path components
+  const getBreadcrumbPath = () => {
     const parts = selectedNode.path.split("/").filter(Boolean);
 
     return (
-      <>
+      <div className="text-sm mb-1">
         <span className="text-gray-500">🏠 Home &gt; </span>
         {parts.map((part, index) => (
           <span key={index} className="text-gray-500">
-            {index < parts.length - 1 ? `${part} > ` : part}
+            {index === parts.length - 2 && part.match(/^t\d+/) ? "👥 " : ""}
+            {part}
+            {index < parts.length - 1 ? " > " : ""}
           </span>
         ))}
-      </>
+      </div>
     );
   };
 
   // Handle edit toggle
-  const toggleEdit = () => {
+  const handleEditToggle = () => {
     if (isEditing) {
-      logger.debug(`Saving changes to: ${selectedNode.path}`);
-      // Save functionality would go here
-      // For now, just log that it's not implemented yet
-      logger.info("Save functionality not implemented yet");
+      logger.info(`Saving changes to ${selectedNode.path} (not implemented)`);
+      // Here would be the actual save implementation
     }
     setIsEditing(!isEditing);
   };
@@ -116,47 +121,44 @@ const FilePreviewPanel = () => {
   const handleDownload = () => {
     const blob = new Blob([currentFile.content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
     a.href = url;
-    a.download = fileName;
+    a.download = selectedNode.name;
     document.body.appendChild(a);
     a.click();
-
     URL.revokeObjectURL(url);
     document.body.removeChild(a);
+    logger.info(`Downloaded file: ${selectedNode.path}`);
   };
 
   // Handle share
   const handleShare = () => {
-    logger.debug(`Share request for: ${selectedNode.path}`);
-    // Placeholder for future implementation
+    logger.info(`Share request for: ${selectedNode.path} (not implemented)`);
+    // Placeholder for future share functionality
   };
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="p-4 border-b">
-        <div className="text-sm">{getPathDisplay()}</div>
-        <h2 className="text-lg font-medium mt-1">{fileName}</h2>
+        {getBreadcrumbPath()}
+        <h2 className="text-lg font-semibold">{selectedNode.name}</h2>
       </div>
 
       {/* Action buttons */}
       <div className="px-4 py-2 border-b flex">
         <button
-          onClick={toggleEdit}
+          onClick={handleEditToggle}
           className="mr-2 px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
         >
           {isEditing ? "Save" : "✏️ Edit"}
         </button>
-
         <button
           onClick={handleDownload}
           className="mr-2 px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"
         >
           ⬇️ Download
         </button>
-
         <button
           onClick={handleShare}
           className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded"

@@ -1,5 +1,102 @@
 # Event Flows for Chat (MVP)
 
+# Add/Remove Workspace Folder Event Flow
+
+## 1. Add Workspace Flow
+
+### User Story
+
+A user wants to add a local folder as a workspace to the application. They click a dedicated "Add Workspace" button, navigate to and select the desired folder using the system's file picker, and confirm their selection. The folder is then added to the workspace list, making its contents available for AI-assisted tasks.
+
+<!--
+  - 用指定的 folder name 當 workspace name
+  - 如果碰到兩個相同的 folder-name，後來者就自動加上後贅詞 "<folder_name>-1" "<folder_name>-2"
+  - 若該 folder 已經是當前 workspaces 中的某個子資料夾，則不再加入，ui 就直接打開該 folder
+  - （未來）使用者可直接將 folder 拖至 app explore 後就加入（不做詢問，因為移除是很簡單的步驟）
+  - UI 沿用目前的 workspace tree node 的做法，每個 node 都有一個 options button， workspace 也視為一個 folder node，點擊 options 按鈕，開啟 options panel，點擊刪除button 後刪除（類似 notion 的做法，請參考notion的圖）
+  - 現階段（ＭＶＰ）可以 naive 一點，就直接用 settings page 上去新增/移除 workspace
+
+-->
+
+### Core Event Flow
+
+```
+# User Interaction
+UIAddWorkspaceButtonClicked
+
+# System File Picker
+→ UISystemFilePickerOpened
+→ UISystemFolderSelected {folderPath}
+
+# Client Command
+
+<!-- 我想要盡可能減少事件種類，可能直接用 client update app settings {kind: "WORKSPACE_ADDED", workspacePath} 比較適合？ -->
+→ ClientAddWorkspace {folderPath}
+
+
+# Server Processing
+  # Checks if folder exists and is accessible
+  # Verifies it's not already added as a workspace
+→ ServerWorkspaceValidated {folderPath, isValid, validationMessage}
+
+(if isValid === true)
+
+  <!-- file watcher 需要增加這個 workspace -->
+
+  → ServerWorkspaceAdded {workspaceId, folderPath, workspaceName}
+
+  <!--  直接用 user settings updated，例如 setttings.json，workspace config 是裡面的一個 -->
+  → ServerWorkspaceConfigUpdated
+
+  → UIWorkspaceExplorerUpdated {workspaces}
+
+  <!-- 前端用這個 event 來取得初始的 workspace tree -->
+  → ClientRequestWorkspaceFolderTree
+
+  → UIWorkspaceSelected {workspacePath}
+
+(else)
+  → UIWorkspaceValidationError {validationMessage}
+```
+
+## 2. Remove Workspace Flow
+
+### User Story
+
+A user wants to remove a workspace from the application without deleting the actual folder from their file system. They select a workspace from the workspace list, click a "Remove" option (via context menu or dedicated button), confirm their intention in a confirmation dialog, and the workspace is removed from the application.
+
+### Core Event Flow
+
+```
+# User Interaction
+<!-- 需要調整 -->
+UIWorkspaceContextMenuOpened {workspaceId}
+UIRemoveWorkspaceOptionSelected {workspaceId}
+
+→ UIConfirmationDialogShown
+→ UIConfirmationDialogConfirmed
+
+# Client Command
+→ ClientRemoveWorkspace {workspaceId}
+
+# Server Processing
+→ ServerWorkspaceRemoved {workspaceId}
+→ ServerWorkspaceConfigUpdated
+→ ServerMemoryCacheCleared {workspaceId}
+  # Clear any in-memory objects related to this workspace
+
+# UI Update
+→ UIWorkspaceExplorerUpdated {workspaces}
+  # Updates the workspace list, removing the deleted workspace
+(if current workspace was removed)
+  → UIWorkspaceSelected {newWorkspaceId}
+    # Selects another workspace if available, otherwise shows empty state
+```
+
+---
+
+<!-- 以下事件流已經實裝，參考用 -->
+
 ## 1. Create New Chat Flow
 
 ### User Story
