@@ -1,46 +1,47 @@
-import fs from "node:fs/promises";
 import path from "node:path";
+import fs from "node:fs/promises";
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 import { IEventBus } from "./event-bus.js";
-import { ChatRepository, fileExists } from "./repositories.js";
+import { ChatFileService } from "./chat-file-service.js";
 import { TaskService } from "./task-service.js";
 import {
   Chat,
   ChatMessage,
   ClientCreateNewChatEvent,
-  ServerChatFileCreatedEvent,
+  ServerChatCreatedEvent,
   ServerChatInitializedEvent,
   ClientSubmitUserChatMessageEvent,
   ServerUserChatMessagePostProcessedEvent,
   ServerChatMessageAppendedEvent,
-  ServerChatFileUpdatedEvent,
   ServerChatUpdatedEvent,
   ServerAIResponseRequestedEvent,
   ServerAIResponseGeneratedEvent,
   ServerAIResponsePostProcessedEvent,
   ClientOpenFileEvent,
-  ServerFileOpenedEvent,
+  ClientOpenChatFileEvent,
   ServerNewChatCreatedEvent,
   ServerArtifactFileCreatedEvent,
+  ServerChatFileOpenedEvent,
+  ServerFileTypeDetectedEvent,
 } from "./event-types.js";
 
 export class ChatService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
-  private readonly chatRepo: ChatRepository;
+  private readonly chatFileService: ChatFileService;
   private readonly workspacePath: string;
   private readonly taskService: TaskService;
 
   constructor(
     eventBus: IEventBus,
-    chatRepo: ChatRepository,
+    chatFileService: ChatFileService,
     workspacePath: string,
     taskService: TaskService
   ) {
     this.logger = new Logger({ name: "ChatService" });
     this.eventBus = eventBus;
-    this.chatRepo = chatRepo;
+    this.chatFileService = chatFileService;
     this.workspacePath = workspacePath;
     this.taskService = taskService;
 
@@ -56,6 +57,11 @@ export class ChatService {
 
     this.eventBus.subscribe<ClientOpenFileEvent>(
       "ClientOpenFile",
+      this.handleOpenFile.bind(this)
+    );
+
+    this.eventBus.subscribe<ClientOpenChatFileEvent>(
+      "ClientOpenChatFile",
       this.handleOpenChatFile.bind(this)
     );
   }
@@ -63,11 +69,9 @@ export class ChatService {
   private async handleCreateNewChat(
     event: ClientCreateNewChatEvent
   ): Promise<void> {
-    const chatId = uuidv4();
     const now = new Date();
 
     // Create task if requested (using TaskService)
-    let taskId = "";
     let taskFolderPath = this.workspacePath;
 
     if (event.newTask) {
@@ -76,13 +80,11 @@ export class ChatService {
         {}, // Default empty config
         event.correlationId
       );
-      taskId = result.taskId;
       taskFolderPath = result.folderPath;
     }
 
-    const chat: Chat = {
-      id: chatId,
-      taskId,
+    const chatData: Omit<Chat, "filePath"> = {
+      id: uuidv4(),
       status: "ACTIVE",
       messages: [],
       createdAt: now,
@@ -91,25 +93,32 @@ export class ChatService {
         mode: event.mode,
         model: event.model,
         knowledge: event.knowledge,
+        title: "New Chat",
       },
     };
 
-    const filePath = await this.chatRepo.createChat(chat, taskFolderPath);
-    chat.filePath = filePath;
+    // Create chat object in memory first
+    const chat = await this.chatFileService.createChat(
+      chatData,
+      taskFolderPath,
+      event.correlationId
+    );
 
-    await this.eventBus.emit<ServerChatFileCreatedEvent>({
-      kind: "ServerChatFileCreated",
-      taskId,
-      chatId,
-      filePath,
+    // Emit chat created event
+    await this.eventBus.emit<ServerChatCreatedEvent>({
+      kind: "ServerChatCreated",
+      chatId: chat.id,
+      chatObject: chat,
       timestamp: new Date(),
       correlationId: event.correlationId,
     });
 
+    // TODO: Seems like a duplicate of the above event, consider removing
+    // Emit new chat created event with the full chat object
     await this.eventBus.emit<ServerNewChatCreatedEvent>({
       kind: "ServerNewChatCreated",
-      chatId,
-      filePath,
+      chatId: chat.id,
+      chatObject: chat,
       timestamp: new Date(),
       correlationId: event.correlationId,
     });
@@ -123,18 +132,26 @@ export class ChatService {
         timestamp: new Date(),
       };
 
-      await this.chatRepo.addMessage(chatId, message);
-      await this.processUserMessage(chat, message, event.correlationId);
+      // Add message to chat
+      const updatedChat = await this.chatFileService.addMessage(
+        chat.filePath,
+        message,
+        event.correlationId
+      );
+
+      await this.processUserMessage(updatedChat, message, event.correlationId);
     }
   }
 
   private async handleSubmitUserChatMessage(
     event: ClientSubmitUserChatMessageEvent
   ): Promise<void> {
-    const chat = await this.chatRepo.findById(event.chatId);
+    // Find the chat by ID
+    const chat = await this.chatFileService.findById(event.chatId);
 
     if (!chat) {
-      throw new Error(`Chat ${event.chatId} not found`);
+      this.logger.error(`Chat not found with ID: ${event.chatId}`);
+      throw new Error(`Chat not found with ID: ${event.chatId}`);
     }
 
     const message: ChatMessage = {
@@ -144,37 +161,65 @@ export class ChatService {
       timestamp: new Date(),
     };
 
-    await this.chatRepo.addMessage(chat.id, message);
-    await this.processUserMessage(chat, message, event.correlationId);
+    // Add message to chat
+    await this.chatFileService.addMessage(
+      chat.filePath,
+      message,
+      event.correlationId
+    );
+
+    // Get updated chat after adding message
+    const updatedChat = await this.chatFileService.findByPath(chat.filePath);
+    await this.processUserMessage(updatedChat, message, event.correlationId);
   }
 
-  private async handleOpenChatFile(event: ClientOpenFileEvent): Promise<void> {
+  // TODO: Consider moving this to chat-file-service
+  private async handleOpenFile(event: ClientOpenFileEvent): Promise<void> {
     const filePath = event.filePath;
 
-    // Only process chat files
-    if (!filePath.endsWith(".chat.json")) {
-      return;
-    }
+    // Detect file type
+    const fileType = this.determineFileType(filePath);
 
-    const fullPath = this.resolvePath(filePath);
+    await this.eventBus.emit<ServerFileTypeDetectedEvent>({
+      kind: "ServerFileTypeDetected",
+      filePath,
+      fileType,
+      timestamp: new Date(),
+      correlationId: event.correlationId,
+    });
 
-    if (!(await fileExists(fullPath))) {
-      throw new Error(`File does not exist: ${filePath}`);
-    }
-
-    try {
-      const chat = await this.chatRepo.readChatFile(fullPath);
-      const content = JSON.stringify(chat);
-
-      await this.eventBus.emit<ServerFileOpenedEvent>({
-        kind: "ServerFileOpened",
+    // For chat files, redirect to the chat-specific handler
+    if (fileType === "chat") {
+      await this.handleOpenChatFile({
+        kind: "ClientOpenChatFile",
         filePath,
-        content,
-        fileType: "chat",
+        timestamp: new Date(),
+        correlationId: event.correlationId,
+      });
+    }
+
+    // Non-chat files are handled by FileService, so do nothing here
+  }
+
+  private async handleOpenChatFile(
+    event: ClientOpenChatFileEvent
+  ): Promise<void> {
+    const filePath = event.filePath;
+
+    // Check if chat exists in memory cache
+    try {
+      const chat = await this.chatFileService.findByPath(filePath);
+
+      // Emit chat file opened event with the full chat object
+      await this.eventBus.emit<ServerChatFileOpenedEvent>({
+        kind: "ServerChatFileOpened",
+        filePath,
+        chat,
         timestamp: new Date(),
         correlationId: event.correlationId,
       });
 
+      // Emit chat initialized event
       await this.eventBus.emit<ServerChatInitializedEvent>({
         kind: "ServerChatInitialized",
         chatId: chat.id,
@@ -184,8 +229,31 @@ export class ChatService {
       });
     } catch (error) {
       this.logger.error(`Failed to open chat file: ${filePath}`, error);
-      throw new Error(`Failed to open chat file: ${filePath}`);
+      throw error;
     }
+  }
+
+  private determineFileType(filePath: string): string {
+    if (filePath.match(/chat\d+\.json$/)) {
+      return "chat";
+    }
+
+    const extension = path.extname(filePath).toLowerCase();
+
+    const fileTypeMap: Record<string, string> = {
+      ".js": "javascript",
+      ".ts": "typescript",
+      ".jsx": "javascript",
+      ".tsx": "typescript",
+      ".html": "html",
+      ".css": "css",
+      ".json": "json",
+      ".md": "markdown",
+      ".txt": "text",
+      // Add more mappings as needed
+    };
+
+    return fileTypeMap[extension] || "unknown";
   }
 
   private async processUserMessage(
@@ -220,20 +288,15 @@ export class ChatService {
       correlationId,
     });
 
-    await this.chatRepo.save(chat);
-
-    await this.eventBus.emit<ServerChatFileUpdatedEvent>({
-      kind: "ServerChatFileUpdated",
-      chatId: chat.id,
-      filePath: chat.filePath || "",
-      timestamp: new Date(),
-      correlationId,
-    });
-
+    // Emit chat updated event with message added update
     await this.eventBus.emit<ServerChatUpdatedEvent>({
       kind: "ServerChatUpdated",
       chatId: chat.id,
       chat,
+      update: {
+        kind: "MESSAGE_ADDED",
+        message,
+      },
       timestamp: new Date(),
       correlationId,
     });
@@ -278,7 +341,15 @@ export class ChatService {
       timestamp: new Date(),
     };
 
-    await this.chatRepo.addMessage(chat.id, aiMessage);
+    // Add AI message to chat
+    await this.chatFileService.addMessage(
+      chat.filePath,
+      aiMessage,
+      correlationId
+    );
+
+    // Get updated chat after adding message
+    const updatedChat = await this.chatFileService.findByPath(chat.filePath);
 
     // Process artifacts if any were detected
     if (artifacts && artifacts.length > 0) {
@@ -286,6 +357,7 @@ export class ChatService {
         chat.id,
         aiMessage.id,
         artifacts,
+        chat.filePath,
         correlationId
       );
     }
@@ -307,20 +379,15 @@ export class ChatService {
       correlationId,
     });
 
-    await this.chatRepo.save(chat);
-
-    await this.eventBus.emit<ServerChatFileUpdatedEvent>({
-      kind: "ServerChatFileUpdated",
-      chatId: chat.id,
-      filePath: chat.filePath || "",
-      timestamp: new Date(),
-      correlationId,
-    });
-
+    // Emit chat updated event with message added update
     await this.eventBus.emit<ServerChatUpdatedEvent>({
       kind: "ServerChatUpdated",
-      chatId: chat.id,
-      chat,
+      chatId: updatedChat.id,
+      chat: updatedChat,
+      update: {
+        kind: "MESSAGE_ADDED",
+        message: aiMessage,
+      },
       timestamp: new Date(),
       correlationId,
     });
@@ -348,15 +415,15 @@ export class ChatService {
     chatId: string,
     messageId: string,
     artifacts: Array<{ id: string; type: string; content: string }>,
+    chatFilePath: string,
     correlationId?: string
   ): Promise<void> {
     for (const artifact of artifacts) {
       const fileName = `artifact-${artifact.id}.${this.getArtifactExtension(artifact.type)}`;
-      const filePath = path.join(
-        this.workspacePath,
-        `task-${chatId.split("-")[0]}`,
-        fileName
-      );
+
+      // Extract folder path from chat file path
+      const folderPath = path.dirname(chatFilePath);
+      const filePath = path.join(folderPath, fileName);
 
       await fs.writeFile(filePath, artifact.content, "utf8");
 
@@ -367,6 +434,20 @@ export class ChatService {
         artifactId: artifact.id,
         filePath,
         fileType: artifact.type,
+        timestamp: new Date(),
+        correlationId,
+      });
+
+      // Update the chat with artifact information
+      const chat = await this.chatFileService.findByPath(chatFilePath);
+      await this.eventBus.emit<ServerChatUpdatedEvent>({
+        kind: "ServerChatUpdated",
+        chatId: chat.id,
+        chat,
+        update: {
+          kind: "ARTIFACT_ADDED",
+          artifact,
+        },
         timestamp: new Date(),
         correlationId,
       });
@@ -403,11 +484,5 @@ export class ChatService {
     }
 
     return references;
-  }
-
-  private resolvePath(relativePath: string): string {
-    return path.isAbsolute(relativePath)
-      ? relativePath
-      : path.join(this.workspacePath, relativePath);
   }
 }

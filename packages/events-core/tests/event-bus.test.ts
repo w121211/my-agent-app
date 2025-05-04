@@ -342,7 +342,14 @@ describe("EventBus", () => {
         kind: "ServerNewChatCreated",
         timestamp: new Date(),
         chatId: "test-chat-id",
-        filePath: "test-file-path",
+        chatObject: {
+          id: "test-chat-id",
+          filePath: "test-file-path",
+          messages: [],
+          status: "ACTIVE",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       };
 
       // Act

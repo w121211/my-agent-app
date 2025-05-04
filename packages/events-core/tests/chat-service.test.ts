@@ -2,7 +2,7 @@ import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { ChatService } from "../src/chat-service.js";
 import { IEventBus } from "../src/event-bus.js";
-import { ChatRepository } from "../src/repositories.js";
+import { ChatFileService } from "../src/chat-file-service.js";
 import { TaskService } from "../src/task-service.js";
 import {
   Chat,
@@ -10,30 +10,25 @@ import {
   ClientCreateNewChatEvent,
   ClientSubmitUserChatMessageEvent,
   ClientOpenFileEvent,
+  ClientOpenChatFileEvent,
+  ServerChatCreatedEvent,
   ServerChatFileCreatedEvent,
   ServerNewChatCreatedEvent,
   ServerChatInitializedEvent,
   ServerUserChatMessagePostProcessedEvent,
   ServerChatMessageAppendedEvent,
-  ServerChatFileUpdatedEvent,
   ServerChatUpdatedEvent,
   ServerAIResponseRequestedEvent,
   ServerAIResponseGeneratedEvent,
   ServerAIResponsePostProcessedEvent,
-  ServerFileOpenedEvent,
+  ServerFileTypeDetectedEvent,
+  ServerChatFileOpenedEvent,
   ServerArtifactFileCreatedEvent,
 } from "../src/event-types.js";
 
 // Mock dependencies
 jest.mock("uuid");
 jest.mock("node:fs/promises");
-jest.mock("../src/repositories.js", () => {
-  const originalModule = jest.requireActual("../src/repositories.js");
-  return {
-    ...originalModule,
-    fileExists: jest.fn(),
-  };
-});
 
 // Mock UUID generation to return predictable values
 const mockUuid = "123e4567-e89b-12d3-a456-426614174000";
@@ -43,7 +38,7 @@ describe("ChatService", () => {
   // Test variables
   const workspacePath = "/test/workspace";
   let eventBus: jest.Mocked<IEventBus>;
-  let chatRepo: jest.Mocked<ChatRepository>;
+  let chatFileService: jest.Mocked<ChatFileService>;
   let taskService: jest.Mocked<TaskService>;
   let chatService: ChatService;
 
@@ -61,17 +56,17 @@ describe("ChatService", () => {
       clear: jest.fn(),
     };
 
-    chatRepo = {
+    chatFileService = {
       findById: jest.fn(),
+      findByPath: jest.fn(),
       findAll: jest.fn(),
-      save: jest.fn().mockResolvedValue(undefined),
-      remove: jest.fn(),
       createChat: jest.fn(),
       addMessage: jest.fn(),
-      getChatFilePath: jest.fn(),
-      loadChat: jest.fn(),
       readChatFile: jest.fn(),
-    } as unknown as jest.Mocked<ChatRepository>;
+      initialize: jest.fn(),
+      deleteChat: jest.fn(),
+      removeFromCache: jest.fn(),
+    } as unknown as jest.Mocked<ChatFileService>;
 
     taskService = {
       createTask: jest.fn().mockResolvedValue({
@@ -80,10 +75,10 @@ describe("ChatService", () => {
       }),
     } as unknown as jest.Mocked<TaskService>;
 
-    // Initialize service with mocks including TaskService
+    // Initialize service with mocks
     chatService = new ChatService(
       eventBus,
-      chatRepo,
+      chatFileService,
       workspacePath,
       taskService
     );
@@ -96,7 +91,6 @@ describe("ChatService", () => {
   describe("handleCreateNewChat", () => {
     it("should create a new chat without a new task", async () => {
       // Arrange
-      const chatFilePath = path.join(workspacePath, `${mockUuid}.chat.json`);
       const event: ClientCreateNewChatEvent = {
         kind: "ClientCreateNewChat",
         newTask: false,
@@ -108,7 +102,24 @@ describe("ChatService", () => {
         correlationId: "corr-123",
       };
 
-      chatRepo.createChat.mockResolvedValue(chatFilePath);
+      const chat: Chat = {
+        id: mockUuid,
+        filePath: path.join(workspacePath, `chat1.json`),
+        status: "ACTIVE",
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mode: "chat",
+          model: "gpt-4",
+          knowledge: ["knowledge1"],
+          title: "New Chat",
+        },
+      };
+
+      chatFileService.createChat.mockResolvedValue(chat);
+      chatFileService.findByPath.mockResolvedValue(chat);
+      chatFileService.addMessage.mockResolvedValue(chat);
 
       // Get the handler that was registered for ClientCreateNewChat
       const createNewChatHandler = (
@@ -121,27 +132,27 @@ describe("ChatService", () => {
       // Assert
       expect(taskService.createTask).not.toHaveBeenCalled();
 
-      expect(chatRepo.createChat).toHaveBeenCalledWith(
+      expect(chatFileService.createChat).toHaveBeenCalledWith(
         expect.objectContaining({
           id: mockUuid,
-          taskId: "",
           status: "ACTIVE",
           messages: [],
           metadata: {
             mode: "chat",
             model: "gpt-4",
             knowledge: ["knowledge1"],
+            title: "New Chat",
           },
         }),
-        workspacePath
+        workspacePath,
+        "corr-123"
       );
 
       expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining<ServerChatFileCreatedEvent>({
-          kind: "ServerChatFileCreated",
-          taskId: "",
+        expect.objectContaining<ServerChatCreatedEvent>({
+          kind: "ServerChatCreated",
           chatId: mockUuid,
-          filePath: chatFilePath,
+          chatObject: chat,
           timestamp: expect.any(Date),
           correlationId: "corr-123",
         })
@@ -151,21 +162,22 @@ describe("ChatService", () => {
         expect.objectContaining<ServerNewChatCreatedEvent>({
           kind: "ServerNewChatCreated",
           chatId: mockUuid,
-          filePath: chatFilePath,
+          chatObject: chat,
           timestamp: expect.any(Date),
           correlationId: "corr-123",
         })
       );
 
       // Check if the message was added when a prompt was provided
-      expect(chatRepo.addMessage).toHaveBeenCalledWith(
-        mockUuid,
+      expect(chatFileService.addMessage).toHaveBeenCalledWith(
+        chat.filePath,
         expect.objectContaining<ChatMessage>({
           id: mockUuid,
           role: "USER",
           content: "Hello, AI!",
           timestamp: expect.any(Date),
-        })
+        }),
+        "corr-123"
       );
     });
 
@@ -173,7 +185,6 @@ describe("ChatService", () => {
       // Arrange
       const taskId = mockUuid;
       const taskFolderPath = path.join(workspacePath, `task-${taskId}`);
-      const chatFilePath = path.join(taskFolderPath, `${mockUuid}.chat.json`);
 
       const event: ClientCreateNewChatEvent = {
         kind: "ClientCreateNewChat",
@@ -186,7 +197,22 @@ describe("ChatService", () => {
         correlationId: "corr-123",
       };
 
-      chatRepo.createChat.mockResolvedValue(chatFilePath);
+      const chat: Chat = {
+        id: mockUuid,
+        filePath: path.join(taskFolderPath, `chat1.json`),
+        status: "ACTIVE",
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mode: "chat",
+          model: "default",
+          knowledge: [],
+          title: "New Chat",
+        },
+      };
+
+      chatFileService.createChat.mockResolvedValue(chat);
       taskService.createTask.mockResolvedValue({
         taskId,
         folderPath: taskFolderPath,
@@ -207,27 +233,28 @@ describe("ChatService", () => {
         event.correlationId
       );
 
-      expect(chatRepo.createChat).toHaveBeenCalledWith(
+      expect(chatFileService.createChat).toHaveBeenCalledWith(
         expect.objectContaining({
           id: mockUuid,
-          taskId,
           status: "ACTIVE",
+          messages: [],
           metadata: {
             mode: "chat",
             model: "default",
             knowledge: [],
+            title: "New Chat",
           },
         }),
-        taskFolderPath
+        taskFolderPath,
+        "corr-123"
       );
 
-      // Check that events were emitted with the correct task ID
+      // Check that events were emitted correctly
       expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining<ServerChatFileCreatedEvent>({
-          kind: "ServerChatFileCreated",
-          taskId,
+        expect.objectContaining<ServerChatCreatedEvent>({
+          kind: "ServerChatCreated",
           chatId: mockUuid,
-          filePath: chatFilePath,
+          chatObject: chat,
           timestamp: expect.any(Date),
           correlationId: "corr-123",
         })
@@ -237,7 +264,7 @@ describe("ChatService", () => {
         expect.objectContaining<ServerNewChatCreatedEvent>({
           kind: "ServerNewChatCreated",
           chatId: mockUuid,
-          filePath: chatFilePath,
+          chatObject: chat,
           timestamp: expect.any(Date),
           correlationId: "corr-123",
         })
@@ -256,7 +283,22 @@ describe("ChatService", () => {
         timestamp: new Date(),
       };
 
-      chatRepo.createChat.mockResolvedValue("/path/to/chat.json");
+      const chat: Chat = {
+        id: mockUuid,
+        filePath: path.join(workspacePath, `chat1.json`),
+        status: "ACTIVE",
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: {
+          mode: "chat",
+          model: "default",
+          knowledge: [],
+          title: "New Chat",
+        },
+      };
+
+      chatFileService.createChat.mockResolvedValue(chat);
 
       // Get the handler
       const createNewChatHandler = (
@@ -267,7 +309,7 @@ describe("ChatService", () => {
       await createNewChatHandler(event);
 
       // Assert
-      expect(chatRepo.addMessage).not.toHaveBeenCalled();
+      expect(chatFileService.addMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -277,12 +319,11 @@ describe("ChatService", () => {
       const chatId = mockUuid;
       const chat: Chat = {
         id: chatId,
-        taskId: "task123",
+        filePath: "/path/to/chat.json",
         messages: [],
         status: "ACTIVE",
         createdAt: new Date(),
         updatedAt: new Date(),
-        filePath: "/path/to/chat.json",
         metadata: {
           mode: "chat",
           model: "gpt-4",
@@ -297,7 +338,9 @@ describe("ChatService", () => {
         correlationId: "corr-123",
       };
 
-      chatRepo.findById.mockResolvedValue(chat);
+      chatFileService.findById.mockResolvedValue(chat);
+      chatFileService.findByPath.mockResolvedValue(chat);
+      chatFileService.addMessage.mockResolvedValue(chat);
 
       // Get the handler
       const submitMessageHandler = (
@@ -308,14 +351,15 @@ describe("ChatService", () => {
       await submitMessageHandler(event);
 
       // Assert
-      expect(chatRepo.addMessage).toHaveBeenCalledWith(
-        chatId,
+      expect(chatFileService.addMessage).toHaveBeenCalledWith(
+        chat.filePath,
         expect.objectContaining<ChatMessage>({
           id: mockUuid,
           role: "USER",
           content: "Hello, AI!",
           timestamp: expect.any(Date),
-        })
+        }),
+        "corr-123"
       );
 
       // Check that message processing events were emitted
@@ -339,8 +383,26 @@ describe("ChatService", () => {
             id: mockUuid,
             role: "USER",
             content: "Hello, AI!",
-            timestamp: expect.any(Date),
           }),
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      // Check that chat updated event was emitted
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerChatUpdatedEvent>({
+          kind: "ServerChatUpdated",
+          chatId,
+          chat,
+          update: {
+            kind: "MESSAGE_ADDED",
+            message: expect.objectContaining({
+              id: mockUuid,
+              role: "USER",
+              content: "Hello, AI!",
+            }),
+          },
           timestamp: expect.any(Date),
           correlationId: "corr-123",
         })
@@ -357,7 +419,7 @@ describe("ChatService", () => {
         })
       );
 
-      // Check that AI response was processed
+      // Check that AI response was generated
       expect(eventBus.emit).toHaveBeenCalledWith(
         expect.objectContaining<ServerAIResponseGeneratedEvent>({
           kind: "ServerAIResponseGenerated",
@@ -369,14 +431,15 @@ describe("ChatService", () => {
       );
 
       // Verify assistant message was added
-      expect(chatRepo.addMessage).toHaveBeenCalledWith(
-        chatId,
+      expect(chatFileService.addMessage).toHaveBeenCalledWith(
+        chat.filePath,
         expect.objectContaining<ChatMessage>({
           role: "ASSISTANT",
           id: expect.any(String),
           content: expect.any(String),
           timestamp: expect.any(Date),
-        })
+        }),
+        "corr-123"
       );
     });
 
@@ -389,7 +452,7 @@ describe("ChatService", () => {
         timestamp: new Date(),
       };
 
-      chatRepo.findById.mockResolvedValue(undefined);
+      chatFileService.findById.mockResolvedValue(undefined);
 
       // Get the handler
       const submitMessageHandler = (
@@ -398,22 +461,20 @@ describe("ChatService", () => {
 
       // Act & Assert
       await expect(submitMessageHandler(event)).rejects.toThrow(
-        "Chat non-existent-id not found"
+        "Chat not found with ID: non-existent-id"
       );
     });
 
     it("should detect and process artifacts in AI responses", async () => {
       // Arrange
       const chatId = mockUuid;
-      const taskId = "task123";
       const chat: Chat = {
         id: chatId,
-        taskId,
+        filePath: "/path/to/chat.json",
         messages: [],
         status: "ACTIVE",
         createdAt: new Date(),
         updatedAt: new Date(),
-        filePath: "/path/to/chat.json",
         metadata: {
           mode: "chat",
           model: "default",
@@ -435,7 +496,9 @@ describe("ChatService", () => {
         return;
       });
 
-      chatRepo.findById.mockResolvedValue(chat);
+      chatFileService.findById.mockResolvedValue(chat);
+      chatFileService.findByPath.mockResolvedValue(chat);
+      chatFileService.addMessage.mockResolvedValue(chat);
 
       const event: ClientSubmitUserChatMessageEvent = {
         kind: "ClientSubmitUserChatMessage",
@@ -452,9 +515,7 @@ describe("ChatService", () => {
       // Act
       await submitMessageHandler(event);
 
-      // Assert
-      // Artifact processing would normally trigger ServerArtifactFileCreatedEvent
-      // But we're keeping this commented as in the original test
+      // Assert - this is commented out as in the original test
       // expect(eventBus.emit).toHaveBeenCalledWith(
       //   expect.objectContaining<ServerArtifactFileCreatedEvent>({
       //     kind: "ServerArtifactFileCreated",
@@ -469,22 +530,10 @@ describe("ChatService", () => {
     });
   });
 
-  describe("handleOpenChatFile", () => {
-    it("should open and initialize a chat file", async () => {
+  describe("handleOpenFile", () => {
+    it("should detect file type and handle non-chat files", async () => {
       // Arrange
-      const filePath = "path/to/chat-123.chat.json";
-      const fullPath = path.join(workspacePath, filePath);
-
-      const chat: Chat = {
-        id: "chat123",
-        taskId: "task123",
-        messages: [],
-        status: "ACTIVE",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        filePath: fullPath,
-      };
-
+      const filePath = "path/to/document.txt";
       const event: ClientOpenFileEvent = {
         kind: "ClientOpenFile",
         filePath,
@@ -492,10 +541,10 @@ describe("ChatService", () => {
         correlationId: "corr-123",
       };
 
-      // Mock file existence check
-      const { fileExists } = require("../src/repositories.js");
-      fileExists.mockResolvedValue(true);
-      chatRepo.readChatFile.mockResolvedValue(chat);
+      // Mock determineFileType to return "text" (non-chat)
+      jest
+        .spyOn(chatService as any, "determineFileType")
+        .mockReturnValue("text");
 
       // Get the handler
       const openFileHandler = (eventBus.subscribe as jest.Mock).mock.calls.find(
@@ -506,14 +555,120 @@ describe("ChatService", () => {
       await openFileHandler(event);
 
       // Assert
-      expect(chatRepo.readChatFile).toHaveBeenCalledWith(fullPath);
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerFileTypeDetectedEvent>({
+          kind: "ServerFileTypeDetected",
+          filePath,
+          fileType: "text",
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      // Should not proceed to open chat
+      expect(chatFileService.findByPath).not.toHaveBeenCalled();
+    });
+
+    it("should redirect chat files to handleOpenChatFile", async () => {
+      // Arrange
+      const filePath = "path/to/chat1.json";
+      const chat: Chat = {
+        id: "chat123",
+        filePath,
+        messages: [],
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Mock findByPath to return the chat object
+      chatFileService.findByPath.mockResolvedValue(chat);
+
+      const event: ClientOpenFileEvent = {
+        kind: "ClientOpenFile",
+        filePath,
+        timestamp: new Date(),
+        correlationId: "corr-123",
+      };
+
+      // Mock determineFileType to return "chat"
+      jest
+        .spyOn(chatService as any, "determineFileType")
+        .mockReturnValue("chat");
+
+      // Get the handler
+      const openFileHandler = (eventBus.subscribe as jest.Mock).mock.calls.find(
+        (call) => call[0] === "ClientOpenFile"
+      )[1];
+
+      // Act
+      await openFileHandler(event);
+
+      // Assert
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerFileTypeDetectedEvent>({
+          kind: "ServerFileTypeDetected",
+          filePath,
+          fileType: "chat",
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+
+      // It should call findByPath
+      expect(chatFileService.findByPath).toHaveBeenCalledWith(filePath);
+
+      // It should emit the chat file opened event
+      expect(eventBus.emit).toHaveBeenCalledWith(
+        expect.objectContaining<ServerChatFileOpenedEvent>({
+          kind: "ServerChatFileOpened",
+          filePath,
+          chat,
+          timestamp: expect.any(Date),
+          correlationId: "corr-123",
+        })
+      );
+    });
+  });
+
+  describe("handleOpenChatFile", () => {
+    it("should open and initialize a chat file", async () => {
+      // Arrange
+      const filePath = "path/to/chat1.json";
+      const chat: Chat = {
+        id: "chat123",
+        filePath,
+        messages: [],
+        status: "ACTIVE",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const event: ClientOpenChatFileEvent = {
+        kind: "ClientOpenChatFile",
+        filePath,
+        timestamp: new Date(),
+        correlationId: "corr-123",
+      };
+
+      chatFileService.findByPath.mockResolvedValue(chat);
+
+      // Get the handler
+      const openChatFileHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientOpenChatFile")[1];
+
+      // Act
+      await openChatFileHandler(event);
+
+      // Assert
+      expect(chatFileService.findByPath).toHaveBeenCalledWith(filePath);
 
       expect(eventBus.emit).toHaveBeenCalledWith(
-        expect.objectContaining<ServerFileOpenedEvent>({
-          kind: "ServerFileOpened",
+        expect.objectContaining<ServerChatFileOpenedEvent>({
+          kind: "ServerChatFileOpened",
           filePath,
-          content: expect.any(String),
-          fileType: "chat",
+          chat,
           timestamp: expect.any(Date),
           correlationId: "corr-123",
         })
@@ -530,49 +685,28 @@ describe("ChatService", () => {
       );
     });
 
-    it("should ignore non-chat files", async () => {
-      // Arrange
-      const event: ClientOpenFileEvent = {
-        kind: "ClientOpenFile",
-        filePath: "path/to/document.txt",
-        timestamp: new Date(),
-      };
-
-      // Get the handler
-      const openFileHandler = (eventBus.subscribe as jest.Mock).mock.calls.find(
-        (call) => call[0] === "ClientOpenFile"
-      )[1];
-
-      // Act
-      await openFileHandler(event);
-
-      // Assert
-      expect(chatRepo.readChatFile).not.toHaveBeenCalled();
-      expect(eventBus.emit).not.toHaveBeenCalled();
-    });
-
     it("should throw an error when file does not exist", async () => {
       // Arrange
-      const filePath = "path/to/missing-chat.chat.json";
+      const filePath = "path/to/missing-chat.json";
 
-      const event: ClientOpenFileEvent = {
-        kind: "ClientOpenFile",
+      const event: ClientOpenChatFileEvent = {
+        kind: "ClientOpenChatFile",
         filePath,
         timestamp: new Date(),
       };
 
-      // Mock file existence check
-      const { fileExists } = require("../src/repositories.js");
-      fileExists.mockResolvedValue(false);
+      chatFileService.findByPath.mockRejectedValue(
+        new Error(`Failed to open chat file: ${filePath}`)
+      );
 
       // Get the handler
-      const openFileHandler = (eventBus.subscribe as jest.Mock).mock.calls.find(
-        (call) => call[0] === "ClientOpenFile"
-      )[1];
+      const openChatFileHandler = (
+        eventBus.subscribe as jest.Mock
+      ).mock.calls.find((call) => call[0] === "ClientOpenChatFile")[1];
 
       // Act & Assert
-      await expect(openFileHandler(event)).rejects.toThrow(
-        `File does not exist: ${filePath}`
+      await expect(openChatFileHandler(event)).rejects.toThrow(
+        `Failed to open chat file: ${filePath}`
       );
     });
   });
@@ -592,6 +726,11 @@ describe("ChatService", () => {
 
       expect(eventBus.subscribe).toHaveBeenCalledWith(
         "ClientOpenFile",
+        expect.any(Function)
+      );
+
+      expect(eventBus.subscribe).toHaveBeenCalledWith(
+        "ClientOpenChatFile",
         expect.any(Function)
       );
     });

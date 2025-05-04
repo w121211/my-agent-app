@@ -23,8 +23,15 @@ export async function writeJsonFile<T>(
   filePath: string,
   data: T
 ): Promise<void> {
+  // Create a temporary file path with timestamp for uniqueness
+  const tempFilePath = `${filePath}.${Date.now()}.tmp`;
+
+  // Write data to the temporary file first
   const content = JSON.stringify(data, null, 2);
-  await fs.writeFile(filePath, content, "utf8");
+  await fs.writeFile(tempFilePath, content, "utf8");
+
+  // Atomically rename the temporary file to the target file
+  await fs.rename(tempFilePath, filePath);
 }
 
 export async function readJsonFile<T>(filePath: string): Promise<T> {
@@ -240,29 +247,29 @@ export class ChatRepository extends BaseRepository<Chat> {
     await this.save(chat);
   }
 
-  async getChatFilePath(
-    taskId: string,
-    chatId: string
-  ): Promise<string | undefined> {
-    const taskFolderPath = this.resolvePath(`task-${taskId}`);
-    const chatFilePath = path.join(taskFolderPath, `${chatId}.chat.json`);
+  // async getChatFilePath(
+  //   taskId: string,
+  //   chatId: string
+  // ): Promise<string | undefined> {
+  //   const taskFolderPath = this.resolvePath(`task-${taskId}`);
+  //   const chatFilePath = path.join(taskFolderPath, `${chatId}.chat.json`);
 
-    if (await fileExists(chatFilePath)) {
-      return chatFilePath;
-    }
+  //   if (await fileExists(chatFilePath)) {
+  //     return chatFilePath;
+  //   }
 
-    return undefined;
-  }
+  //   return undefined;
+  // }
 
-  async loadChat(taskId: string, chatId: string): Promise<Chat | undefined> {
-    const filePath = await this.getChatFilePath(taskId, chatId);
+  // async loadChat(taskId: string, chatId: string): Promise<Chat | undefined> {
+  //   const filePath = await this.getChatFilePath(taskId, chatId);
 
-    if (!filePath) {
-      return undefined;
-    }
+  //   if (!filePath) {
+  //     return undefined;
+  //   }
 
-    return this.readChatFile(filePath);
-  }
+  //   return this.readChatFile(filePath);
+  // }
 
   async readChatFile(filePath: string): Promise<Chat> {
     const chatFileData = await readJsonFile<ChatFileData>(filePath);
@@ -271,11 +278,11 @@ export class ChatRepository extends BaseRepository<Chat> {
       throw new Error(`File ${filePath} is not a chat file`);
     }
 
-    const taskId = this.extractTaskIdFromPath(filePath);
+    // const taskId = this.extractTaskIdFromPath(filePath);
 
     const chat: Chat = {
       id: chatFileData.chatId,
-      taskId,
+      // taskId,
       messages: chatFileData.messages.map((msg) => ({
         id: msg.id,
         role: msg.role as Role,
@@ -309,16 +316,16 @@ export class ChatRepository extends BaseRepository<Chat> {
     await writeJsonFile(filePath, chatFile);
   }
 
-  private extractTaskIdFromPath(filePath: string): string {
-    const pathParts = filePath.split(path.sep);
+  // private extractTaskIdFromPath(filePath: string): string {
+  //   const pathParts = filePath.split(path.sep);
 
-    for (const part of pathParts) {
-      if (part.startsWith("task-")) {
-        return part.substring(5);
-      }
-    }
+  //   for (const part of pathParts) {
+  //     if (part.startsWith("task-")) {
+  //       return part.substring(5);
+  //     }
+  //   }
 
-    this.logger.warn(`Could not extract task ID from path: ${filePath}`);
-    return "unknown";
-  }
+  //   this.logger.warn(`Could not extract task ID from path: ${filePath}`);
+  //   return "unknown";
+  // }
 }

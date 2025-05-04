@@ -54,10 +54,17 @@ describe("File Operation Helpers", () => {
       const filePath = "/test/file.json";
       const data = { test: "data" };
 
+      // Mock Date.now to return a consistent timestamp for the temp file
+      const originalDateNow = Date.now;
+      Date.now = jest.fn(() => 1234567890);
+
       await writeJsonFile(filePath, data);
 
+      // Restore original Date.now
+      Date.now = originalDateNow;
+
       expect(mockFs.writeFile).toHaveBeenCalledWith(
-        filePath,
+        `${filePath}.1234567890.tmp`,
         JSON.stringify(data, null, 2),
         "utf8"
       );
@@ -155,7 +162,9 @@ describe("TaskRepository", () => {
       // Verify file system storage
       expect(mockFs.writeFile).toHaveBeenCalled();
       const writeCallArgs = mockFs.writeFile.mock.calls[0];
-      expect(writeCallArgs?.[0]).toBe("/test/workspace/task-123/task.json");
+      expect(writeCallArgs?.[0]).toMatch(
+        /^\/test\/workspace\/task-123\/task\.json\.\d+\.tmp$/
+      );
 
       const parsedTask = JSON.parse(writeCallArgs?.[1] as string);
       // Convert string dates back to Date objects for comparison
@@ -270,258 +279,6 @@ describe("TaskRepository", () => {
 
     it("should do nothing for non-existent id", async () => {
       await expect(taskRepo.remove("non-existent")).resolves.not.toThrow();
-    });
-  });
-});
-
-describe("ChatRepository", () => {
-  const workspacePath = "/test/workspace";
-  let chatRepo: ChatRepository;
-  let mockChat: Chat;
-  let mockMessage: ChatMessage;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    chatRepo = new ChatRepository(workspacePath);
-    mockMessage = {
-      id: "msg-123",
-      role: "USER" as Role,
-      content: "Test message",
-      timestamp: new Date(),
-    };
-    mockChat = {
-      id: "chat-123",
-      taskId: "task-456",
-      messages: [mockMessage],
-      status: "ACTIVE" as ChatStatus,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-  });
-
-  describe("save", () => {
-    it("should save chat in memory and to file if filePath exists", async () => {
-      mockChat.filePath = "/test/workspace/chat-123.json";
-      mockFs.writeFile.mockResolvedValue(undefined);
-
-      await chatRepo.save(mockChat);
-
-      const savedChat = await chatRepo.findById(mockChat.id);
-      expect(savedChat).toEqual(mockChat);
-      expect(mockFs.writeFile).toHaveBeenCalled();
-    });
-
-    it("should save chat only in memory if no filePath", async () => {
-      await chatRepo.save(mockChat);
-
-      const savedChat = await chatRepo.findById(mockChat.id);
-      expect(savedChat).toEqual(mockChat);
-      expect(mockFs.writeFile).not.toHaveBeenCalled();
-    });
-
-    it("should throw ConcurrencyError if trying to save older version", async () => {
-      await chatRepo.save(mockChat);
-
-      const olderChat = {
-        ...mockChat,
-        updatedAt: new Date(mockChat.updatedAt.getTime() - 1000),
-      };
-
-      await expect(chatRepo.save(olderChat)).rejects.toThrow(ConcurrencyError);
-    });
-  });
-
-  describe("createChat", () => {
-    it("should create a chat file and return its path", async () => {
-      const taskFolderPath = "/test/workspace/task-456";
-      mockFs.writeFile.mockResolvedValue(undefined);
-
-      const filePath = await chatRepo.createChat(mockChat, taskFolderPath);
-
-      expect(filePath).toBe("/test/workspace/task-456/chat-123.chat.json");
-      expect(mockFs.writeFile).toHaveBeenCalled();
-
-      const savedChat = await chatRepo.findById(mockChat.id);
-      expect(savedChat).toBeDefined();
-      expect(savedChat?.filePath).toBe(filePath);
-    });
-  });
-
-  describe("addMessage", () => {
-    it("should add message to chat and save it", async () => {
-      mockChat.filePath = "/test/workspace/chat-123.json";
-      await chatRepo.save(mockChat);
-
-      const newMessage: ChatMessage = {
-        id: "msg-456",
-        role: "ASSISTANT" as Role,
-        content: "Response message",
-        timestamp: new Date(),
-      };
-
-      mockFs.writeFile.mockResolvedValue(undefined);
-      await chatRepo.addMessage(mockChat.id, newMessage);
-
-      const updatedChat = await chatRepo.findById(mockChat.id);
-      expect(updatedChat?.messages).toHaveLength(2);
-      expect(updatedChat?.messages[1]).toEqual(newMessage);
-      expect(mockFs.writeFile).toHaveBeenCalled();
-    });
-
-    it("should throw EntityNotFoundError for non-existent chat", async () => {
-      const newMessage: ChatMessage = {
-        id: "msg-456",
-        role: "ASSISTANT" as Role,
-        content: "Response message",
-        timestamp: new Date(),
-      };
-
-      await expect(
-        chatRepo.addMessage("non-existent", newMessage)
-      ).rejects.toThrow(EntityNotFoundError);
-    });
-  });
-
-  describe("getChatFilePath", () => {
-    it("should return file path if exists", async () => {
-      mockFs.access.mockResolvedValue(undefined);
-
-      const filePath = await chatRepo.getChatFilePath("task-456", "chat-123");
-
-      expect(filePath).toBe("/test/workspace/task-task-456/chat-123.chat.json");
-    });
-
-    it("should return undefined if file does not exist", async () => {
-      mockFs.access.mockRejectedValue(new Error("File not found"));
-
-      const filePath = await chatRepo.getChatFilePath("task-456", "chat-123");
-
-      expect(filePath).toBeUndefined();
-    });
-  });
-
-  describe("loadChat", () => {
-    it("should load chat from file if exists", async () => {
-      mockFs.access.mockResolvedValue(undefined);
-
-      const chatFileData = {
-        _type: "chat",
-        chatId: "chat-123",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        title: "Test Chat",
-        messages: [
-          {
-            id: "msg-123",
-            role: "USER",
-            content: "Hello",
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      };
-      mockFs.readFile.mockResolvedValue(JSON.stringify(chatFileData));
-
-      const chat = await chatRepo.loadChat("task-456", "chat-123");
-
-      expect(chat).toBeDefined();
-      expect(chat?.id).toBe("chat-123");
-      expect(chat?.messages).toHaveLength(1);
-      expect(chat?.messages?.[0]?.content).toBe("Hello");
-    });
-
-    it("should return undefined if file does not exist", async () => {
-      mockFs.access.mockRejectedValue(new Error("File not found"));
-
-      const chat = await chatRepo.loadChat("task-456", "chat-123");
-
-      expect(chat).toBeUndefined();
-    });
-  });
-
-  describe("readChatFile", () => {
-    it("should read and parse chat file", async () => {
-      const chatFileData = {
-        _type: "chat",
-        chatId: "chat-123",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        title: "Test Chat",
-        messages: [
-          {
-            id: "msg-123",
-            role: "USER",
-            content: "Hello",
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      };
-      mockFs.readFile.mockResolvedValue(JSON.stringify(chatFileData));
-
-      const filePath = "/test/workspace/task-456/chat-123.chat.json";
-      const chat = await chatRepo.readChatFile(filePath);
-
-      expect(chat).toBeDefined();
-      expect(chat.id).toBe("chat-123");
-      expect(chat.taskId).toBe("456"); // Extracted from path
-      expect(chat.messages).toHaveLength(1);
-      expect(chat.filePath).toBe(filePath);
-    });
-
-    it("should throw error if file is not a chat file", async () => {
-      const invalidData = {
-        _type: "not-chat",
-        chatId: "chat-123",
-      };
-      mockFs.readFile.mockResolvedValue(JSON.stringify(invalidData));
-
-      const filePath = "/test/workspace/task-456/chat-123.chat.json";
-
-      await expect(chatRepo.readChatFile(filePath)).rejects.toThrow(
-        "is not a chat file"
-      );
-    });
-  });
-
-  describe("findById and findAll", () => {
-    it("should find chat by id", async () => {
-      await chatRepo.save(mockChat);
-
-      const foundChat = await chatRepo.findById(mockChat.id);
-
-      expect(foundChat).toEqual(mockChat);
-    });
-
-    it("should return undefined for non-existent id", async () => {
-      const foundChat = await chatRepo.findById("non-existent");
-
-      expect(foundChat).toBeUndefined();
-    });
-
-    it("should return all chats", async () => {
-      const mockChat2 = { ...mockChat, id: "chat-456" };
-      await chatRepo.save(mockChat);
-      await chatRepo.save(mockChat2);
-
-      const allChats = await chatRepo.findAll();
-
-      expect(allChats).toHaveLength(2);
-      expect(allChats).toContainEqual(mockChat);
-      expect(allChats).toContainEqual(mockChat2);
-    });
-  });
-
-  describe("remove", () => {
-    it("should remove chat from memory", async () => {
-      await chatRepo.save(mockChat);
-
-      await chatRepo.remove(mockChat.id);
-
-      const foundChat = await chatRepo.findById(mockChat.id);
-      expect(foundChat).toBeUndefined();
-    });
-
-    it("should do nothing for non-existent id", async () => {
-      await expect(chatRepo.remove("non-existent")).resolves.not.toThrow();
     });
   });
 });

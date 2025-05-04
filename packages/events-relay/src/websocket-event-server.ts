@@ -99,7 +99,7 @@ export class WebSocketEventServer {
     );
 
     ws.on("message", (message: WebSocket.Data) => {
-      this.logger.debug("Received message from client:", message);
+      // this.logger.debug("Received message from client:", message);
       this.handleClientMessage(ws, message);
     });
 
@@ -162,9 +162,7 @@ export class WebSocketEventServer {
       }
     });
 
-    this.logger.debug(
-      `Broadcasted ${event.kind} to ${this.clients.size} clients`
-    );
+    this.logger.debug(`Relayed server event to clients: ${event.kind}`, event);
   }
 
   /**
@@ -172,8 +170,6 @@ export class WebSocketEventServer {
    */
   private handleClientMessage(ws: WebSocket, data: WebSocket.Data): void {
     let message: RelayMessage;
-
-    this.logger.debug("Received message from client:", data);
 
     try {
       const messageString = data.toString();
@@ -195,6 +191,11 @@ export class WebSocketEventServer {
             `Error processing event: ${error.message}`
           );
         });
+
+        this.logger.debug(
+          `Relayed client event to server: ${clientEvent.kind}`,
+          clientEvent
+        );
       } else {
         this.sendError(ws, "INVALID_EVENT", "Invalid client event format");
       }

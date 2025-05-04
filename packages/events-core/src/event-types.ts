@@ -12,6 +12,11 @@ export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR";
 
 export type ChatMode = "chat" | "agent";
 
+export type ChatUpdateType =
+  | "MESSAGE_ADDED"
+  | "ARTIFACT_ADDED"
+  | "METADATA_UPDATED";
+
 /**
  * Structure representing a file system node in the folder tree
  */
@@ -43,18 +48,10 @@ export const ClientEventKind = [
   "ClientBranchChat",
   "ClientApproveWork",
 
-  // TODO: These events require refactoring
+  // File related
   "ClientRequestWorkspaceFolderTree",
-  "ClientFileTreeUpdated",
-  "ClientDirectoryAdded",
-  "ClientFileAdded",
-  "ClientEditorReloadRequested",
-  "ClientEditorUpdated",
-  "ClientFileChangeIgnored",
-  "ClientChatUpdated",
-  "ClientTaskUpdated",
-  "ClientUIStateUpdated",
   "ClientOpenFile",
+  "ClientOpenChatFile",
 
   // Client test events
   "ClientTestPing",
@@ -80,12 +77,13 @@ export const ServerEventKind = [
   "ServerNextSubtaskTriggered",
 
   // Chat related
+  "ServerChatCreated",
   "ServerChatFileCreated",
   "ServerChatInitialized",
   "ServerChatMessageAppended",
   "ServerChatFileUpdated",
   "ServerChatUpdated",
-  "ServerNewChatCreated", // Response to ClientCreateNewChat event
+  "ServerNewChatCreated",
 
   // AI processing
   "ServerUserChatMessagePostProcessed",
@@ -94,7 +92,11 @@ export const ServerEventKind = [
   "ServerAIResponsePostProcessed",
 
   // File related
+  "ServerFileTypeDetected",
   "ServerFileOpened",
+  "ServerChatFileOpened",
+  "ServerChatFileLoaded",
+  "ServerNonChatFileOpened",
   "ServerArtifactFileCreated",
 
   // System related
@@ -105,9 +107,7 @@ export const ServerEventKind = [
 
 export type ServerEventKind = (typeof ServerEventKind)[number];
 
-// Combine all event types for type definitions
-// TODO:The string union type is included temporarily for development convenience
-// when working with custom or dynamic event types that haven't been fully typed yet
+// Union type for event kinds
 export type EventKind = ClientEventKind | ServerEventKind | string;
 
 export interface TeamConfig {
@@ -133,7 +133,6 @@ export interface Task {
   title: string;
   status: TaskStatus;
   currentSubtaskId?: string;
-  // subtasks: Subtask[];
   folderPath?: string;
   config: Record<string, unknown>;
   createdAt: Date;
@@ -170,23 +169,23 @@ export interface ChatMetadata {
 
 export interface Chat {
   id: string;
-  taskId: string;
-  // subtaskId: string;
+  filePath: string;
   messages: ChatMessage[];
   status: ChatStatus;
   createdAt: Date;
   updatedAt: Date;
   metadata?: ChatMetadata;
-  filePath?: string; // Added filePath property to store the chat's file path
 }
 
-export interface ChatFile {
-  _type: string;
-  chatId: string;
-  createdAt: Date;
-  updatedAt: Date;
-  title?: string;
-  messages: ChatMessage[];
+export interface ChatUpdateData {
+  kind: ChatUpdateType;
+  message?: ChatMessage;
+  artifact?: {
+    id: string;
+    type: string;
+    content: string;
+  };
+  metadata?: Partial<ChatMetadata>;
 }
 
 export interface Artifact {
@@ -314,63 +313,19 @@ export interface ClientOpenFileEvent extends BaseClientEvent {
   filePath: string;
 }
 
+export interface ClientOpenChatFileEvent extends BaseClientEvent {
+  kind: "ClientOpenChatFile";
+  filePath: string;
+}
+
 export interface ClientRequestWorkspaceFolderTreeEvent extends BaseClientEvent {
   kind: "ClientRequestWorkspaceFolderTree";
-  workspacePath?: string; // Optional path to specify which workspace folder to query
+  workspacePath?: string;
 }
 
 export interface ClientTestPingEvent extends BaseClientEvent {
   kind: "ClientTestPing";
   message: string;
-}
-
-// Client State Update Events
-
-export interface ClientFileTreeUpdatedEvent extends BaseClientEvent {
-  kind: "ClientFileTreeUpdated";
-  tree: unknown;
-}
-
-export interface ClientDirectoryAddedEvent extends BaseClientEvent {
-  kind: "ClientDirectoryAdded";
-  path: string;
-}
-
-export interface ClientFileAddedEvent extends BaseClientEvent {
-  kind: "ClientFileAdded";
-  path: string;
-  content: string;
-}
-
-export interface ClientEditorReloadRequestedEvent extends BaseClientEvent {
-  kind: "ClientEditorReloadRequested";
-  filePath: string;
-}
-
-export interface ClientEditorUpdatedEvent extends BaseClientEvent {
-  kind: "ClientEditorUpdated";
-  filePath: string;
-  content: string;
-}
-
-export interface ClientFileChangeIgnoredEvent extends BaseClientEvent {
-  kind: "ClientFileChangeIgnored";
-  filePath: string;
-}
-
-export interface ClientChatUpdatedEvent extends BaseClientEvent {
-  kind: "ClientChatUpdated";
-  chat: Chat;
-}
-
-export interface ClientTaskUpdatedEvent extends BaseClientEvent {
-  kind: "ClientTaskUpdated";
-  task: Task;
-}
-
-export interface ClientUIStateUpdatedEvent extends BaseClientEvent {
-  kind: "ClientUIStateUpdated";
-  state: Record<string, unknown>;
 }
 
 // Server Events
@@ -433,9 +388,14 @@ export interface ServerNextSubtaskTriggeredEvent extends BaseServerEvent {
   currentSubtaskId: string;
 }
 
+export interface ServerChatCreatedEvent extends BaseServerEvent {
+  kind: "ServerChatCreated";
+  chatId: string;
+  chatObject: Chat;
+}
+
 export interface ServerChatFileCreatedEvent extends BaseServerEvent {
   kind: "ServerChatFileCreated";
-  taskId: string;
   chatId: string;
   filePath: string;
 }
@@ -462,12 +422,13 @@ export interface ServerChatUpdatedEvent extends BaseServerEvent {
   kind: "ServerChatUpdated";
   chatId: string;
   chat: Chat;
+  update: ChatUpdateData;
 }
 
 export interface ServerNewChatCreatedEvent extends BaseServerEvent {
   kind: "ServerNewChatCreated";
   chatId: string;
-  filePath: string;
+  chatObject: Chat;
 }
 
 export interface ServerUserChatMessagePostProcessedEvent
@@ -507,8 +468,32 @@ export interface ServerAIResponsePostProcessedEvent extends BaseServerEvent {
   processedContent: string;
 }
 
+export interface ServerFileTypeDetectedEvent extends BaseServerEvent {
+  kind: "ServerFileTypeDetected";
+  filePath: string;
+  fileType: string;
+}
+
 export interface ServerFileOpenedEvent extends BaseServerEvent {
   kind: "ServerFileOpened";
+  filePath: string;
+  content: string;
+  fileType: string;
+}
+
+export interface ServerChatFileOpenedEvent extends BaseServerEvent {
+  kind: "ServerChatFileOpened";
+  filePath: string;
+  chat: Chat;
+}
+
+export interface ServerChatFileLoadedEvent extends BaseServerEvent {
+  kind: "ServerChatFileLoaded";
+  filePath: string;
+}
+
+export interface ServerNonChatFileOpenedEvent extends BaseServerEvent {
+  kind: "ServerNonChatFileOpened";
   filePath: string;
   content: string;
   fileType: string;
@@ -536,7 +521,7 @@ export interface ChokidarFsEventData {
   fsEventKind: ChokidarFsEventKind;
   srcPath: string;
   isDirectory: boolean;
-  error?: Error; // For error events
+  error?: Error;
 }
 
 export interface ServerFileWatcherEvent extends BaseServerEvent {
@@ -549,7 +534,7 @@ export interface ServerWorkspaceFolderTreeResponsedEvent
   kind: "ServerWorkspaceFolderTreeResponsed";
   workspacePath: string;
   folderTree: FolderTreeNode | null;
-  error?: string; // Optional error message if the request failed
+  error?: string;
 }
 
 export interface ServerTestPingEvent extends BaseServerEvent {
@@ -573,17 +558,9 @@ export type ClientEventUnion =
   | ClientBranchChatEvent
   | ClientApproveWorkEvent
   | ClientOpenFileEvent
+  | ClientOpenChatFileEvent
   | ClientRequestWorkspaceFolderTreeEvent
-  | ClientTestPingEvent
-  | ClientFileTreeUpdatedEvent
-  | ClientDirectoryAddedEvent
-  | ClientFileAddedEvent
-  | ClientEditorReloadRequestedEvent
-  | ClientEditorUpdatedEvent
-  | ClientFileChangeIgnoredEvent
-  | ClientChatUpdatedEvent
-  | ClientTaskUpdatedEvent
-  | ClientUIStateUpdatedEvent;
+  | ClientTestPingEvent;
 
 export type ServerEventUnion =
   | ServerTaskCreatedEvent
@@ -595,6 +572,7 @@ export type ServerEventUnion =
   | ServerSubtaskCompletedEvent
   | ServerSubtaskUpdatedEvent
   | ServerNextSubtaskTriggeredEvent
+  | ServerChatCreatedEvent
   | ServerChatFileCreatedEvent
   | ServerChatInitializedEvent
   | ServerChatMessageAppendedEvent
@@ -605,13 +583,17 @@ export type ServerEventUnion =
   | ServerAIResponseRequestedEvent
   | ServerAIResponseGeneratedEvent
   | ServerAIResponsePostProcessedEvent
+  | ServerFileTypeDetectedEvent
   | ServerFileOpenedEvent
+  | ServerChatFileOpenedEvent
+  | ServerChatFileLoadedEvent
+  | ServerNonChatFileOpenedEvent
   | ServerArtifactFileCreatedEvent
   | ServerFileWatcherEvent
   | ServerWorkspaceFolderTreeResponsedEvent
   | ServerTestPingEvent;
 
-// Combined event union for backward compatibility
+// Combined event union
 export type EventUnion = ClientEventUnion | ServerEventUnion;
 
 /**
@@ -652,23 +634,16 @@ export function isCommandEvent(event: BaseEvent): boolean {
     "ClientCloneSubtask",
     "ClientStartNewChat",
     "ClientCreateNewChat",
-    "ClientSubmitMessage",
     "ClientSubmitUserChatMessage",
     "ClientCloneChat",
     "ClientBranchChat",
     "ClientApproveWork",
     "ClientOpenFile",
-    "ClientRunTest",
+    "ClientOpenChatFile",
   ];
 
   return clientCommandEvents.includes(event.kind as string);
 }
-
-export type SyncEventHandler<T extends EventUnion> = (event: T) => void;
-
-export type AsyncEventHandler<T extends EventUnion> = (
-  event: T
-) => Promise<void>;
 
 export interface EntityWithId {
   id: string;

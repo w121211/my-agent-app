@@ -6,9 +6,10 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { v4 as uuidv4 } from "uuid";
 import { createServerEventBus, IEventBus } from "../src/event-bus.js";
-import { TaskRepository, ChatRepository } from "../src/repositories.js";
+import { TaskRepository } from "../src/repositories.js";
 import { TaskService } from "../src/task-service.js";
 import { ChatService } from "../src/chat-service.js";
+import { ChatFileService } from "../src/chat-file-service.js";
 import { FileService } from "../src/file-service.js";
 import { FileWatcherService } from "../src/file-watcher-service.js";
 import {
@@ -16,6 +17,8 @@ import {
   ClientSubmitUserChatMessageEvent,
   ClientOpenFileEvent,
   ServerNewChatCreatedEvent,
+  ServerChatUpdatedEvent,
+  Chat,
 } from "../src/event-types.js";
 
 // Setup workspace and initialize services
@@ -33,20 +36,21 @@ async function setupDemo() {
 
   // Initialize repositories
   const taskRepo = new TaskRepository(workspacePath);
-  const chatRepo = new ChatRepository(workspacePath);
-
-  // Load any existing data
-  await taskRepo.loadWorkspace();
 
   // Initialize services
   const taskService = new TaskService(eventBus, taskRepo);
-  // Updated ChatService constructor with taskService parameter
+
+  // Initialize ChatFileService instead of ChatRepository
+  const chatFileService = new ChatFileService(workspacePath, eventBus);
+
+  // Initialize ChatService with ChatFileService
   const chatService = new ChatService(
     eventBus,
-    chatRepo,
+    chatFileService,
     workspacePath,
     taskService
   );
+
   const fileService = new FileService(eventBus, workspacePath);
   const fileWatcherService = new FileWatcherService(eventBus, workspacePath);
 
@@ -66,7 +70,7 @@ async function setupDemo() {
     eventBus,
     workspacePath,
     taskRepo,
-    chatRepo,
+    chatFileService,
     taskService,
     chatService,
     fileService,
@@ -83,7 +87,7 @@ async function demoCreateNewChat(
 
   const correlationId = uuidv4();
 
-  // Mock user creating a new chat
+  // Mock user creating a new chat (following new design)
   const createChatEvent: ClientCreateNewChatEvent = {
     kind: "ClientCreateNewChat",
     newTask: true,
@@ -169,30 +173,48 @@ async function main() {
     await setupDemo();
 
   try {
-    // Track chatId from first flow
+    // Track chat information from events
     let chatId = "";
     let chatFilePath = "";
 
-    // Subscribe to ServerNewChatCreated to get the chat ID
-    const unsubscribe = eventBus.subscribe<ServerNewChatCreatedEvent>(
+    // Create an object to track the chat
+    let chatObject: Chat | null = null;
+
+    // Subscribe to ServerNewChatCreated to get the chat object
+    const newChatUnsubscribe = eventBus.subscribe<ServerNewChatCreatedEvent>(
       "ServerNewChatCreated",
       (event) => {
         chatId = event.chatId;
-        chatFilePath = event.filePath;
+        chatObject = event.chatObject;
+        chatFilePath = event.chatObject.filePath;
         logger.info(
           `New chat created with ID: ${chatId}, filePath: ${chatFilePath}`
         );
       }
     );
 
+    // Also subscribe to ServerChatUpdated to track updates
+    const chatUpdatedUnsubscribe = eventBus.subscribe<ServerChatUpdatedEvent>(
+      "ServerChatUpdated",
+      (event) => {
+        // Update our local reference to the chat object
+        if (event.chatId === chatId) {
+          chatObject = event.chat;
+          logger.info(
+            `Chat updated: ${event.chatId}, update type: ${event.update.kind}`
+          );
+        }
+      }
+    );
+
     // Demo Create New Chat
     await demoCreateNewChat(eventBus, logger);
 
-    // Unsubscribe after we got the chat ID
-    unsubscribe();
+    // Unsubscribe from new chat events after we got the chat ID
+    newChatUnsubscribe();
 
-    if (!chatId) {
-      throw new Error("No chat ID was received, cannot continue demo");
+    if (!chatId || !chatFilePath) {
+      throw new Error("No chat information was received, cannot continue demo");
     }
 
     // Wait a bit before next flow
@@ -206,6 +228,19 @@ async function main() {
 
     // Demo Open Chat File
     await demoOpenFile(eventBus, logger, chatFilePath);
+
+    // Unsubscribe from chat updated events
+    chatUpdatedUnsubscribe();
+
+    // Log the final chat state if available
+    if (chatObject) {
+      const chat = chatObject as Chat; // Explicit cast to help TypeScript
+      logger.info("Final chat state:", {
+        id: chat.id,
+        messageCount: chat.messages.length,
+        status: chat.status,
+      });
+    }
 
     logger.info("All demo flows completed successfully!");
   } catch (error) {

@@ -12,7 +12,7 @@ interface NewChatModalProps {
 
 const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) => {
   const chatPanelService = useChatPanelService();
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState("Hello world");
   const [createNewTask, setCreateNewTask] = useState(false);
   const [mode, setMode] = useState<ChatMode>("chat");
   const [model, setModel] = useState("Claude 3.7");
@@ -46,7 +46,7 @@ const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) => {
     });
 
     // Reset form and close
-    setPrompt("");
+    setPrompt("Hello world");
     setKnowledge("");
     onClose();
   };
