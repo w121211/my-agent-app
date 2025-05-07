@@ -58,7 +58,7 @@
 請針對每個問題逐一回答
 - client open file 時，應該是指定 file path，所以似乎需要 find chat cache by file path
     - 而且我目前想像到的使用場景，幾乎都是依賴  file path 來 get chat，例如 run task -> use entryChatFilePath to run chat
-    - 這主要是因為目前設計中，我們允許使用者隨意移動 chat，而將 chat 從 task1/ 移動至 task2/ 時，它就自動改為隸屬於 task2
+    - 這主要是因為目前設計中，我們w允許使用者隨意移動 chat，而將 chat 從 task1/ 移動至 task2/ 時，它就自動改為隸屬於 task2
     - 在此情況下，我覺得更需要的是{chatFilePath: chat} set，以此來維護chat cache
     - 如果使用者移動了一個 chat 檔案，透過chokidar，應該是會收到兩個 events: unlink -> add，所以在 unlink 的地方我們就直接把 cached chat 刪除，add 無視（等未來需要執行 chat 或 open chat 時才 reload the chat）
 - 需要 folderCache 嗎？我覺得有點過度設計了，反而增加複雜度

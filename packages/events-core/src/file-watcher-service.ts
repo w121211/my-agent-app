@@ -1,33 +1,27 @@
 import path from "node:path";
-import fs from "node:fs/promises";
 import chokidar, { FSWatcher, ChokidarOptions } from "chokidar";
 import { Logger, ILogObj } from "tslog";
 import { IEventBus } from "./event-bus.js";
 import {
   ChokidarFsEventData,
   ChokidarFsEventKind,
-  ClientRequestWorkspaceFolderTreeEvent,
-  FolderTreeNode,
   ServerFileWatcherEvent,
-  ServerWorkspaceFolderTreeResponsedEvent,
+  BaseServerEvent,
+  BaseEvent,
 } from "./event-types.js";
+import { ServerRequestUpdateWatchingFolderEvent } from "./workspace-service.js";
 
 /**
- * Watches for file system changes in the workspace and emits events
+ * Watches for file system changes and emits events
  */
 export class FileWatcherService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
-  private readonly workspacePath: string;
   private readonly chokidarOptions: ChokidarOptions;
-  private watcher: FSWatcher | null = null;
-  private isWatching = false;
+  private watchers: Map<string, FSWatcher> = new Map();
 
   /**
    * Default chokidar options for file watching
-   * NOTE: Ignoring logic here is still active via chokidar options,
-   * but the separate isPathIgnored function used during tree
-   * building has been removed.
    */
   private static readonly DEFAULT_OPTIONS: ChokidarOptions = {
     persistent: true,
@@ -41,14 +35,9 @@ export class FileWatcherService {
     awaitWriteFinish: true, // Wait for writes to complete
   };
 
-  constructor(
-    eventBus: IEventBus,
-    workspacePath: string,
-    chokidarOptions: ChokidarOptions = {}
-  ) {
+  constructor(eventBus: IEventBus, chokidarOptions: ChokidarOptions = {}) {
     this.logger = new Logger({ name: "FileWatcherService" });
     this.eventBus = eventBus;
-    this.workspacePath = workspacePath;
 
     // Merge the provided options with defaults
     this.chokidarOptions = {
@@ -56,61 +45,87 @@ export class FileWatcherService {
       ...chokidarOptions,
     };
 
-    // Subscribe to workspace folder tree requests
-    this.eventBus.subscribe<ClientRequestWorkspaceFolderTreeEvent>(
-      "ClientRequestWorkspaceFolderTree",
-      this.handleWorkspaceTreeRequest.bind(this)
+    // Subscribe to watch folder update requests
+    this.eventBus.subscribe<ServerRequestUpdateWatchingFolderEvent>(
+      "ServerRequestUpdateWatchingFolder",
+      this.handleUpdateWatchingFolder.bind(this)
     );
   }
 
   /**
-   * Start watching the workspace for file changes
+   * Handle requests to update watched folders
    */
-  public startWatching(): void {
-    if (this.isWatching) {
-      this.logger.warn("File watcher is already running");
-      return;
+  private async handleUpdateWatchingFolder(
+    event: ServerRequestUpdateWatchingFolderEvent
+  ): Promise<void> {
+    const { workspacePath, action } = event;
+
+    if (action === "add") {
+      await this.startWatchingFolder(workspacePath);
+    } else if (action === "remove") {
+      await this.stopWatchingFolder(workspacePath);
     }
-
-    this.logger.info(`Starting file watcher on ${this.workspacePath}`);
-
-    this.watcher = chokidar.watch(this.workspacePath, this.chokidarOptions);
-
-    // Set up event handlers
-    this.watcher
-      .on("add", (filePath) => this.handleFsEvent("add", filePath, false))
-      .on("change", (filePath) => this.handleFsEvent("change", filePath, false))
-      .on("unlink", (filePath) => this.handleFsEvent("unlink", filePath, false))
-      .on("addDir", (dirPath) => this.handleFsEvent("addDir", dirPath, true))
-      .on("unlinkDir", (dirPath) =>
-        this.handleFsEvent("unlinkDir", dirPath, true)
-      )
-      .on("error", (error) => {
-        this.logger.error(`File watcher error: ${error}`);
-        const errorObj =
-          error instanceof Error ? error : new Error(String(error));
-        this.handleFsEvent("error", "", false, errorObj);
-      })
-      .on("ready", () => {
-        this.logger.info("Initial file scan complete");
-        this.handleFsEvent("ready", "", false);
-      });
-
-    this.isWatching = true;
   }
 
   /**
-   * Stop watching for file changes
+   * Start watching a specific folder for file changes
    */
-  public async stopWatching(): Promise<void> {
-    if (!this.isWatching || !this.watcher) {
+  public async startWatchingFolder(folderPath: string): Promise<void> {
+    if (this.watchers.has(folderPath)) {
+      this.logger.warn(`Already watching folder: ${folderPath}`);
       return;
     }
 
-    this.logger.info("Stopping file watcher");
-    await this.watcher.close();
-    this.watcher = null;
-    this.isWatching = false;
+    this.logger.info(`Starting file watcher on ${folderPath}`);
+
+    const watcher = chokidar.watch(folderPath, this.chokidarOptions);
+
+    // Set up event handlers
+    watcher
+      .on("add", (filePath) =>
+        this.handleFsEvent("add", filePath, folderPath, false)
+      )
+      .on("change", (filePath) =>
+        this.handleFsEvent("change", filePath, folderPath, false)
+      )
+      .on("unlink", (filePath) =>
+        this.handleFsEvent("unlink", filePath, folderPath, false)
+      )
+      .on("addDir", (dirPath) =>
+        this.handleFsEvent("addDir", dirPath, folderPath, true)
+      )
+      .on("unlinkDir", (dirPath) =>
+        this.handleFsEvent("unlinkDir", dirPath, folderPath, true)
+      )
+      .on("error", (error) => {
+        this.logger.error(`File watcher error in ${folderPath}: ${error}`);
+        const errorObj =
+          error instanceof Error ? error : new Error(String(error));
+        this.handleFsEvent("error", "", folderPath, false, errorObj);
+      })
+      .on("ready", () => {
+        this.logger.info(`Initial file scan complete for ${folderPath}`);
+        this.handleFsEvent("ready", "", folderPath, false);
+      });
+
+    this.watchers.set(folderPath, watcher);
+  }
+
+  /**
+   * Stop watching a specific folder
+   */
+  public async stopWatchingFolder(folderPath: string): Promise<void> {
+    const watcher = this.watchers.get(folderPath);
+
+    if (!watcher) {
+      this.logger.warn(`Not currently watching folder: ${folderPath}`);
+      return;
+    }
+
+    this.logger.info(`Stopping file watcher on ${folderPath}`);
+
+    await watcher.close();
+    this.watchers.delete(folderPath);
   }
 
   /**
@@ -119,12 +134,11 @@ export class FileWatcherService {
   private handleFsEvent(
     fsEventKind: ChokidarFsEventKind,
     filePath: string,
+    basePath: string,
     isDirectory: boolean,
     error?: Error
   ): void {
-    const relativePath = filePath
-      ? path.relative(this.workspacePath, filePath)
-      : "";
+    const relativePath = filePath ? path.relative(basePath, filePath) : "";
 
     const fsEventData: ChokidarFsEventData = {
       fsEventKind,
@@ -149,122 +163,57 @@ export class FileWatcherService {
   }
 
   /**
-   * Handle requests for workspace folder tree
+   * Stop all file watchers
    */
-  private async handleWorkspaceTreeRequest(
-    event: ClientRequestWorkspaceFolderTreeEvent
-  ): Promise<void> {
-    const targetPath = event.workspacePath
-      ? path.join(this.workspacePath, event.workspacePath)
-      : this.workspacePath;
+  public async stopAllWatchers(): Promise<void> {
+    this.logger.info("Stopping all file watchers");
 
-    this.logger.info(`Processing workspace tree request for: ${targetPath}`);
-
-    try {
-      // *** No ignore logic is applied during tree building anymore ***
-      const folderTree = await this.buildFolderTree(targetPath);
-
-      await this.eventBus.emit<ServerWorkspaceFolderTreeResponsedEvent>({
-        kind: "ServerWorkspaceFolderTreeResponsed",
-        timestamp: new Date(),
-        correlationId: event.correlationId,
-        workspacePath: event.workspacePath || "",
-        folderTree,
-      });
-    } catch (error) {
-      this.logger.error(`Error building workspace tree: ${error}`);
-      await this.eventBus.emit<ServerWorkspaceFolderTreeResponsedEvent>({
-        kind: "ServerWorkspaceFolderTreeResponsed",
-        timestamp: new Date(),
-        correlationId: event.correlationId,
-        workspacePath: event.workspacePath || "",
-        folderTree: null,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  /**
-   * Recursively build a folder tree structure starting at rootPath.
-   * Uses fs.promises.readdir with withFileTypes for potential optimization.
-   * Does NOT apply any ignore logic.
-   */
-  private async buildFolderTree(rootPath: string): Promise<FolderTreeNode> {
-    const baseName = path.basename(rootPath);
-    const relativePath = path.relative(this.workspacePath, rootPath);
-
-    const stats = await fs.stat(rootPath); // Check current path type
-
-    if (!stats.isDirectory()) {
-      // It's a file, return file node
-      return {
-        name: baseName,
-        path: relativePath,
-        isDirectory: false,
-      };
-    }
-
-    // It's a directory, process its children
-    // Use withFileTypes: true to get fs.Dirent objects
-    const dirEntries = await fs.readdir(rootPath, { withFileTypes: true });
-    const children: FolderTreeNode[] = [];
-
-    for (const dirent of dirEntries) {
-      // Iterate over fs.Dirent objects
-      const fullPath = path.join(rootPath, dirent.name);
-      try {
-        // Recursively build the tree for the child path
-        // The recursive call will handle its own stat check
-        const childNode = await this.buildFolderTree(fullPath);
-        children.push(childNode);
-      } catch (error) {
-        // Log and skip entries that can't be accessed (e.g., permission errors)
-        // Check if error is an instance of Error for better logging
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        this.logger.debug(
-          `Skipping inaccessible path: ${fullPath}. Error: ${errorMessage}`
-        );
-
-        // Option to still add the file to the tree with error info, or simply throw the error
-        // In this case, we're re-throwing to skip this file completely
-        throw error;
+    const closePromises = Array.from(this.watchers.entries()).map(
+      async ([path, watcher]) => {
+        try {
+          await watcher.close();
+          this.logger.debug(`Stopped watching: ${path}`);
+        } catch (error) {
+          this.logger.error(`Error stopping watcher for ${path}: ${error}`);
+        }
       }
-    }
+    );
 
-    // Return directory node
-    return {
-      name: baseName,
-      path: relativePath || "/", // Use "/" for root directory's relative path
-      isDirectory: true,
-      children,
-    };
+    await Promise.all(closePromises);
+    this.watchers.clear();
   }
 
   /**
-   * Check if the watcher is currently active
+   * Check if a folder is being watched
    */
-  public isActive(): boolean {
-    return this.isWatching;
+  public isWatchingFolder(folderPath: string): boolean {
+    return this.watchers.has(folderPath);
+  }
+
+  /**
+   * Get the number of watched folders
+   */
+  public getWatchedFolderCount(): number {
+    return this.watchers.size;
+  }
+
+  /**
+   * Get a list of all watched folders
+   */
+  public getWatchedFolders(): string[] {
+    return Array.from(this.watchers.keys());
   }
 }
 
 /**
- * Factory function to create a file watcher with sensible defaults
+ * Factory function to create a file watcher service
  */
 export function createFileWatcherService(
   eventBus: IEventBus,
-  workspacePath: string,
   options: ChokidarOptions = {}
 ): FileWatcherService {
   const logger = new Logger({ name: "FileWatcherServiceFactory" });
-  logger.info(`Creating file watcher for workspace: ${workspacePath}`);
+  logger.info("Creating file watcher service");
 
-  // Create watcher with specified or default options
-  const watcher = new FileWatcherService(eventBus, workspacePath, options);
-
-  // Start watching immediately
-  watcher.startWatching();
-
-  return watcher;
+  return new FileWatcherService(eventBus, options);
 }

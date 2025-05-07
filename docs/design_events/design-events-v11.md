@@ -30,7 +30,7 @@ UIAddWorkspaceButtonClicked
 
 # Client Command
 
-<!-- 我想要盡可能減少事件種類，可能直接用 client update app settings {kind: "WORKSPACE_ADDED", workspacePath} 比較適合？ -->
+<!-- 我想要盡可能減少事件種類，可能直接用 client update user settings {kind: "WORKSPACE_ADDED", workspacePath} 比較適合？ -->
 → ClientAddWorkspace {folderPath}
 
 
