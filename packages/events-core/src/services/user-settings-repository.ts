@@ -1,6 +1,8 @@
+// File path: packages/events-core/src/services/user-settings-repository.ts
+
 import path from "node:path";
 import { Logger, ILogObj } from "tslog";
-import { fileExists, readJsonFile, writeJsonFile } from "./file-helpers.js";
+import { fileExists, readJsonFile, writeJsonFile } from "../file-helpers.js";
 
 /**
  * Interface for user settings
@@ -35,7 +37,9 @@ export class UserSettingsRepository {
    */
   public async getSettings(): Promise<UserSettings> {
     if (!(await fileExists(this.filePath))) {
-      this.logger.info(`Settings file not found, creating default at ${this.filePath}`);
+      this.logger.info(
+        `Settings file not found, creating default at ${this.filePath}`
+      );
       await this.saveSettings(DEFAULT_USER_SETTINGS);
       return { ...DEFAULT_USER_SETTINGS };
     }

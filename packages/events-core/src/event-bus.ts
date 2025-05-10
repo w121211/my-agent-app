@@ -1,3 +1,5 @@
+// File path: packages/events-core/src/event-bus.ts
+
 import { Logger, ILogObj } from "tslog";
 import {
   EventKind,

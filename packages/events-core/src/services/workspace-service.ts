@@ -1,28 +1,18 @@
+// File path: packages/events-core/src/services/workspace-service.ts
+
 import path from "node:path";
 import fs from "node:fs/promises";
 import { Logger, ILogObj } from "tslog";
-import { IEventBus } from "./event-bus.js";
-import { UserSettingsRepository } from "./user-settings-repository.js";
-import {
-  ClientRequestWorkspaceFolderTreeEvent,
-  ServerWorkspaceFolderTreeResponsedEvent,
+import type { IEventBus } from "../event-bus.js";
+import type { UserSettingsRepository } from "./user-settings-repository.js";
+import type { ServerUserSettingsUpdatedEvent } from "./user-settings-service.js";
+import type {
   FolderTreeNode,
-  BaseClientEvent,
-  BaseServerEvent,
+  // ServerRequestUpdateWatchingFolderEvent,
+  // ServerUserSettingsUpdatedEvent,
+  // UserSettings,
   BaseEvent,
-} from "./event-types.js";
-
-// Define workspace update command type
-export type WorkspaceUpdateCommand = {
-  command: "addWorkspace" | "removeWorkspace";
-  workspacePath: string;
-};
-
-// Event for client workspace updates
-export interface ClientUpdateWorkspaceEvent extends BaseEvent {
-  kind: "ClientUpdateWorkspace";
-  update: WorkspaceUpdateCommand;
-}
+} from "../event-types.js";
 
 // Event for workspace validation results
 export interface ServerWorkspaceValidatedEvent extends BaseEvent {
@@ -45,9 +35,6 @@ export interface ClientRequestStartWatchingAllWorkspacesEvent
   kind: "ClientRequestStartWatchingAllWorkspaces";
 }
 
-/**
- * Service for managing workspaces
- */
 export class WorkspaceService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
@@ -60,38 +47,77 @@ export class WorkspaceService {
     this.logger = new Logger({ name: "WorkspaceService" });
     this.eventBus = eventBus;
     this.userSettingsRepository = userSettingsRepository;
-
-    // Subscribe to workspace-related events
-    this.eventBus.subscribe<ClientRequestWorkspaceFolderTreeEvent>(
-      "ClientRequestWorkspaceFolderTree",
-      this.handleWorkspaceTreeRequest.bind(this)
-    );
-
-    this.eventBus.subscribe<ClientUpdateWorkspaceEvent>(
-      "ClientUpdateWorkspace",
-      this.handleWorkspaceUpdate.bind(this)
-    );
-
-    this.eventBus.subscribe<ClientRequestStartWatchingAllWorkspacesEvent>(
-      "ClientRequestStartWatchingAllWorkspaces",
-      this.handleStartWatchingAllWorkspaces.bind(this)
-    );
   }
 
   /**
-   * Handle client workspace update requests
+   * Get folder tree for a workspace path
    */
-  private async handleWorkspaceUpdate(
-    event: ClientUpdateWorkspaceEvent
-  ): Promise<void> {
-    const { command, workspacePath } = event.update;
+  public async getFolderTree(
+    workspacePath?: string,
+    correlationId?: string
+  ): Promise<{ folderTree: FolderTreeNode | null; error?: string }> {
+    this.logger.info(
+      `Processing workspace tree request for: ${workspacePath || ""}`
+    );
 
-    if (command === "addWorkspace") {
-      await this.addWorkspace(workspacePath, event.correlationId);
-    } else if (command === "removeWorkspace") {
-      await this.removeWorkspace(workspacePath, event.correlationId);
+    try {
+      // Get settings to verify workspaces
+      const settings = await this.userSettingsRepository.getSettings();
+
+      if (settings.workspaces.length === 0) {
+        throw new Error("No workspaces configured");
+      }
+
+      // Determine which workspace to use and the relative path
+      let fullPath: string;
+      let selectedWorkspacePath: string;
+
+      if (!workspacePath) {
+        // If no path specified, use the first workspace
+        if (settings.workspaces.length === 0) {
+          throw new Error("No workspaces configured");
+        }
+        selectedWorkspacePath = settings.workspaces[0]!;
+        fullPath = selectedWorkspacePath;
+      } else {
+        // Find matching workspace
+        const matchingWorkspace = settings.workspaces.find(
+          (workspace) =>
+            workspacePath === workspace ||
+            workspacePath.startsWith(workspace + path.sep)
+        );
+
+        if (!matchingWorkspace) {
+          throw new Error(
+            `Path ${workspacePath} is not within any registered workspace`
+          );
+        }
+
+        selectedWorkspacePath = matchingWorkspace;
+        fullPath = workspacePath;
+      }
+
+      // Build the folder tree
+      const folderTree = await this.buildFolderTree(
+        selectedWorkspacePath,
+        fullPath
+      );
+      return { folderTree };
+    } catch (error) {
+      this.logger.error(`Error building workspace tree: ${error}`);
+      return {
+        folderTree: null,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
+
+  /**
+   * Get user settings
+   */
+  // public async getSettings(): Promise<UserSettings> {
+  //   return this.userSettingsRepository.getSettings();
+  // }
 
   /**
    * Add a workspace
@@ -99,26 +125,17 @@ export class WorkspaceService {
   public async addWorkspace(
     workspacePath: string,
     correlationId?: string
-  ): Promise<void> {
+  ): Promise<{ success: boolean; message?: string }> {
     this.logger.info(`Adding workspace: ${workspacePath}`);
 
     // Validate if workspace path exists and is a directory
     const isValid = await this.validateWorkspacePath(workspacePath);
 
-    // Emit validation event
-    await this.eventBus.emit<ServerWorkspaceValidatedEvent>({
-      kind: "ServerWorkspaceValidated",
-      timestamp: new Date(),
-      correlationId,
-      workspacePath,
-      isValid,
-      validationMessage: isValid
-        ? undefined
-        : `Invalid workspace path: ${workspacePath}`,
-    });
-
     if (!isValid) {
-      return;
+      return {
+        success: false,
+        message: `Invalid workspace path: ${workspacePath}`,
+      };
     }
 
     // Get current settings
@@ -127,7 +144,10 @@ export class WorkspaceService {
     // Check if workspace already exists
     if (settings.workspaces.includes(workspacePath)) {
       this.logger.warn(`Workspace already exists: ${workspacePath}`);
-      return;
+      return {
+        success: true,
+        message: `Workspace already exists: ${workspacePath}`,
+      };
     }
 
     // Add workspace path to settings
@@ -145,7 +165,17 @@ export class WorkspaceService {
       action: "add",
     });
 
+    // Emit settings updated event
+    await this.eventBus.emit<ServerUserSettingsUpdatedEvent>({
+      kind: "ServerUserSettingsUpdated",
+      timestamp: new Date(),
+      correlationId,
+      settings,
+      changeType: "WORKSPACE_ADDED",
+    });
+
     this.logger.info(`Workspace added successfully: ${workspacePath}`);
+    return { success: true };
   }
 
   /**
@@ -154,7 +184,7 @@ export class WorkspaceService {
   public async removeWorkspace(
     workspacePath: string,
     correlationId?: string
-  ): Promise<void> {
+  ): Promise<{ success: boolean; message?: string }> {
     this.logger.info(`Removing workspace: ${workspacePath}`);
 
     // Get current settings
@@ -163,7 +193,10 @@ export class WorkspaceService {
     // Check if workspace exists
     if (!settings.workspaces.includes(workspacePath)) {
       this.logger.warn(`Workspace does not exist: ${workspacePath}`);
-      return;
+      return {
+        success: false,
+        message: `Workspace does not exist: ${workspacePath}`,
+      };
     }
 
     // Remove workspace path from settings
@@ -183,7 +216,17 @@ export class WorkspaceService {
       action: "remove",
     });
 
+    // Emit settings updated event
+    await this.eventBus.emit<ServerUserSettingsUpdatedEvent>({
+      kind: "ServerUserSettingsUpdated",
+      timestamp: new Date(),
+      correlationId,
+      settings,
+      changeType: "WORKSPACE_REMOVED",
+    });
+
     this.logger.info(`Workspace removed successfully: ${workspacePath}`);
+    return { success: true };
   }
 
   /**
@@ -191,7 +234,7 @@ export class WorkspaceService {
    */
   public async startWatchingAllWorkspaces(
     correlationId?: string
-  ): Promise<void> {
+  ): Promise<{ success: boolean; count: number }> {
     this.logger.info("Starting to watch all workspaces");
 
     // Get all workspace paths from settings
@@ -200,7 +243,7 @@ export class WorkspaceService {
 
     if (workspacePaths.length === 0) {
       this.logger.info("No workspaces found to watch");
-      return;
+      return { success: true, count: 0 };
     }
 
     // Request watching for each workspace
@@ -215,15 +258,7 @@ export class WorkspaceService {
     }
 
     this.logger.info(`Started watching ${workspacePaths.length} workspaces`);
-  }
-
-  /**
-   * Handle client request to start watching all workspaces
-   */
-  private async handleStartWatchingAllWorkspaces(
-    event: ClientRequestStartWatchingAllWorkspacesEvent
-  ): Promise<void> {
-    await this.startWatchingAllWorkspaces(event.correlationId);
+    return { success: true, count: workspacePaths.length };
   }
 
   /**
@@ -236,76 +271,6 @@ export class WorkspaceService {
     } catch (error) {
       this.logger.error(`Error validating workspace path: ${error}`);
       return false;
-    }
-  }
-
-  /**
-   * Handle requests for workspace folder tree
-   */
-  private async handleWorkspaceTreeRequest(
-    event: ClientRequestWorkspaceFolderTreeEvent
-  ): Promise<void> {
-    const requestedPath = event.workspacePath || "";
-
-    this.logger.info(`Processing workspace tree request for: ${requestedPath}`);
-
-    try {
-      // Get settings to verify workspaces
-      const settings = await this.userSettingsRepository.getSettings();
-
-      if (settings.workspaces.length === 0) {
-        throw new Error("No workspaces configured");
-      }
-
-      // Determine which workspace to use and the relative path
-      let fullPath: string;
-      let workspacePath: string;
-
-      if (!requestedPath) {
-        // If no path specified, use the first workspace
-        if (settings.workspaces.length === 0) {
-          throw new Error("No workspaces configured");
-        }
-        workspacePath = settings.workspaces[0]!;
-        fullPath = workspacePath;
-      } else {
-        // Find matching workspace
-        const matchingWorkspace = settings.workspaces.find(
-          (workspace) =>
-            requestedPath === workspace ||
-            requestedPath.startsWith(workspace + path.sep)
-        );
-
-        if (!matchingWorkspace) {
-          throw new Error(
-            `Path ${requestedPath} is not within any registered workspace`
-          );
-        }
-
-        workspacePath = matchingWorkspace;
-        fullPath = requestedPath;
-      }
-
-      // Build the folder tree
-      const folderTree = await this.buildFolderTree(workspacePath, fullPath);
-
-      await this.eventBus.emit<ServerWorkspaceFolderTreeResponsedEvent>({
-        kind: "ServerWorkspaceFolderTreeResponsed",
-        timestamp: new Date(),
-        correlationId: event.correlationId,
-        workspacePath: requestedPath,
-        folderTree,
-      });
-    } catch (error) {
-      this.logger.error(`Error building workspace tree: ${error}`);
-      await this.eventBus.emit<ServerWorkspaceFolderTreeResponsedEvent>({
-        kind: "ServerWorkspaceFolderTreeResponsed",
-        timestamp: new Date(),
-        correlationId: event.correlationId,
-        workspacePath: requestedPath,
-        folderTree: null,
-        error: error instanceof Error ? error.message : String(error),
-      });
     }
   }
 
@@ -325,7 +290,7 @@ export class WorkspaceService {
       // It's a file, return file node
       return {
         name: baseName,
-        path: relativePath,
+        path: relativePath || baseName,
         isDirectory: false,
       };
     }
@@ -356,14 +321,4 @@ export class WorkspaceService {
       children,
     };
   }
-}
-
-/**
- * Factory function to create a workspace service
- */
-export function createWorkspaceService(
-  eventBus: IEventBus,
-  userSettingsRepository: UserSettingsRepository
-): WorkspaceService {
-  return new WorkspaceService(eventBus, userSettingsRepository);
 }

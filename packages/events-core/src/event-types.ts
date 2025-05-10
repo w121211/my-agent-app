@@ -1,3 +1,5 @@
+// File path: packages/events-core/src/event-types.ts
+
 export type TaskStatus =
   | "CREATED"
   | "INITIALIZED"

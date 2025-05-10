@@ -1,17 +1,17 @@
+// File path: packages/events-core/src/services/task-service.ts
+
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
-import { IEventBus } from "./event-bus.js";
-import { TaskRepository } from "./repositories.js";
-import {
-  ClientCreateTaskEvent,
+import type { IEventBus } from "../event-bus.js";
+import type { TaskRepository } from "../repositories.js";
+import type {
   ServerTaskCreatedEvent,
   ServerTaskFolderCreatedEvent,
   ServerTaskConfigFileCreatedEvent,
-  ClientStartTaskEvent,
   ServerTaskInitializedEvent,
   ServerTaskLoadedEvent,
   Task,
-} from "./event-types.js";
+} from "../event-types.js";
 
 export class TaskService {
   private readonly logger: Logger<ILogObj>;
@@ -22,18 +22,11 @@ export class TaskService {
     this.logger = new Logger({ name: "TaskService" });
     this.eventBus = eventBus;
     this.taskRepo = taskRepo;
-
-    this.eventBus.subscribe<ClientCreateTaskEvent>(
-      "ClientCreateTask",
-      this.handleCreateTaskCommand.bind(this)
-    );
-
-    this.eventBus.subscribe<ClientStartTaskEvent>(
-      "ClientStartTask",
-      this.handleStartTaskCommand.bind(this)
-    );
   }
 
+  /**
+   * Creates a new task
+   */
   async createTask(
     taskName: string,
     taskConfig: Record<string, unknown>,
@@ -86,23 +79,14 @@ export class TaskService {
     return { taskId, folderPath };
   }
 
-  private async handleCreateTaskCommand(
-    event: ClientCreateTaskEvent
-  ): Promise<void> {
-    await this.createTask(
-      event.taskName,
-      event.taskConfig,
-      event.correlationId
-    );
-  }
-
-  private async handleStartTaskCommand(
-    event: ClientStartTaskEvent
-  ): Promise<void> {
-    const task = await this.taskRepo.findById(event.taskId);
+  /**
+   * Starts a task
+   */
+  async startTask(taskId: string, correlationId?: string): Promise<Task> {
+    const task = await this.taskRepo.findById(taskId);
 
     if (!task) {
-      throw new Error(`Task ${event.taskId} not found`);
+      throw new Error(`Task ${taskId} not found`);
     }
 
     task.status = "IN_PROGRESS";
@@ -111,18 +95,34 @@ export class TaskService {
 
     await this.eventBus.emit<ServerTaskLoadedEvent>({
       kind: "ServerTaskLoaded",
-      taskId: event.taskId,
+      taskId,
       taskState: task,
       timestamp: new Date(),
-      correlationId: event.correlationId,
+      correlationId,
     });
 
     await this.eventBus.emit<ServerTaskInitializedEvent>({
       kind: "ServerTaskInitialized",
-      taskId: event.taskId,
+      taskId,
       initialState: { status: task.status },
       timestamp: new Date(),
-      correlationId: event.correlationId,
+      correlationId,
     });
+
+    return task;
+  }
+
+  /**
+   * Gets a task by ID
+   */
+  async getTaskById(taskId: string): Promise<Task | undefined> {
+    return this.taskRepo.findById(taskId);
+  }
+
+  /**
+   * Gets all tasks
+   */
+  async getAllTasks(): Promise<Task[]> {
+    return this.taskRepo.findAll();
   }
 }

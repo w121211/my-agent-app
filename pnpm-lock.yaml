@@ -285,6 +285,9 @@ importers:
 
   packages/events-core:
     dependencies:
+      '@trpc/server':
+        specifier: ^11.1.2
+        version: 11.1.2(typescript@5.8.2)
       chokidar:
         specifier: ^4.0.3
         version: 4.0.3
@@ -294,6 +297,9 @@ importers:
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
+      ws:
+        specifier: ^8.18.1
+        version: 8.18.1
       zod:
         specifier: ^3.24.2
         version: 3.24.2
@@ -310,6 +316,9 @@ importers:
       '@types/node':
         specifier: ^22.13.5
         version: 22.13.8
+      '@types/ws':
+        specifier: ^8.5.14
+        version: 8.5.14
       eslint:
         specifier: ^9.21.0
         version: 9.21.0(jiti@2.4.2)
@@ -1268,6 +1277,11 @@ packages:
 
   '@tootallnate/quickjs-emscripten@0.23.0':
     resolution: {integrity: sha512-C5Mc6rdnsaJDjO3UpGW/CQTHtCKaYlScZTly4JIu97Jxo/odCiH0ITnDXSJPTOrEKk/ycSZ0AOgTmkDtkOsvIA==}
+
+  '@trpc/server@11.1.2':
+    resolution: {integrity: sha512-Oi9zWHG0ZDkbDo4sYkduoV7q4sIe6UwjrRLC91vNMYQK+PVgpbTCmK1laRwewAGu0zaayqcGDosANjceOIC3GA==}
+    peerDependencies:
+      typescript: '>=5.7.2'
 
   '@tsconfig/node10@1.0.11':
     resolution: {integrity: sha512-DcRjDCujK/kCk/cUe8Xz8ZSpm8mS3mNNpta+jGCA6USEDfktlNvm1+IuZ9eTcDbNk41BHwpHHeW+N1lKCz4zOw==}
@@ -4967,6 +4981,10 @@ snapshots:
   '@tootallnate/once@2.0.0': {}
 
   '@tootallnate/quickjs-emscripten@0.23.0': {}
+
+  '@trpc/server@11.1.2(typescript@5.8.2)':
+    dependencies:
+      typescript: 5.8.2
 
   '@tsconfig/node10@1.0.11': {}
 

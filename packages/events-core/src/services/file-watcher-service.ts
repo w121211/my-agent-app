@@ -1,15 +1,17 @@
+// File path: packages/events-core/src/services/file-watcher-service.ts
+
 import path from "node:path";
 import chokidar, { FSWatcher, ChokidarOptions } from "chokidar";
 import { Logger, ILogObj } from "tslog";
-import { IEventBus } from "./event-bus.js";
-import {
+import type { IEventBus } from "../event-bus.js";
+import type {
   ChokidarFsEventData,
   ChokidarFsEventKind,
   ServerFileWatcherEvent,
   BaseServerEvent,
   BaseEvent,
-} from "./event-types.js";
-import { ServerRequestUpdateWatchingFolderEvent } from "./workspace-service.js";
+} from "../event-types.js";
+import type { ServerRequestUpdateWatchingFolderEvent } from "./workspace-service.js";
 
 /**
  * Watches for file system changes and emits events

@@ -1,8 +1,10 @@
+// File path: packages/events-core/src/services/chat-file-service.ts
+
 import path from "node:path";
 import fs from "node:fs/promises";
 import { ILogObj, Logger } from "tslog";
-import { IEventBus } from "./event-bus.js";
-import {
+import type { IEventBus } from "../event-bus.js";
+import type {
   Chat,
   ChatMessage,
   ChatMessageMetadata,
@@ -10,14 +12,14 @@ import {
   Role,
   ServerChatFileCreatedEvent,
   ServerChatFileUpdatedEvent,
-} from "./event-types.js";
+} from "../event-types.js";
 import {
   createDirectory,
   fileExists,
   readJsonFile,
   writeJsonFile,
   listDirectory,
-} from "./file-helpers.js";
+} from "../file-helpers.js";
 
 export class ChatFileError extends Error {
   constructor(message: string) {

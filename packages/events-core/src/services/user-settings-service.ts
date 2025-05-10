@@ -1,11 +1,13 @@
+// File path: packages/events-core/src/services/user-settings-service.ts
+
 import { Logger, ILogObj } from "tslog";
-import { IEventBus } from "./event-bus.js";
-import {
+import type { IEventBus } from "../event-bus.js";
+import type { BaseEvent } from "../event-types.js";
+import type {
   UserSettingsRepository,
   UserSettings,
 } from "./user-settings-repository.js";
-import { WorkspaceService } from "./workspace-service.js";
-import { BaseClientEvent, BaseEvent, BaseServerEvent } from "./event-types.js";
+import type { WorkspaceService } from "./workspace-service.js";
 
 // Event type definitions
 export type UserSettingsUpdateType = "WORKSPACE_ADDED" | "WORKSPACE_REMOVED";
