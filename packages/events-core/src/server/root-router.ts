@@ -1,7 +1,6 @@
 // File path: packages/events-core/src/server/root-router.ts
 
 import { ILogObj, Logger } from "tslog";
-// import { router } from "./trpc.js";
 import { router } from "./trpc-server.js";
 import { createServerEventBus } from "../event-bus.js";
 import { TaskRepository } from "../repositories.js";

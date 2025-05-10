@@ -1,5 +1,5 @@
 // File path: packages/events-core/src/server/trpc-server.ts
-// For testing, run this file with `pnpm tsx src/server/trpc-server.ts`
+// For testing, run this file with `pnpm tsx --watch src/server/trpc-server.ts`
 
 import {
   CreateHTTPContextOptions,
@@ -23,11 +23,6 @@ function createContext(
 ) {
   return { logger };
 }
-// function createContext(
-//   opts: CreateHTTPContextOptions | CreateWSSContextFnOptions
-// ) {
-//   return {};
-// }
 type Context = Awaited<ReturnType<typeof createContext>>;
 
 // Initialize tRPC with context
@@ -52,6 +47,8 @@ export const loggerMiddleware = middleware(
       ctx.logger.error(
         `${type} ${path} failed in ${durationMs}ms: ${result.error.message}`
       );
+      // You can also log the error stack if needed
+      ctx.logger.error(result.error.stack);
     }
 
     return result;
@@ -60,51 +57,6 @@ export const loggerMiddleware = middleware(
 
 // Base procedure with logger
 export const loggedProcedure = publicProcedure.use(loggerMiddleware);
-
-// const greetingRouter = router({
-//   hello: publicProcedure
-//     .input(
-//       z.object({
-//         name: z.string(),
-//       })
-//     )
-//     .query(({ input }) => `Hello, ${input.name}!`),
-// });
-
-// const postRouter = router({
-//   createPost: publicProcedure
-//     .input(
-//       z.object({
-//         title: z.string(),
-//         text: z.string(),
-//       })
-//     )
-//     .mutation(({ input }) => {
-//       // imagine db call here
-//       return {
-//         id: `${Math.random()}`,
-//         ...input,
-//       };
-//     }),
-//   randomNumber: publicProcedure.subscription(() => {
-//     return observable<{ randomNumber: number }>((emit) => {
-//       const timer = setInterval(() => {
-//         // emits a number every second
-//         emit.next({ randomNumber: Math.random() });
-//       }, 200);
-
-//       return () => {
-//         clearInterval(timer);
-//       };
-//     });
-//   }),
-// });
-
-// Merge routers together
-// const appRouter = router({
-// greeting: greetingRouter,
-// post: postRouter,
-// });
 
 async function startServer() {
   logger.info("Starting server...");
@@ -137,14 +89,14 @@ async function startServer() {
     });
 
     // Optional: Log connected clients periodically
-    const clientIntervalId = setInterval(() => {
-      logger.debug(`Connected clients: ${wss.clients.size}`);
-    }, 10000);
+    // const clientIntervalId = setInterval(() => {
+    //   logger.debug(`Connected clients: ${wss.clients.size}`);
+    // }, 10000);
 
     // Handle shutdown
     const shutdown = () => {
       logger.info("Shutting down server...");
-      clearInterval(clientIntervalId);
+      // clearInterval(clientIntervalId);
       wssHandler.broadcastReconnectNotification();
       server.close();
       process.exit(0);

@@ -169,6 +169,8 @@ export class ChatFileService {
       filePath,
     };
 
+    this.logger.debug(`Creating new chat: ${fileName}`, newChat);
+
     // Save chat to file asynchronously
     this.saveChatToFile(newChat, filePath)
       .then(() => {
@@ -322,6 +324,8 @@ export class ChatFileService {
     };
 
     await writeJsonFile(filePath, chatFile);
+
+    this.logger.debug(`Saved chat to file: ${filePath}`, chatFile);
   }
 
   /**

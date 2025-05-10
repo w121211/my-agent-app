@@ -52,16 +52,16 @@ export class ChatService {
   ): Promise<Chat> {
     const now = new Date();
 
-    // Create task if requested
-    let taskFolderPath = this.workspacePath;
+    let folderPath = this.workspacePath;
 
+    // Create task if requested
     if (newTask) {
       const result = await this.taskService.createTask(
         "New Chat Task",
         {}, // Default empty config
         correlationId
       );
-      taskFolderPath = result.folderPath;
+      folderPath = result.folderPath;
     }
 
     const chatData: Omit<Chat, "filePath"> = {
@@ -81,7 +81,7 @@ export class ChatService {
     // Create chat object in memory first
     const chat = await this.chatFileService.createChat(
       chatData,
-      taskFolderPath,
+      folderPath,
       correlationId
     );
 
