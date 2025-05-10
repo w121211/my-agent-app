@@ -50,9 +50,5 @@ export function createWorkspaceRouter(workspaceService: WorkspaceService) {
       .mutation(async ({ input }) => {
         return workspaceService.startWatchingAllWorkspaces(input.correlationId);
       }),
-
-    getSettings: loggedProcedure.query(async () => {
-      return workspaceService.getSettings();
-    }),
   });
 }

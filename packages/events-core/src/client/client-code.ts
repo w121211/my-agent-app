@@ -17,6 +17,8 @@ globalThis.WebSocket = WebSocket as any;
 const SERVER_URL = "http://localhost:3000";
 const WS_URL = "ws://localhost:3000";
 
+const workspace2Path = "workspace-2"; // Adjust this path as needed
+
 // Create WebSocket client
 const wsClient = createWSClient({
   url: WS_URL,
@@ -87,26 +89,26 @@ async function main() {
     const allChats = await trpc.chat.getAll.query();
     console.log(`Found ${allChats.length} chats`);
 
-    // 3. Workspace API examples
+    // 3. User Settings API examples
+    console.log("\n--- User Settings API ---");
+    const settings = await trpc.userSettings.getSettings.query();
+    console.log("Current user settings:", settings);
+
+    // 4. Workspace API examples
     console.log("\n--- Workspace API ---");
 
-    // Get settings
-    const settings = await trpc.workspace.getSettings.query();
-    console.log("Current settings:", settings);
-
     // Add a workspace (adjust path as needed)
-    const workspacePath = "/path/to/workspace";
     try {
       const addResult = await trpc.workspace.addWorkspace.mutate({
         command: "addWorkspace",
-        workspacePath,
+        workspacePath: workspace2Path,
       });
       console.log("Add workspace result:", addResult);
     } catch (error) {
       console.error("Failed to add workspace:", error);
     }
 
-    // 4. File operations
+    // 5. File operations
     console.log("\n--- File API ---");
 
     // Get file type
@@ -119,7 +121,7 @@ async function main() {
       console.error("Failed to get file type:", error);
     }
 
-    // 5. Notifications (Subscriptions)
+    // 6. Notifications (Subscriptions)
     console.log("\n--- Notifications API ---");
 
     // Send a test notification

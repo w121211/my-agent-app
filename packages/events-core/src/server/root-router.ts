@@ -11,11 +11,13 @@ import { FileService } from "../services/file-service.js";
 import { UserSettingsRepository } from "../services/user-settings-repository.js";
 import { ChatFileService } from "../services/chat-file-service.js";
 import { FileWatcherService } from "../services/file-watcher-service.js";
+import { createUserSettingsService } from "../services/user-settings-service.js";
 import { createTaskRouter } from "./routers/task-router.js";
 import { createChatRouter } from "./routers/chat-router.js";
 import { createWorkspaceRouter } from "./routers/workspace-router.js";
 import { createFileRouter } from "./routers/file-router.js";
 import { createNotificationRouter } from "./routers/notification-router.js";
+import { createUserSettingsRouter } from "./routers/user-settings-router.js";
 
 export function createAppRouter() {
   // Setup logger
@@ -45,6 +47,13 @@ export function createAppRouter() {
   );
   const fileService = new FileService(eventBus, workspacePath);
 
+  // Create user settings service
+  const userSettingsService = createUserSettingsService(
+    eventBus,
+    userSettingsRepo,
+    workspaceService
+  );
+
   // Initialize file watcher
   const fileWatcher = new FileWatcherService(eventBus);
 
@@ -60,6 +69,7 @@ export function createAppRouter() {
     workspace: createWorkspaceRouter(workspaceService),
     file: createFileRouter(fileService),
     notification: createNotificationRouter(eventBus),
+    userSettings: createUserSettingsRouter(userSettingsService), // Add the new user settings router
   });
 }
 

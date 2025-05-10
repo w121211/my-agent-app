@@ -18,12 +18,23 @@ export async function writeJsonFile<T>(
   filePath: string,
   data: T
 ): Promise<void> {
+  console.debug(`Writing to file: ${filePath}`);
+
   // Create a temporary file path with timestamp for uniqueness
   const tempFilePath = `${filePath}.${Date.now()}.tmp`;
 
   // Write data to the temporary file first
   const content = JSON.stringify(data, null, 2);
   await fs.writeFile(tempFilePath, content, "utf8");
+
+  // Log debug information about other files in the directory
+  try {
+    const dirPath = path.dirname(filePath);
+    const files = await fs.readdir(dirPath);
+    console.debug(`Files in ${dirPath}:`, files);
+  } catch (err) {
+    console.debug(`Unable to list directory ${path.dirname(filePath)}: ${err}`);
+  }
 
   // Atomically rename the temporary file to the target file
   await fs.rename(tempFilePath, filePath);

@@ -171,23 +171,17 @@ export class ChatFileService {
 
     this.logger.debug(`Creating new chat: ${fileName}`, newChat);
 
-    // Save chat to file asynchronously
-    this.saveChatToFile(newChat, filePath)
-      .then(() => {
-        // Emit file created event after the file is written
-        if (this.eventBus) {
-          this.eventBus.emit<ServerChatFileCreatedEvent>({
-            kind: "ServerChatFileCreated",
-            chatId: newChat.id,
-            filePath: newChat.filePath,
-            timestamp: new Date(),
-            correlationId,
-          });
-        }
-      })
-      .catch((error) => {
-        this.logger.error(`Failed to save chat file: ${filePath}`, error);
-      });
+    // Save chat to file synchronously
+    await this.saveChatToFile(newChat, filePath);
+
+    // Emit file created event after the file is written
+    await this.eventBus.emit<ServerChatFileCreatedEvent>({
+      kind: "ServerChatFileCreated",
+      chatId: newChat.id,
+      filePath: newChat.filePath,
+      timestamp: new Date(),
+      correlationId,
+    });
 
     // Cache the chat immediately
     this.chatCache.set(filePath, newChat);
@@ -303,10 +297,32 @@ export class ChatFileService {
   /**
    * Resolve a relative path to an absolute path
    */
+  // private resolvePath(relativePath: string): string {
+  //   return path.isAbsolute(relativePath)
+  //     ? relativePath
+  //     : path.join(this.workspacePath, relativePath);
+  // }
   private resolvePath(relativePath: string): string {
-    return path.isAbsolute(relativePath)
-      ? relativePath
-      : path.join(this.workspacePath, relativePath);
+    // If path is absolute, return as is
+    if (path.isAbsolute(relativePath)) {
+      return relativePath;
+    }
+
+    // Use path.normalize to handle path separators consistently
+    const normalizedRelative = path.normalize(relativePath);
+    const normalizedWorkspace = path.normalize(this.workspacePath);
+
+    // Check if the path already contains the workspace path as a proper directory prefix
+    // by ensuring it's followed by a path separator or is exactly equal
+    if (
+      normalizedRelative === normalizedWorkspace ||
+      normalizedRelative.startsWith(normalizedWorkspace + path.sep)
+    ) {
+      return relativePath;
+    }
+
+    // Otherwise, join with workspace path
+    return path.join(this.workspacePath, relativePath);
   }
 
   /**
@@ -322,6 +338,7 @@ export class ChatFileService {
       metadata: chat.metadata,
       messages: chat.messages,
     };
+    this.logger.debug(`Saving chat to file: ${filePath}`, chatFile);
 
     await writeJsonFile(filePath, chatFile);
 

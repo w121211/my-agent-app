@@ -4,15 +4,9 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { Logger, ILogObj } from "tslog";
 import type { IEventBus } from "../event-bus.js";
+import type { FolderTreeNode, BaseEvent } from "../event-types.js";
 import type { UserSettingsRepository } from "./user-settings-repository.js";
 import type { ServerUserSettingsUpdatedEvent } from "./user-settings-service.js";
-import type {
-  FolderTreeNode,
-  // ServerRequestUpdateWatchingFolderEvent,
-  // ServerUserSettingsUpdatedEvent,
-  // UserSettings,
-  BaseEvent,
-} from "../event-types.js";
 
 // Event for workspace validation results
 export interface ServerWorkspaceValidatedEvent extends BaseEvent {
@@ -113,13 +107,6 @@ export class WorkspaceService {
   }
 
   /**
-   * Get user settings
-   */
-  // public async getSettings(): Promise<UserSettings> {
-  //   return this.userSettingsRepository.getSettings();
-  // }
-
-  /**
    * Add a workspace
    */
   public async addWorkspace(
@@ -175,6 +162,9 @@ export class WorkspaceService {
     });
 
     this.logger.info(`Workspace added successfully: ${workspacePath}`);
+    this.logger.debug(
+      `Workspace added: ${workspacePath}, current workspaces: ${settings.workspaces.join(", ")}`
+    );
     return { success: true };
   }
 
