@@ -12,7 +12,7 @@ import {
 import { initTRPC } from "@trpc/server";
 import { Logger } from "tslog";
 import { WebSocketServer } from "ws";
-// import { createAppRouter } from "./root-router.js";
+import { createAppRouter } from "./root-router.js";
 
 const logger = new Logger({ name: "Server" });
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
@@ -101,16 +101,16 @@ export const loggedProcedure = publicProcedure.use(loggerMiddleware);
 // });
 
 // Merge routers together
-const appRouter = router({
-  // greeting: greetingRouter,
-  // post: postRouter,
-});
+// const appRouter = router({
+// greeting: greetingRouter,
+// post: postRouter,
+// });
 
 async function startServer() {
   logger.info("Starting server...");
 
   try {
-    // const appRouter = createAppRouter();
+    const appRouter = createAppRouter();
 
     // Create HTTP server with tRPC handler
     const server = createHTTPServer({
