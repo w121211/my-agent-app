@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/server/routers/task-router.ts
-
+// packages/events-core/src/server/routers/task-router.ts
 import { router, loggedProcedure } from "../trpc-server.js";
 import { createTaskSchema, taskIdSchema } from "../schemas.js";
 import { TaskService } from "../../services/task-service.js";

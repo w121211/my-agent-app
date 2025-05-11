@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/server/routers/chat-router.ts
-
+// packages/events-core/src/server/routers/chat-router.ts
 import { router, loggedProcedure } from "../trpc-server.js";
 import {
   createNewChatSchema,

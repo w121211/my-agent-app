@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/repositories.ts
-
+// packages/events-core/src/repositories.ts
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ILogObj, Logger } from "tslog";

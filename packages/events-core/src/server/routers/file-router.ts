@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/server/routers/file-router.ts
-
+// packages/events-core/src/server/routers/file-router.ts
 import { router, loggedProcedure } from "../trpc-server.js";
 import { openFileSchema } from "../schemas.js";
 import { FileService } from "../../services/file-service.js";

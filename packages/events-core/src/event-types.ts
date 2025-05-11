@@ -1,4 +1,5 @@
-// File path: packages/events-core/src/event-types.ts
+// packages/events-core/src/event-types.ts
+import type { ProjectFolder } from "./services/user-settings-repository.js";
 
 export type TaskStatus =
   | "CREATED"
@@ -24,10 +25,17 @@ export type ChatUpdateType =
  */
 export type FolderTreeNode = {
   name: string;
-  path: string;
+  path: string; // Absolute path
   isDirectory: boolean;
   children?: FolderTreeNode[];
 };
+
+/**
+ * Project folder operations
+ */
+export type ProjectFolderUpdateType =
+  | "PROJECT_FOLDER_ADDED"
+  | "PROJECT_FOLDER_REMOVED";
 
 /**
  * Events originating from clients
@@ -54,6 +62,10 @@ export const ClientEventKind = [
   "ClientRequestWorkspaceFolderTree",
   "ClientOpenFile",
   "ClientOpenChatFile",
+
+  // Project folder related
+  "ClientUpdateProjectFolder",
+  "ClientRequestStartWatchingAllProjectFolders",
 
   // Client test events
   "ClientTestPing",
@@ -100,6 +112,11 @@ export const ServerEventKind = [
   "ServerChatFileLoaded",
   "ServerNonChatFileOpened",
   "ServerArtifactFileCreated",
+
+  // Project folder related
+  "ServerProjectFolderUpdated",
+  "ServerProjectFolderValidated",
+  "ServerRequestUpdateWatchingFolder",
 
   // System related
   "ServerFileWatcherEvent",
@@ -325,6 +342,19 @@ export interface ClientRequestWorkspaceFolderTreeEvent extends BaseClientEvent {
   workspacePath?: string;
 }
 
+// Project folder related client events
+export interface ClientUpdateProjectFolderEvent extends BaseClientEvent {
+  kind: "ClientUpdateProjectFolder";
+  type: ProjectFolderUpdateType;
+  projectFolderPath?: string;
+  projectFolderId?: string;
+}
+
+export interface ClientRequestStartWatchingAllProjectFoldersEvent
+  extends BaseClientEvent {
+  kind: "ClientRequestStartWatchingAllProjectFolders";
+}
+
 export interface ClientTestPingEvent extends BaseClientEvent {
   kind: "ClientTestPing";
   message: string;
@@ -510,6 +540,26 @@ export interface ServerArtifactFileCreatedEvent extends BaseServerEvent {
   fileType: string;
 }
 
+// Project folder related server events
+export interface ServerProjectFolderUpdatedEvent extends BaseServerEvent {
+  kind: "ServerProjectFolderUpdated";
+  projectFolders: ProjectFolder[];
+  changeType: ProjectFolderUpdateType;
+}
+
+export interface ServerProjectFolderValidatedEvent extends BaseServerEvent {
+  kind: "ServerProjectFolderValidated";
+  projectFolderPath: string;
+  isValid: boolean;
+  validationMessage?: string;
+}
+
+export interface ServerRequestUpdateWatchingFolderEvent extends BaseEvent {
+  kind: "ServerRequestUpdateWatchingFolder";
+  folderPath: string;
+  action: "add" | "remove";
+}
+
 export type ChokidarFsEventKind =
   | "add"
   | "addDir"
@@ -562,6 +612,8 @@ export type ClientEventUnion =
   | ClientOpenFileEvent
   | ClientOpenChatFileEvent
   | ClientRequestWorkspaceFolderTreeEvent
+  | ClientUpdateProjectFolderEvent
+  | ClientRequestStartWatchingAllProjectFoldersEvent
   | ClientTestPingEvent;
 
 export type ServerEventUnion =
@@ -593,6 +645,9 @@ export type ServerEventUnion =
   | ServerArtifactFileCreatedEvent
   | ServerFileWatcherEvent
   | ServerWorkspaceFolderTreeResponsedEvent
+  | ServerProjectFolderUpdatedEvent
+  | ServerProjectFolderValidatedEvent
+  | ServerRequestUpdateWatchingFolderEvent
   | ServerTestPingEvent;
 
 // Combined event union
@@ -642,6 +697,8 @@ export function isCommandEvent(event: BaseEvent): boolean {
     "ClientApproveWork",
     "ClientOpenFile",
     "ClientOpenChatFile",
+    "ClientUpdateProjectFolder",
+    "ClientRequestStartWatchingAllProjectFolders",
   ];
 
   return clientCommandEvents.includes(event.kind as string);

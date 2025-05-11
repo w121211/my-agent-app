@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/server/schemas.ts
-
+// packages/events-core/src/server/schemas.ts
 import { z } from "zod";
 
 // Task schemas
@@ -49,18 +48,35 @@ export const openFileSchema = z.object({
   correlationId: z.string().optional(),
 });
 
-// Workspace schemas
+// Project folder schemas
 export const folderTreeRequestSchema = z.object({
-  workspacePath: z.string().optional(),
+  projectFolderPath: z.string().optional(),
   correlationId: z.string().optional(),
 });
 
-export const workspaceUpdateSchema = z.object({
-  command: z.enum(["addWorkspace", "removeWorkspace"]),
-  workspacePath: z.string(),
-  correlationId: z.string().optional(),
-});
+export const projectFolderUpdateSchema = z
+  .object({
+    command: z.enum(["addProjectFolder", "removeProjectFolder"]),
+    projectFolderPath: z.string().optional(),
+    projectFolderId: z.string().optional(),
+    correlationId: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.command === "addProjectFolder" && !data.projectFolderPath) {
+        return false;
+      }
+      if (data.command === "removeProjectFolder" && !data.projectFolderId) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        "projectFolderPath required for addProjectFolder, projectFolderId required for removeProjectFolder",
+    }
+  );
 
-export const startWatchingAllWorkspacesSchema = z.object({
+export const startWatchingAllProjectFoldersSchema = z.object({
   correlationId: z.string().optional(),
 });

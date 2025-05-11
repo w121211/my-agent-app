@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/server/routers/notification-router.ts
-
+// packages/events-core/src/server/routers/notification-router.ts
 import { observable } from "@trpc/server/observable";
 import { z } from "zod";
 import { router, loggedProcedure } from "../trpc-server.js";

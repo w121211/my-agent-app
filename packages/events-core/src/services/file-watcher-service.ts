@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/services/file-watcher-service.ts
-
+// packages/events-core/src/services/file-watcher-service.ts
 import path from "node:path";
 import chokidar, { FSWatcher, ChokidarOptions } from "chokidar";
 import { Logger, ILogObj } from "tslog";
@@ -11,7 +10,15 @@ import type {
   BaseServerEvent,
   BaseEvent,
 } from "../event-types.js";
-import type { ServerRequestUpdateWatchingFolderEvent } from "./workspace-service.js";
+
+/**
+ * Event for project folder file watching updates
+ */
+export interface ServerRequestUpdateWatchingFolderEvent extends BaseEvent {
+  kind: "ServerRequestUpdateWatchingFolder";
+  folderPath: string; // Absolute path
+  action: "add" | "remove";
+}
 
 /**
  * Watches for file system changes and emits events
@@ -60,12 +67,12 @@ export class FileWatcherService {
   private async handleUpdateWatchingFolder(
     event: ServerRequestUpdateWatchingFolderEvent
   ): Promise<void> {
-    const { workspacePath, action } = event;
+    const { folderPath, action } = event;
 
     if (action === "add") {
-      await this.startWatchingFolder(workspacePath);
+      await this.startWatchingFolder(folderPath);
     } else if (action === "remove") {
-      await this.stopWatchingFolder(workspacePath);
+      await this.stopWatchingFolder(folderPath);
     }
   }
 
@@ -140,17 +147,21 @@ export class FileWatcherService {
     isDirectory: boolean,
     error?: Error
   ): void {
+    // Always use absolute paths in the event data
+    const absolutePath = path.isAbsolute(filePath)
+      ? filePath
+      : path.join(basePath, filePath);
     const relativePath = filePath ? path.relative(basePath, filePath) : "";
 
     const fsEventData: ChokidarFsEventData = {
       fsEventKind,
-      srcPath: relativePath,
+      srcPath: absolutePath, // Use absolute path
       isDirectory,
       error,
     };
 
     this.logger.debug(
-      `Chokidar fs event: ${fsEventKind} - ${relativePath} (${isDirectory ? "directory" : "file"})`
+      `Chokidar fs event: ${fsEventKind} - ${absolutePath} (${isDirectory ? "directory" : "file"})`
     );
 
     this.eventBus
@@ -205,17 +216,4 @@ export class FileWatcherService {
   public getWatchedFolders(): string[] {
     return Array.from(this.watchers.keys());
   }
-}
-
-/**
- * Factory function to create a file watcher service
- */
-export function createFileWatcherService(
-  eventBus: IEventBus,
-  options: ChokidarOptions = {}
-): FileWatcherService {
-  const logger = new Logger({ name: "FileWatcherServiceFactory" });
-  logger.info("Creating file watcher service");
-
-  return new FileWatcherService(eventBus, options);
 }

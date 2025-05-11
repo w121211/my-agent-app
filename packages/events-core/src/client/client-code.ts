@@ -1,4 +1,4 @@
-// File path: packages/events-core/src/client/client-code.ts
+// packages/events-core/src/client/client-code.ts
 // Run this code with `pnpm tsx src/client/client-code.ts`
 import {
   createTRPCClient,

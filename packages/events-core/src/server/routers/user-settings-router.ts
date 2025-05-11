@@ -1,9 +1,7 @@
-// File path: packages/events-core/src/server/routers/user-settings-router.ts
-
+// packages/events-core/src/server/routers/user-settings-router.ts
 import { router, loggedProcedure } from "../trpc-server.js";
 import { z } from "zod";
 import { UserSettingsService } from "../../services/user-settings-service.js";
-import { workspaceUpdateSchema } from "../schemas.js";
 
 export function createUserSettingsRouter(
   userSettingsService: UserSettingsService

@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/services/chat-service.ts
-
+// packages/events-core/src/services/chat-service.ts
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 import type { IEventBus } from "../event-bus.js";

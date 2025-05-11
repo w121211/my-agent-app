@@ -1,33 +1,31 @@
-// File path: packages/events-core/src/services/file-service.ts
-
+// packages/events-core/src/services/file-service.ts
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ILogObj, Logger } from "tslog";
 import type { IEventBus } from "../event-bus.js";
 import type { ServerFileOpenedEvent } from "../event-types.js";
 import { fileExists } from "../file-helpers.js";
+import type { WorkspacePathService } from "./workspace-path-service.js";
 
 export interface FileContent {
   content: string;
   fileType: string;
   filePath: string;
+  workspacePath?: string;
   isBase64?: boolean;
 }
 
 export class FileService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
-  private readonly workspacePath: string;
+  private readonly pathService: WorkspacePathService;
 
-  constructor(eventBus: IEventBus, workspacePath: string) {
+  constructor(eventBus: IEventBus, pathService: WorkspacePathService) {
     this.logger = new Logger({ name: "FileService" });
     this.eventBus = eventBus;
-    this.workspacePath = workspacePath;
+    this.pathService = pathService;
   }
 
-  /**
-   * Open a file and return its content
-   */
   async openFile(
     filePath: string,
     correlationId?: string
@@ -58,17 +56,22 @@ export class FileService {
       content = await fs.readFile(fullPath, "utf8");
     }
 
+    // Resolve workspace path info
+    const workspacePath = this.pathService.resolveToWorkspacePath(fullPath);
+    const displayPath = workspacePath ? workspacePath.displayPath : filePath;
+
     const fileContent: FileContent = {
       content,
       fileType,
-      filePath,
+      filePath: displayPath,
+      workspacePath: workspacePath?.workspace,
       isBase64,
     };
 
     // Emit file opened event
     await this.eventBus.emit<ServerFileOpenedEvent>({
       kind: "ServerFileOpened",
-      filePath,
+      filePath: displayPath,
       content,
       fileType,
       timestamp: new Date(),
@@ -78,9 +81,6 @@ export class FileService {
     return fileContent;
   }
 
-  /**
-   * Get file type based on extension
-   */
   getFileType(filePath: string): string {
     const extension = path.extname(filePath).toLowerCase();
 
@@ -119,20 +119,12 @@ export class FileService {
     return fileTypeMap[extension] || "unknown";
   }
 
-  /**
-   * Check if file type is binary
-   */
   private isBinaryFile(fileType: string): boolean {
     const binaryTypes = ["image", "pdf", "archive"];
     return binaryTypes.includes(fileType);
   }
 
-  /**
-   * Resolve a path to an absolute path
-   */
-  private resolvePath(relativePath: string): string {
-    return path.isAbsolute(relativePath)
-      ? relativePath
-      : path.join(this.workspacePath, relativePath);
+  private resolvePath(filePath: string): string {
+    return this.pathService.resolveToAbsolutePath(filePath);
   }
 }

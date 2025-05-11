@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/services/user-settings-service.ts
-
+// packages/events-core/src/services/user-settings-service.ts
 import { Logger, ILogObj } from "tslog";
 import type { IEventBus } from "../event-bus.js";
 import type { BaseEvent } from "../event-types.js";
@@ -7,15 +6,18 @@ import type {
   UserSettingsRepository,
   UserSettings,
 } from "./user-settings-repository.js";
-import type { WorkspaceService } from "./workspace-service.js";
+import type { ProjectFolderService } from "./project-folder-service.js";
 
 // Event type definitions
-export type UserSettingsUpdateType = "WORKSPACE_ADDED" | "WORKSPACE_REMOVED";
+export type UserSettingsUpdateType =
+  | "PROJECT_FOLDER_ADDED"
+  | "PROJECT_FOLDER_REMOVED";
 
 export interface ClientUpdateUserSettingsEvent extends BaseEvent {
   kind: "ClientUpdateUserSettings";
   type: UserSettingsUpdateType;
-  workspacePath?: string;
+  projectFolderPath?: string;
+  projectFolderId?: string;
 }
 
 export interface ServerUserSettingsUpdatedEvent extends BaseEvent {
@@ -31,17 +33,17 @@ export class UserSettingsService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
   private readonly userSettingsRepository: UserSettingsRepository;
-  private readonly workspaceService: WorkspaceService;
+  private readonly projectFolderService: ProjectFolderService;
 
   constructor(
     eventBus: IEventBus,
     userSettingsRepository: UserSettingsRepository,
-    workspaceService: WorkspaceService
+    projectFolderService: ProjectFolderService
   ) {
     this.logger = new Logger({ name: "UserSettingsService" });
     this.eventBus = eventBus;
     this.userSettingsRepository = userSettingsRepository;
-    this.workspaceService = workspaceService;
+    this.projectFolderService = projectFolderService;
 
     // Subscribe to user settings events
     this.eventBus.subscribe<ClientUpdateUserSettingsEvent>(
@@ -58,25 +60,29 @@ export class UserSettingsService {
   ): Promise<void> {
     this.logger.info(`Handling user settings update: ${event.type}`);
 
-    if (
-      !event.workspacePath &&
-      (event.type === "WORKSPACE_ADDED" || event.type === "WORKSPACE_REMOVED")
-    ) {
-      this.logger.error("Workspace path is required for workspace updates");
-      return;
-    }
-
     try {
       switch (event.type) {
-        case "WORKSPACE_ADDED":
-          await this.workspaceService.addWorkspace(
-            event.workspacePath!,
+        case "PROJECT_FOLDER_ADDED":
+          if (!event.projectFolderPath) {
+            this.logger.error(
+              "Project folder path is required for add operation"
+            );
+            return;
+          }
+          await this.projectFolderService.addProjectFolder(
+            event.projectFolderPath,
             event.correlationId
           );
           break;
-        case "WORKSPACE_REMOVED":
-          await this.workspaceService.removeWorkspace(
-            event.workspacePath!,
+        case "PROJECT_FOLDER_REMOVED":
+          if (!event.projectFolderId) {
+            this.logger.error(
+              "Project folder ID is required for remove operation"
+            );
+            return;
+          }
+          await this.projectFolderService.removeProjectFolder(
+            event.projectFolderId,
             event.correlationId
           );
           break;
@@ -84,18 +90,6 @@ export class UserSettingsService {
           this.logger.warn(`Unknown settings update type: ${event.type}`);
           return;
       }
-
-      // Get current settings after workspace operation
-      const settings = await this.userSettingsRepository.getSettings();
-
-      // Emit settings updated event
-      await this.eventBus.emit<ServerUserSettingsUpdatedEvent>({
-        kind: "ServerUserSettingsUpdated",
-        timestamp: new Date(),
-        correlationId: event.correlationId,
-        settings,
-        changeType: event.type,
-      });
     } catch (error) {
       this.logger.error(`Error handling user settings update: ${error}`);
     }
@@ -115,11 +109,11 @@ export class UserSettingsService {
 export function createUserSettingsService(
   eventBus: IEventBus,
   userSettingsRepository: UserSettingsRepository,
-  workspaceService: WorkspaceService
+  projectFolderService: ProjectFolderService
 ): UserSettingsService {
   return new UserSettingsService(
     eventBus,
     userSettingsRepository,
-    workspaceService
+    projectFolderService
   );
 }

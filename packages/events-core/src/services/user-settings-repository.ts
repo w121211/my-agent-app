@@ -1,14 +1,28 @@
-// File path: packages/events-core/src/services/user-settings-repository.ts
-
+// packages/events-core/src/services/user-settings-repository.ts
 import path from "node:path";
+import os from "node:os";
 import { Logger, ILogObj } from "tslog";
-import { fileExists, readJsonFile, writeJsonFile } from "../file-helpers.js";
+import {
+  fileExists,
+  readJsonFile,
+  writeJsonFile,
+  createDirectory,
+} from "../file-helpers.js";
+
+/**
+ * Interface for a project folder
+ */
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  path: string;
+}
 
 /**
  * Interface for user settings
  */
 export interface UserSettings {
-  workspaces: string[];
+  projectFolders: ProjectFolder[];
   // Additional settings can be added in the future
 }
 
@@ -16,7 +30,7 @@ export interface UserSettings {
  * Default user settings
  */
 export const DEFAULT_USER_SETTINGS: UserSettings = {
-  workspaces: [],
+  projectFolders: [],
 };
 
 /**
@@ -77,9 +91,15 @@ export class UserSettingsRepository {
  * Factory function to create a user settings repository
  */
 export function createUserSettingsRepository(
-  baseDir: string,
-  fileName: string = "userSettings.json"
+  appName: string = "app"
 ): UserSettingsRepository {
-  const filePath = path.join(baseDir, fileName);
+  // Use user's home directory
+  const homeDir = os.homedir();
+  const appDir = path.join(homeDir, `.${appName}`);
+
+  // Ensure app directory exists
+  createDirectory(appDir);
+
+  const filePath = path.join(appDir, "userSettings.json");
   return new UserSettingsRepository(filePath);
 }

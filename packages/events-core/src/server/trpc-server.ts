@@ -1,6 +1,5 @@
-// File path: packages/events-core/src/server/trpc-server.ts
+// packages/events-core/src/server/trpc-server.ts
 // For testing, run this file with `pnpm tsx --watch src/server/trpc-server.ts`
-
 import {
   CreateHTTPContextOptions,
   createHTTPServer,

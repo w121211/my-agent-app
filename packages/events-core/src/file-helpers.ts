@@ -1,5 +1,4 @@
-// File path: packages/events-core/src/file-helpers.ts
-
+// packages/events-core/src/file-helpers.ts
 import fs from "node:fs/promises";
 import path from "node:path";
 
