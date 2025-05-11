@@ -1,9 +1,9 @@
 // packages/events-core/src/server/routers/notification-router.ts
 import { observable } from "@trpc/server/observable";
 import { z } from "zod";
-import { router, loggedProcedure } from "../trpc-server.js";
 import { IEventBus } from "../../event-bus.js";
 import { BaseServerEvent } from "../../event-types.js";
+import { router, loggedProcedure } from "../trpc-server.js";
 
 export function createNotificationRouter(eventBus: IEventBus) {
   return router({

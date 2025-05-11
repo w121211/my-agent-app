@@ -7,7 +7,7 @@ import { TaskService } from "../services/task-service.js";
 import { ChatService } from "../services/chat-service.js";
 import { FileService } from "../services/file-service.js";
 import { createUserSettingsRepository } from "../services/user-settings-repository.js";
-import { ChatFileService } from "../services/chat-file-service.js";
+import { ChatRepository } from "../services/chat-repository.js";
 import { FileWatcherService } from "../services/file-watcher-service.js";
 import { createUserSettingsService } from "../services/user-settings-service.js";
 import { createProjectFolderService } from "../services/project-folder-service.js";
@@ -40,14 +40,13 @@ export function createAppRouter() {
     userSettingsRepo
   );
   const taskService = new TaskService(eventBus, taskRepo);
-  const chatFileService = new ChatFileService("", eventBus); // Default blank path
-  const chatService = new ChatService(
-    eventBus,
-    chatFileService,
-    "", // Default blank path
-    taskService
-  );
-  const fileService = new FileService(eventBus, ""); // Default blank path
+
+  // Using ChatRepository instead of ChatFileService
+  const chatRepository = new ChatRepository(eventBus);
+  const chatService = new ChatService(eventBus, chatRepository, taskService);
+
+  // Updated FileService that doesn't need WorkspacePathService
+  const fileService = new FileService(eventBus);
 
   // Create user settings service
   const userSettingsService = createUserSettingsService(

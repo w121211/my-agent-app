@@ -1,11 +1,40 @@
 // packages/events-core/src/server/routers/project-folder-router.ts
+import { z } from "zod";
 import { router, loggedProcedure } from "../trpc-server.js";
-import {
-  folderTreeRequestSchema,
-  projectFolderUpdateSchema,
-  startWatchingAllProjectFoldersSchema,
-} from "../schemas.js";
 import { ProjectFolderService } from "../../services/project-folder-service.js";
+
+// Project folder schemas
+export const folderTreeRequestSchema = z.object({
+  projectFolderPath: z.string().optional(),
+  correlationId: z.string().optional(),
+});
+
+export const projectFolderUpdateSchema = z
+  .object({
+    command: z.enum(["addProjectFolder", "removeProjectFolder"]),
+    projectFolderPath: z.string().optional(),
+    projectFolderId: z.string().optional(),
+    correlationId: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.command === "addProjectFolder" && !data.projectFolderPath) {
+        return false;
+      }
+      if (data.command === "removeProjectFolder" && !data.projectFolderId) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message:
+        "projectFolderPath required for addProjectFolder, projectFolderId required for removeProjectFolder",
+    }
+  );
+
+export const startWatchingAllProjectFoldersSchema = z.object({
+  correlationId: z.string().optional(),
+});
 
 export function createProjectFolderRouter(
   projectFolderService: ProjectFolderService

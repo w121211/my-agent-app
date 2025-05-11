@@ -44,55 +44,6 @@ export class UserSettingsService {
     this.eventBus = eventBus;
     this.userSettingsRepository = userSettingsRepository;
     this.projectFolderService = projectFolderService;
-
-    // Subscribe to user settings events
-    this.eventBus.subscribe<ClientUpdateUserSettingsEvent>(
-      "ClientUpdateUserSettings",
-      this.handleUserSettingsUpdate.bind(this)
-    );
-  }
-
-  /**
-   * Handle user settings update events
-   */
-  private async handleUserSettingsUpdate(
-    event: ClientUpdateUserSettingsEvent
-  ): Promise<void> {
-    this.logger.info(`Handling user settings update: ${event.type}`);
-
-    try {
-      switch (event.type) {
-        case "PROJECT_FOLDER_ADDED":
-          if (!event.projectFolderPath) {
-            this.logger.error(
-              "Project folder path is required for add operation"
-            );
-            return;
-          }
-          await this.projectFolderService.addProjectFolder(
-            event.projectFolderPath,
-            event.correlationId
-          );
-          break;
-        case "PROJECT_FOLDER_REMOVED":
-          if (!event.projectFolderId) {
-            this.logger.error(
-              "Project folder ID is required for remove operation"
-            );
-            return;
-          }
-          await this.projectFolderService.removeProjectFolder(
-            event.projectFolderId,
-            event.correlationId
-          );
-          break;
-        default:
-          this.logger.warn(`Unknown settings update type: ${event.type}`);
-          return;
-      }
-    } catch (error) {
-      this.logger.error(`Error handling user settings update: ${error}`);
-    }
   }
 
   /**
@@ -100,6 +51,51 @@ export class UserSettingsService {
    */
   public async getUserSettings(): Promise<UserSettings> {
     return this.userSettingsRepository.getSettings();
+  }
+
+  /**
+   * Update user settings
+   */
+  public async updateUserSettings(
+    settingsUpdate: Record<string, unknown>,
+    correlationId?: string
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      this.logger.info("Updating user settings");
+
+      // Get current settings
+      const currentSettings = await this.userSettingsRepository.getSettings();
+
+      // Create updated settings by merging with current settings
+      const updatedSettings: UserSettings = { ...currentSettings };
+
+      // Update settings fields
+      // Note: projectFolders should be updated through the ProjectFolderService,
+      // so we'll ignore that field here
+      if (settingsUpdate.projectFolders !== undefined) {
+        this.logger.warn(
+          "Attempting to update projectFolders directly. This should be done through ProjectFolderService."
+        );
+      }
+      Object.keys(settingsUpdate).forEach((key) => {
+        if (key !== "projectFolders") {
+          // For now, just update any fields other than projectFolders directly
+          (updatedSettings as any)[key] = settingsUpdate[key];
+        }
+      });
+
+      // Save updated settings
+      await this.userSettingsRepository.saveSettings(updatedSettings);
+
+      this.logger.info("User settings updated successfully");
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Error updating user settings: ${error}`);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 }
 

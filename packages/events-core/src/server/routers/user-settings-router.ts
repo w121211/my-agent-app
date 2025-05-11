@@ -1,7 +1,7 @@
 // packages/events-core/src/server/routers/user-settings-router.ts
-import { router, loggedProcedure } from "../trpc-server.js";
 import { z } from "zod";
 import { UserSettingsService } from "../../services/user-settings-service.js";
+import { router, loggedProcedure } from "../trpc-server.js";
 
 export function createUserSettingsRouter(
   userSettingsService: UserSettingsService
@@ -21,12 +21,10 @@ export function createUserSettingsRouter(
         })
       )
       .mutation(async ({ input }) => {
-        // This would need implementation in the UserSettingsService
-        // For now we'll return a not implemented response
-        return {
-          success: false,
-          message: "Direct settings update not implemented yet",
-        };
+        return userSettingsService.updateUserSettings(
+          input.settings,
+          input.correlationId
+        );
       }),
   });
 }

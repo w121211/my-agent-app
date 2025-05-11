@@ -1,12 +1,38 @@
 // packages/events-core/src/server/routers/chat-router.ts
-import { router, loggedProcedure } from "../trpc-server.js";
-import {
-  createNewChatSchema,
-  submitMessageSchema,
-  chatIdSchema,
-  openFileSchema,
-} from "../schemas.js";
+import { z } from "zod";
 import { ChatService } from "../../services/chat-service.js";
+import { router, loggedProcedure } from "../trpc-server.js";
+import { openFileSchema } from "./file-router.js";
+
+// Chat schemas
+export const createNewChatSchema = z.object({
+  targetDirectoryAbsolutePath: z.string(),
+  newTask: z.boolean().default(false),
+  mode: z.enum(["chat", "agent"]).default("chat"),
+  knowledge: z.array(z.string()).default([]),
+  prompt: z.string().optional(),
+  model: z.string().default("default"),
+  correlationId: z.string().optional(),
+});
+
+export const submitMessageSchema = z.object({
+  chatId: z.string().uuid(),
+  message: z.string(),
+  attachments: z
+    .array(
+      z.object({
+        fileName: z.string(),
+        content: z.string(),
+      })
+    )
+    .optional(),
+  correlationId: z.string().optional(),
+});
+
+export const chatIdSchema = z.object({
+  chatId: z.string().uuid(),
+  correlationId: z.string().optional(),
+});
 
 export function createChatRouter(chatService: ChatService) {
   return router({
@@ -14,6 +40,7 @@ export function createChatRouter(chatService: ChatService) {
       .input(createNewChatSchema)
       .mutation(async ({ input }) => {
         return chatService.createChat(
+          input.targetDirectoryAbsolutePath,
           input.newTask,
           input.mode,
           input.knowledge,

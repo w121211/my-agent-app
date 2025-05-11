@@ -2,7 +2,7 @@
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 import type { IEventBus } from "../event-bus.js";
-import type { ChatFileService } from "./chat-file-service.js";
+import type { ChatRepository } from "./chat-repository.js";
 import type { TaskService } from "./task-service.js";
 import type {
   Chat,
@@ -21,27 +21,26 @@ import type {
 export class ChatService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
-  private readonly chatFileService: ChatFileService;
-  private readonly workspacePath: string;
+  private readonly chatRepository: ChatRepository;
   private readonly taskService: TaskService;
 
   constructor(
     eventBus: IEventBus,
-    chatFileService: ChatFileService,
-    workspacePath: string,
+    chatRepository: ChatRepository,
     taskService: TaskService
   ) {
     this.logger = new Logger({ name: "ChatService" });
     this.eventBus = eventBus;
-    this.chatFileService = chatFileService;
-    this.workspacePath = workspacePath;
+    this.chatRepository = chatRepository;
     this.taskService = taskService;
   }
 
   /**
    * Creates a new chat
+   * @param targetDirectoryAbsolutePath Absolute path to directory where chat file will be created
    */
   async createChat(
+    targetDirectoryAbsolutePath: string,
     newTask: boolean,
     mode: ChatMode,
     knowledge: string[],
@@ -50,8 +49,7 @@ export class ChatService {
     correlationId?: string
   ): Promise<Chat> {
     const now = new Date();
-
-    let folderPath = this.workspacePath;
+    let folderPath = targetDirectoryAbsolutePath;
 
     // Create task if requested
     if (newTask) {
@@ -77,8 +75,8 @@ export class ChatService {
       },
     };
 
-    // Create chat object in memory first
-    const chat = await this.chatFileService.createChat(
+    // Create chat object using repository
+    const chat = await this.chatRepository.createChat(
       chatData,
       folderPath,
       correlationId
@@ -103,14 +101,14 @@ export class ChatService {
       };
 
       // Add message to chat
-      await this.chatFileService.addMessage(
+      await this.chatRepository.addMessage(
         chat.filePath,
         message,
         correlationId
       );
 
       // Get updated chat after adding message
-      const updatedChat = await this.chatFileService.findByPath(chat.filePath);
+      const updatedChat = await this.chatRepository.findByPath(chat.filePath);
       await this.processUserMessage(updatedChat, message, correlationId);
       return updatedChat;
     }
@@ -128,7 +126,7 @@ export class ChatService {
     correlationId?: string
   ): Promise<Chat> {
     // Find the chat by ID
-    const chat = await this.chatFileService.findById(chatId);
+    const chat = await this.chatRepository.findById(chatId);
 
     if (!chat) {
       this.logger.error(`Chat not found with ID: ${chatId}`);
@@ -143,7 +141,7 @@ export class ChatService {
     };
 
     // Add message to chat
-    await this.chatFileService.addMessage(
+    await this.chatRepository.addMessage(
       chat.filePath,
       chatMessage,
       correlationId
@@ -155,7 +153,7 @@ export class ChatService {
     }
 
     // Get updated chat after adding message
-    const updatedChat = await this.chatFileService.findByPath(chat.filePath);
+    const updatedChat = await this.chatRepository.findByPath(chat.filePath);
     await this.processUserMessage(updatedChat, chatMessage, correlationId);
 
     return updatedChat;
@@ -165,22 +163,25 @@ export class ChatService {
    * Gets a chat by ID
    */
   async getChatById(chatId: string): Promise<Chat | undefined> {
-    return this.chatFileService.findById(chatId);
+    return this.chatRepository.findById(chatId);
   }
 
   /**
    * Gets all chats
    */
   async getAllChats(): Promise<Chat[]> {
-    return this.chatFileService.findAll();
+    return this.chatRepository.findAll();
   }
 
   /**
    * Opens a chat file
    */
-  async openChatFile(filePath: string, correlationId?: string): Promise<Chat> {
+  async openChatFile(
+    absoluteFilePath: string,
+    correlationId?: string
+  ): Promise<Chat> {
     try {
-      const chat = await this.chatFileService.findByPath(filePath);
+      const chat = await this.chatRepository.findByPath(absoluteFilePath);
 
       // Emit chat initialized event
       await this.eventBus.emit<ServerChatInitializedEvent>({
@@ -193,7 +194,7 @@ export class ChatService {
 
       return chat;
     } catch (error) {
-      this.logger.error(`Failed to open chat file: ${filePath}`, error);
+      this.logger.error(`Failed to open chat file: ${absoluteFilePath}`, error);
       throw error;
     }
   }
@@ -290,14 +291,14 @@ export class ChatService {
     };
 
     // Add AI message to chat
-    await this.chatFileService.addMessage(
+    await this.chatRepository.addMessage(
       chat.filePath,
       aiMessage,
       correlationId
     );
 
     // Get updated chat after adding message
-    const updatedChat = await this.chatFileService.findByPath(chat.filePath);
+    const updatedChat = await this.chatRepository.findByPath(chat.filePath);
 
     // Process artifacts if any were detected
     if (artifacts && artifacts.length > 0) {

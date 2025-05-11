@@ -5,43 +5,38 @@ import { ILogObj, Logger } from "tslog";
 import type { IEventBus } from "../event-bus.js";
 import type { ServerFileOpenedEvent } from "../event-types.js";
 import { fileExists } from "../file-helpers.js";
-import type { WorkspacePathService } from "./workspace-path-service.js";
 
 export interface FileContent {
   content: string;
   fileType: string;
-  filePath: string;
-  workspacePath?: string;
+  filePath: string; // Absolute path
   isBase64?: boolean;
 }
 
 export class FileService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
-  private readonly pathService: WorkspacePathService;
 
-  constructor(eventBus: IEventBus, pathService: WorkspacePathService) {
+  constructor(eventBus: IEventBus) {
     this.logger = new Logger({ name: "FileService" });
     this.eventBus = eventBus;
-    this.pathService = pathService;
   }
 
   async openFile(
-    filePath: string,
+    absoluteFilePath: string,
     correlationId?: string
   ): Promise<FileContent> {
     // Skip chat files as they are handled by ChatService
-    if (filePath.endsWith(".chat.json")) {
+    if (absoluteFilePath.endsWith(".chat.json")) {
       throw new Error("Chat files should be opened using the Chat service");
     }
 
-    const fileType = this.getFileType(filePath);
-    const fullPath = this.resolvePath(filePath);
+    const fileType = this.getFileType(absoluteFilePath);
 
     // Check if file exists
-    const exists = await fileExists(fullPath);
+    const exists = await fileExists(absoluteFilePath);
     if (!exists) {
-      throw new Error(`File does not exist: ${filePath}`);
+      throw new Error(`File does not exist: ${absoluteFilePath}`);
     }
 
     // Read the file content based on type
@@ -49,29 +44,24 @@ export class FileService {
     let isBase64 = false;
 
     if (this.isBinaryFile(fileType)) {
-      const buffer = await fs.readFile(fullPath);
+      const buffer = await fs.readFile(absoluteFilePath);
       content = buffer.toString("base64");
       isBase64 = true;
     } else {
-      content = await fs.readFile(fullPath, "utf8");
+      content = await fs.readFile(absoluteFilePath, "utf8");
     }
-
-    // Resolve workspace path info
-    const workspacePath = this.pathService.resolveToWorkspacePath(fullPath);
-    const displayPath = workspacePath ? workspacePath.displayPath : filePath;
 
     const fileContent: FileContent = {
       content,
       fileType,
-      filePath: displayPath,
-      workspacePath: workspacePath?.workspace,
+      filePath: absoluteFilePath,
       isBase64,
     };
 
     // Emit file opened event
     await this.eventBus.emit<ServerFileOpenedEvent>({
       kind: "ServerFileOpened",
-      filePath: displayPath,
+      filePath: absoluteFilePath,
       content,
       fileType,
       timestamp: new Date(),
@@ -122,9 +112,5 @@ export class FileService {
   private isBinaryFile(fileType: string): boolean {
     const binaryTypes = ["image", "pdf", "archive"];
     return binaryTypes.includes(fileType);
-  }
-
-  private resolvePath(filePath: string): string {
-    return this.pathService.resolveToAbsolutePath(filePath);
   }
 }

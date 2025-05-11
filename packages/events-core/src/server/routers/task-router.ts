@@ -1,7 +1,19 @@
 // packages/events-core/src/server/routers/task-router.ts
-import { router, loggedProcedure } from "../trpc-server.js";
-import { createTaskSchema, taskIdSchema } from "../schemas.js";
+import { z } from "zod";
 import { TaskService } from "../../services/task-service.js";
+import { router, loggedProcedure } from "../trpc-server.js";
+
+// Task schemas
+export const createTaskSchema = z.object({
+  taskName: z.string().min(1),
+  taskConfig: z.record(z.unknown()).default({}),
+  correlationId: z.string().optional(),
+});
+
+export const taskIdSchema = z.object({
+  taskId: z.string().uuid(),
+  correlationId: z.string().optional(),
+});
 
 export function createTaskRouter(taskService: TaskService) {
   return router({
