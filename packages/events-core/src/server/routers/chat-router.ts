@@ -1,14 +1,13 @@
 // packages/events-core/src/server/routers/chat-router.ts
 import { z } from "zod";
-import { ChatService } from "../../services/chat-service.js";
+import { ChatService, ChatMode } from "../../services/chat-service.js";
 import { router, loggedProcedure } from "../trpc-server.js";
-import { openFileSchema } from "./file-router.js";
 
 // Chat schemas
 export const createNewChatSchema = z.object({
   targetDirectoryAbsolutePath: z.string(),
   newTask: z.boolean().default(false),
-  mode: z.enum(["chat", "agent"]).default("chat"),
+  mode: z.enum(["chat", "agent"] as const).default("chat"),
   knowledge: z.array(z.string()).default([]),
   prompt: z.string().optional(),
   model: z.string().default("default"),
@@ -31,6 +30,11 @@ export const submitMessageSchema = z.object({
 
 export const chatIdSchema = z.object({
   chatId: z.string().uuid(),
+  correlationId: z.string().optional(),
+});
+
+export const openFileSchema = z.object({
+  filePath: z.string(),
   correlationId: z.string().optional(),
 });
 

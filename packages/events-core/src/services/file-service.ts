@@ -3,13 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ILogObj, Logger } from "tslog";
 import type { IEventBus } from "../event-bus.js";
-import type { ServerFileOpenedEvent } from "../event-types.js";
 import { fileExists } from "../file-helpers.js";
 
 export interface FileContent {
   content: string;
   fileType: string;
-  filePath: string; // Absolute path
+  absoluteFilePath: string;
   isBase64?: boolean;
 }
 
@@ -51,24 +50,12 @@ export class FileService {
       content = await fs.readFile(absoluteFilePath, "utf8");
     }
 
-    const fileContent: FileContent = {
+    return {
       content,
       fileType,
-      filePath: absoluteFilePath,
+      absoluteFilePath,
       isBase64,
     };
-
-    // Emit file opened event
-    await this.eventBus.emit<ServerFileOpenedEvent>({
-      kind: "ServerFileOpened",
-      filePath: absoluteFilePath,
-      content,
-      fileType,
-      timestamp: new Date(),
-      correlationId,
-    });
-
-    return fileContent;
   }
 
   getFileType(filePath: string): string {

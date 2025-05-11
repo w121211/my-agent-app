@@ -17,14 +17,10 @@ export function createUserSettingsRouter(
       .input(
         z.object({
           settings: z.record(z.unknown()),
-          correlationId: z.string().optional(),
         })
       )
       .mutation(async ({ input }) => {
-        return userSettingsService.updateUserSettings(
-          input.settings,
-          input.correlationId
-        );
+        return userSettingsService.updateUserSettings(input.settings);
       }),
   });
 }

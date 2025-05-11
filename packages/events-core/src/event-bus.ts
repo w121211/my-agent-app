@@ -1,41 +1,29 @@
 // packages/events-core/src/event-bus.ts
 import { Logger, ILogObj } from "tslog";
-import {
-  EventKind,
-  EventUnion,
-  ClientEventKind,
-  ServerEventKind,
-  BaseEvent,
-} from "./event-types.js";
+
+// Base event interface
+export interface BaseEvent {
+  kind: string;
+  timestamp: Date;
+  correlationId?: string;
+}
 
 // Handler type for both sync and async event handlers
 export type EventHandler<T extends BaseEvent> = (
   event: T
 ) => void | Promise<void>;
 
-/**
- * Core event bus interface
- */
+// Core event bus interface
 export interface IEventBus {
   emit<T extends BaseEvent>(event: T): Promise<void>;
   subscribe<T extends BaseEvent>(
-    eventKind: EventKind,
-    handler: EventHandler<T>
-  ): () => void;
-  subscribeToAllClientEvents<T extends BaseEvent>(
-    handler: EventHandler<T>
-  ): () => void;
-  subscribeToAllServerEvents<T extends BaseEvent>(
+    eventKind: string,
     handler: EventHandler<T>
   ): () => void;
   unsubscribe<T extends BaseEvent>(
-    eventKind: EventKind,
+    eventKind: string,
     handler: EventHandler<T>
   ): void;
-  unsubscribeAll(eventKind: EventKind): void;
-  hasHandlers(eventKind: EventKind): boolean;
-  getHandlerCount(eventKind: EventKind): number;
-  clear(): void;
 }
 
 export type EventBusEnvironment = "client" | "server";
@@ -45,11 +33,9 @@ export interface EventBusOptions {
   environment: EventBusEnvironment;
 }
 
-/**
- * Enhanced event bus implementation that supports both client and server events
- */
+// Event bus implementation
 export class EventBus implements IEventBus {
-  private handlers: Map<EventKind, Set<EventHandler<any>>> = new Map();
+  private handlers: Map<string, Set<EventHandler<any>>> = new Map();
   private logger: Logger<ILogObj>;
   private environment: EventBusEnvironment;
 
@@ -59,12 +45,8 @@ export class EventBus implements IEventBus {
       options.logger || new Logger({ name: `EventBus-${this.environment}` });
   }
 
-  /**
-   * Subscribe to events of a specific type
-   * Returns an unsubscribe function for easy cleanup
-   */
   public subscribe<T extends BaseEvent>(
-    eventKind: EventKind,
+    eventKind: string,
     handler: EventHandler<T>
   ): () => void {
     if (!this.handlers.has(eventKind)) {
@@ -74,60 +56,11 @@ export class EventBus implements IEventBus {
     const handlers = this.handlers.get(eventKind)!;
     handlers.add(handler);
 
-    // this.logger.debug(`Subscribed handler to ${eventKind}`);
-
     return () => this.unsubscribe(eventKind, handler);
   }
 
-  /**
-   * Subscribe to all client events
-   * Returns an unsubscribe function for easy cleanup
-   */
-  public subscribeToAllClientEvents<T extends BaseEvent>(
-    handler: EventHandler<T>
-  ): () => void {
-    const unsubscribers: Array<() => void> = [];
-
-    // Add to client events
-    Object.values(ClientEventKind).forEach((kind) => {
-      unsubscribers.push(this.subscribe(kind, handler));
-    });
-
-    this.logger.debug(
-      `Subscribed handler to all client events (${Object.values(ClientEventKind).length} events)`
-    );
-
-    // Return a function that unsubscribes from all
-    return () => unsubscribers.forEach((unsub) => unsub());
-  }
-
-  /**
-   * Subscribe to all server events
-   * Returns an unsubscribe function for easy cleanup
-   */
-  public subscribeToAllServerEvents<T extends BaseEvent>(
-    handler: EventHandler<T>
-  ): () => void {
-    const unsubscribers: Array<() => void> = [];
-
-    // Add to server events
-    Object.values(ServerEventKind).forEach((kind) => {
-      unsubscribers.push(this.subscribe(kind, handler));
-    });
-
-    this.logger.debug(
-      `Subscribed handler to all server events (${Object.values(ServerEventKind).length} events)`
-    );
-
-    // Return a function that unsubscribes from all
-    return () => unsubscribers.forEach((unsub) => unsub());
-  }
-
-  /**
-   * Unsubscribe a specific handler from an event type
-   */
   public unsubscribe<T extends BaseEvent>(
-    eventKind: EventKind,
+    eventKind: string,
     handler: EventHandler<T>
   ): void {
     if (!this.handlers.has(eventKind)) {
@@ -142,21 +75,9 @@ export class EventBus implements IEventBus {
     }
   }
 
-  /**
-   * Unsubscribe all handlers for a specific event type
-   */
-  public unsubscribeAll(eventKind: EventKind): void {
-    this.handlers.delete(eventKind);
-  }
-
-  /**
-   * Emit an event to all subscribed handlers
-   */
   public async emit<T extends BaseEvent>(event: T): Promise<void> {
     const eventKind = event.kind;
     const handlers = this.handlers.get(eventKind);
-
-    // this.logger.debug(`Emitting event ${eventKind}`, event);
 
     if (!handlers || handlers.size === 0) {
       this.logger.warn(
@@ -172,38 +93,7 @@ export class EventBus implements IEventBus {
     await Promise.all(promises);
   }
 
-  /**
-   * Check if handlers exist for an event kind
-   */
-  public hasHandlers(eventKind: EventKind): boolean {
-    return !!this.handlers.get(eventKind)?.size;
-  }
-
-  /**
-   * Get the number of handlers for an event kind
-   */
-  public getHandlerCount(eventKind: EventKind): number {
-    return this.handlers.get(eventKind)?.size || 0;
-  }
-
-  /**
-   * Clear all event handlers
-   */
-  public clear(): void {
-    this.handlers.clear();
-  }
-
-  /**
-   * Get the environment this event bus is running in
-   */
-  public getEnvironment(): EventBusEnvironment {
-    return this.environment;
-  }
-
-  /**
-   * Execute a handler with error handling
-   */
-  private async executeHandler<T extends EventUnion>(
+  private async executeHandler<T extends BaseEvent>(
     handler: EventHandler<T>,
     event: T
   ): Promise<void> {
@@ -219,14 +109,6 @@ export const createClientEventBus = (
   options: Omit<EventBusOptions, "environment"> = {}
 ) => {
   const logger = options.logger || new Logger({ name: "EventBus-client" });
-
-  // Check if we're in a browser environment
-  if (typeof window === "undefined" || typeof window.document === "undefined") {
-    logger.warn(
-      "Creating a client event bus in a non-browser environment may lead to unexpected behavior"
-    );
-  }
-
   return new EventBus({ ...options, logger, environment: "client" });
 };
 
@@ -234,17 +116,5 @@ export const createServerEventBus = (
   options: Omit<EventBusOptions, "environment"> = {}
 ) => {
   const logger = options.logger || new Logger({ name: "EventBus-server" });
-
-  // Check if we're in a Node.js environment
-  if (
-    typeof process === "undefined" ||
-    !process.versions ||
-    !process.versions.node
-  ) {
-    logger.warn(
-      "Creating a server event bus in a non-Node.js environment may lead to unexpected behavior"
-    );
-  }
-
   return new EventBus({ ...options, logger, environment: "server" });
 };

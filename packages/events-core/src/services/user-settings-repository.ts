@@ -8,34 +8,17 @@ import {
   writeJsonFile,
   createDirectory,
 } from "../file-helpers.js";
+import { ProjectFolder } from "./project-folder-service.js";
 
-/**
- * Interface for a project folder
- */
-export interface ProjectFolder {
-  id: string;
-  name: string;
-  path: string;
-}
-
-/**
- * Interface for user settings
- */
 export interface UserSettings {
   projectFolders: ProjectFolder[];
   // Additional settings can be added in the future
 }
 
-/**
- * Default user settings
- */
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   projectFolders: [],
 };
 
-/**
- * Repository for managing user settings
- */
 export class UserSettingsRepository {
   private readonly logger: Logger<ILogObj>;
   private readonly filePath: string;
@@ -45,10 +28,6 @@ export class UserSettingsRepository {
     this.filePath = settingsFilePath;
   }
 
-  /**
-   * Get user settings
-   * Creates the settings file with default values if it doesn't exist
-   */
   public async getSettings(): Promise<UserSettings> {
     if (!(await fileExists(this.filePath))) {
       this.logger.info(
@@ -66,9 +45,6 @@ export class UserSettingsRepository {
     }
   }
 
-  /**
-   * Save user settings
-   */
   public async saveSettings(settings: UserSettings): Promise<void> {
     try {
       await writeJsonFile(this.filePath, settings);
@@ -79,17 +55,11 @@ export class UserSettingsRepository {
     }
   }
 
-  /**
-   * Get file path
-   */
   public getFilePath(): string {
     return this.filePath;
   }
 }
 
-/**
- * Factory function to create a user settings repository
- */
 export function createUserSettingsRepository(
   appName: string = "app"
 ): UserSettingsRepository {

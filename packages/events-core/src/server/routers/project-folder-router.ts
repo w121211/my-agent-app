@@ -6,31 +6,17 @@ import { ProjectFolderService } from "../../services/project-folder-service.js";
 // Project folder schemas
 export const folderTreeRequestSchema = z.object({
   projectFolderPath: z.string().optional(),
+});
+
+export const addProjectFolderSchema = z.object({
+  projectFolderPath: z.string(),
   correlationId: z.string().optional(),
 });
 
-export const projectFolderUpdateSchema = z
-  .object({
-    command: z.enum(["addProjectFolder", "removeProjectFolder"]),
-    projectFolderPath: z.string().optional(),
-    projectFolderId: z.string().optional(),
-    correlationId: z.string().optional(),
-  })
-  .refine(
-    (data) => {
-      if (data.command === "addProjectFolder" && !data.projectFolderPath) {
-        return false;
-      }
-      if (data.command === "removeProjectFolder" && !data.projectFolderId) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message:
-        "projectFolderPath required for addProjectFolder, projectFolderId required for removeProjectFolder",
-    }
-  );
+export const removeProjectFolderSchema = z.object({
+  projectFolderId: z.string(),
+  correlationId: z.string().optional(),
+});
 
 export const startWatchingAllProjectFoldersSchema = z.object({
   correlationId: z.string().optional(),
@@ -43,34 +29,23 @@ export function createProjectFolderRouter(
     getFolderTree: loggedProcedure
       .input(folderTreeRequestSchema)
       .query(async ({ input }) => {
-        return projectFolderService.getFolderTree(
+        return projectFolderService.getFolderTree(input.projectFolderPath);
+      }),
+
+    addProjectFolder: loggedProcedure
+      .input(addProjectFolderSchema)
+      .mutation(async ({ input }) => {
+        return projectFolderService.addProjectFolder(
           input.projectFolderPath,
           input.correlationId
         );
       }),
 
-    addProjectFolder: loggedProcedure
-      .input(projectFolderUpdateSchema)
-      .mutation(async ({ input }) => {
-        if (input.command !== "addProjectFolder") {
-          throw new Error("Invalid command for addProjectFolder");
-        }
-
-        return projectFolderService.addProjectFolder(
-          input.projectFolderPath!,
-          input.correlationId
-        );
-      }),
-
     removeProjectFolder: loggedProcedure
-      .input(projectFolderUpdateSchema)
+      .input(removeProjectFolderSchema)
       .mutation(async ({ input }) => {
-        if (input.command !== "removeProjectFolder") {
-          throw new Error("Invalid command for removeProjectFolder");
-        }
-
         return projectFolderService.removeProjectFolder(
-          input.projectFolderId!,
+          input.projectFolderId,
           input.correlationId
         );
       }),

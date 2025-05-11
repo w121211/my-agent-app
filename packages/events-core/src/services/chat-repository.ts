@@ -2,16 +2,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { ILogObj, Logger } from "tslog";
-import type { IEventBus } from "../event-bus.js";
-import type {
-  Chat,
-  ChatMessage,
-  ChatMessageMetadata,
-  ChatMetadata,
-  Role,
-  ServerChatFileCreatedEvent,
-  ServerChatFileUpdatedEvent,
-} from "../event-types.js";
+import type { IEventBus, BaseEvent } from "../event-bus.js";
 import {
   createDirectory,
   fileExists,
@@ -19,6 +10,13 @@ import {
   writeJsonFile,
   listDirectory,
 } from "../file-helpers.js";
+import type {
+  Chat,
+  ChatMessage,
+  ChatMetadata,
+  Role,
+  ChatStatus,
+} from "./chat-service.js";
 
 export class ChatFileError extends Error {
   constructor(message: string) {
@@ -34,6 +32,13 @@ export class ChatNotFoundError extends ChatFileError {
   }
 }
 
+// Event for notifying when a chat file is created or updated
+export interface ChatFileEvent extends BaseEvent {
+  kind: "ChatFileCreatedEvent" | "ChatFileUpdatedEvent";
+  chatId: string;
+  absoluteFilePath: string;
+}
+
 interface ChatFileData {
   _type: string;
   id: string;
@@ -46,7 +51,7 @@ interface ChatFileData {
     role: string;
     content: string;
     timestamp: string | Date;
-    metadata?: ChatMessageMetadata;
+    metadata?: Record<string, unknown>;
   }>;
 }
 
@@ -145,10 +150,10 @@ export class ChatRepository {
     await this.saveChatToFile(newChat, absoluteFilePath);
 
     // Emit file created event
-    await this.eventBus.emit<ServerChatFileCreatedEvent>({
-      kind: "ServerChatFileCreated",
+    await this.eventBus.emit<ChatFileEvent>({
+      kind: "ChatFileCreatedEvent",
       chatId: newChat.id,
-      filePath: absoluteFilePath,
+      absoluteFilePath,
       timestamp: new Date(),
       correlationId,
     });
@@ -192,10 +197,10 @@ export class ChatRepository {
     await this.saveChatToFile(chat, absoluteFilePath);
 
     // Emit file updated event
-    await this.eventBus.emit<ServerChatFileUpdatedEvent>({
-      kind: "ServerChatFileUpdated",
+    await this.eventBus.emit<ChatFileEvent>({
+      kind: "ChatFileUpdatedEvent",
       chatId: chat.id,
-      filePath: absoluteFilePath,
+      absoluteFilePath,
       timestamp: new Date(),
       correlationId,
     });
@@ -248,17 +253,23 @@ export class ChatRepository {
       throw new ChatFileError(`File ${absoluteFilePath} is not a chat file`);
     }
 
+    // Convert roles to proper type without using 'as'
+    const ensureRole = (role: string): Role => {
+      const validRoles: Role[] = ["ASSISTANT", "USER", "FUNCTION_EXECUTOR"];
+      return validRoles.includes(role as Role) ? (role as Role) : "USER"; // Default to USER if invalid
+    };
+
     const chat: Chat = {
       id: chatFileData.id,
       filePath: absoluteFilePath,
       messages: chatFileData.messages.map((msg) => ({
         id: msg.id,
-        role: msg.role as Role,
+        role: ensureRole(msg.role),
         content: msg.content,
         timestamp: new Date(msg.timestamp),
         metadata: msg.metadata,
       })),
-      status: "ACTIVE",
+      status: "ACTIVE" as ChatStatus,
       createdAt: new Date(chatFileData.createdAt),
       updatedAt: new Date(chatFileData.updatedAt),
       metadata: chatFileData.metadata,

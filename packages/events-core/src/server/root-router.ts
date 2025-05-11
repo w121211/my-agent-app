@@ -35,10 +35,14 @@ export function createAppRouter() {
   const taskRepo = new TaskRepository("");
 
   // Create services
+  const fileWatcherService = new FileWatcherService(eventBus);
+
   const projectFolderService = createProjectFolderService(
     eventBus,
-    userSettingsRepo
+    userSettingsRepo,
+    fileWatcherService
   );
+
   const taskService = new TaskService(eventBus, taskRepo);
 
   // Using ChatRepository instead of ChatFileService
@@ -50,13 +54,9 @@ export function createAppRouter() {
 
   // Create user settings service
   const userSettingsService = createUserSettingsService(
-    eventBus,
     userSettingsRepo,
     projectFolderService
   );
-
-  // Initialize file watcher
-  const fileWatcher = new FileWatcherService(eventBus);
 
   // Start watching all project folders
   projectFolderService

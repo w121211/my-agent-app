@@ -1,22 +1,69 @@
 // packages/events-core/src/services/chat-service.ts
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
-import type { IEventBus } from "../event-bus.js";
+import type { IEventBus, BaseEvent } from "../event-bus.js";
 import type { ChatRepository } from "./chat-repository.js";
 import type { TaskService } from "./task-service.js";
-import type {
-  Chat,
-  ChatMessage,
-  ServerChatCreatedEvent,
-  ServerChatInitializedEvent,
-  ServerChatMessageAppendedEvent,
-  ServerChatUpdatedEvent,
-  ServerAIResponseRequestedEvent,
-  ServerAIResponseGeneratedEvent,
-  ServerUserChatMessagePostProcessedEvent,
-  ServerAIResponsePostProcessedEvent,
-  ChatMode,
-} from "../event-types.js";
+
+// Define types specific to chat service
+export type ChatStatus = "ACTIVE" | "CLOSED";
+export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR";
+export type ChatMode = "chat" | "agent";
+
+export interface ChatMessageMetadata {
+  subtaskId?: string;
+  taskId?: string;
+  functionCalls?: Record<string, unknown>[];
+  isPrompt?: boolean;
+  fileReferences?: Array<{
+    path: string;
+    md5: string;
+  }>;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: Role;
+  content: string;
+  timestamp: Date;
+  metadata?: ChatMessageMetadata;
+}
+
+export interface ChatMetadata {
+  title?: string;
+  summary?: string;
+  tags?: string[];
+  mode?: ChatMode;
+  model?: string;
+  knowledge?: string[];
+}
+
+export interface Chat {
+  id: string;
+  filePath: string;
+  messages: ChatMessage[];
+  status: ChatStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: ChatMetadata;
+}
+
+// Define chat event types
+export type ChatUpdateType =
+  | "MESSAGE_ADDED"
+  | "METADATA_UPDATED"
+  | "AI_RESPONSE_ADDED";
+
+export interface ChatUpdatedEvent extends BaseEvent {
+  kind: "ChatUpdatedEvent";
+  chatId: string;
+  updateType: ChatUpdateType;
+  update: {
+    message?: ChatMessage;
+    metadata?: Partial<ChatMetadata>;
+  };
+  chat: Chat;
+}
 
 export class ChatService {
   private readonly logger: Logger<ILogObj>;
@@ -35,10 +82,6 @@ export class ChatService {
     this.taskService = taskService;
   }
 
-  /**
-   * Creates a new chat
-   * @param targetDirectoryAbsolutePath Absolute path to directory where chat file will be created
-   */
   async createChat(
     targetDirectoryAbsolutePath: string,
     newTask: boolean,
@@ -82,15 +125,6 @@ export class ChatService {
       correlationId
     );
 
-    // Emit chat created event
-    await this.eventBus.emit<ServerChatCreatedEvent>({
-      kind: "ServerChatCreated",
-      chatId: chat.id,
-      chatObject: chat,
-      timestamp: new Date(),
-      correlationId,
-    });
-
     // If initial prompt is provided, add it as first message
     if (prompt) {
       const message: ChatMessage = {
@@ -116,9 +150,6 @@ export class ChatService {
     return chat;
   }
 
-  /**
-   * Submits a user message to a chat
-   */
   async submitMessage(
     chatId: string,
     message: string,
@@ -159,90 +190,47 @@ export class ChatService {
     return updatedChat;
   }
 
-  /**
-   * Gets a chat by ID
-   */
   async getChatById(chatId: string): Promise<Chat | undefined> {
     return this.chatRepository.findById(chatId);
   }
 
-  /**
-   * Gets all chats
-   */
   async getAllChats(): Promise<Chat[]> {
     return this.chatRepository.findAll();
   }
 
-  /**
-   * Opens a chat file
-   */
   async openChatFile(
     absoluteFilePath: string,
     correlationId?: string
   ): Promise<Chat> {
     try {
-      const chat = await this.chatRepository.findByPath(absoluteFilePath);
-
-      // Emit chat initialized event
-      await this.eventBus.emit<ServerChatInitializedEvent>({
-        kind: "ServerChatInitialized",
-        chatId: chat.id,
-        chatData: chat,
-        timestamp: new Date(),
-        correlationId,
-      });
-
-      return chat;
+      return await this.chatRepository.findByPath(absoluteFilePath);
     } catch (error) {
       this.logger.error(`Failed to open chat file: ${absoluteFilePath}`, error);
       throw error;
     }
   }
 
-  /**
-   * Process user message and generate AI response if needed
-   */
   private async processUserMessage(
     chat: Chat,
     message: ChatMessage,
     correlationId?: string
   ): Promise<void> {
-    // Process file references (#file syntax)
-    const processedContent = message.content;
+    // Process file references and update the message
     const fileReferences = this.extractFileReferences(message.content);
-
-    await this.eventBus.emit<ServerUserChatMessagePostProcessedEvent>({
-      kind: "ServerUserChatMessagePostProcessed",
-      chatId: chat.id,
-      messageId: message.id,
-      processedContent,
-      fileReferences,
-      timestamp: new Date(),
-      correlationId,
-    });
-
     message.metadata = {
       ...message.metadata,
       fileReferences,
     };
 
-    await this.eventBus.emit<ServerChatMessageAppendedEvent>({
-      kind: "ServerChatMessageAppended",
-      chatId: chat.id,
-      message,
-      timestamp: new Date(),
-      correlationId,
-    });
-
     // Emit chat updated event with message added update
-    await this.eventBus.emit<ServerChatUpdatedEvent>({
-      kind: "ServerChatUpdated",
+    await this.eventBus.emit<ChatUpdatedEvent>({
+      kind: "ChatUpdatedEvent",
       chatId: chat.id,
-      chat,
+      updateType: "MESSAGE_ADDED",
       update: {
-        kind: "MESSAGE_ADDED",
         message,
       },
+      chat,
       timestamp: new Date(),
       correlationId,
     });
@@ -253,35 +241,15 @@ export class ChatService {
     }
   }
 
-  /**
-   * Generate AI response for a chat
-   */
   private async generateAIResponse(
     chat: Chat,
     correlationId?: string
   ): Promise<void> {
     const model = chat.metadata?.model || "default";
 
-    await this.eventBus.emit<ServerAIResponseRequestedEvent>({
-      kind: "ServerAIResponseRequested",
-      chatId: chat.id,
-      model,
-      timestamp: new Date(),
-      correlationId,
-    });
-
     // Placeholder for AI service integration
     const aiResponse = "This is a placeholder AI response";
     const artifacts = this.detectArtifacts(aiResponse);
-
-    await this.eventBus.emit<ServerAIResponseGeneratedEvent>({
-      kind: "ServerAIResponseGenerated",
-      chatId: chat.id,
-      response: aiResponse,
-      artifacts,
-      timestamp: new Date(),
-      correlationId,
-    });
 
     const aiMessage: ChatMessage = {
       id: uuidv4(),
@@ -311,40 +279,20 @@ export class ChatService {
       );
     }
 
-    await this.eventBus.emit<ServerAIResponsePostProcessedEvent>({
-      kind: "ServerAIResponsePostProcessed",
-      chatId: chat.id,
-      messageId: aiMessage.id,
-      processedContent: aiResponse,
-      timestamp: new Date(),
-      correlationId,
-    });
-
-    await this.eventBus.emit<ServerChatMessageAppendedEvent>({
-      kind: "ServerChatMessageAppended",
-      chatId: chat.id,
-      message: aiMessage,
-      timestamp: new Date(),
-      correlationId,
-    });
-
-    // Emit chat updated event with message added update
-    await this.eventBus.emit<ServerChatUpdatedEvent>({
-      kind: "ServerChatUpdated",
+    // Emit chat updated event with AI message added
+    await this.eventBus.emit<ChatUpdatedEvent>({
+      kind: "ChatUpdatedEvent",
       chatId: updatedChat.id,
-      chat: updatedChat,
+      updateType: "AI_RESPONSE_ADDED",
       update: {
-        kind: "MESSAGE_ADDED",
         message: aiMessage,
       },
+      chat: updatedChat,
       timestamp: new Date(),
       correlationId,
     });
   }
 
-  /**
-   * Detect artifacts in AI response
-   */
   private detectArtifacts(response: string): Array<{
     id: string;
     type: string;
@@ -363,9 +311,6 @@ export class ChatService {
     return [];
   }
 
-  /**
-   * Process artifacts in AI response
-   */
   private async processArtifacts(
     chatId: string,
     messageId: string,
@@ -376,9 +321,6 @@ export class ChatService {
     // Implementation for processing artifacts would go here
   }
 
-  /**
-   * Extract file references from message content
-   */
   private extractFileReferences(
     content: string
   ): Array<{ path: string; md5: string }> {

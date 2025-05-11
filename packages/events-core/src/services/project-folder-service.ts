@@ -3,59 +3,53 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { v4 as uuidv4 } from "uuid";
 import { Logger, ILogObj } from "tslog";
-import type { IEventBus } from "../event-bus.js";
-import type { FolderTreeNode, BaseEvent } from "../event-types.js";
-import type {
-  UserSettingsRepository,
-  ProjectFolder,
-  UserSettings,
-} from "./user-settings-repository.js";
+import type { IEventBus, BaseEvent } from "../event-bus.js";
+import type { UserSettingsRepository } from "./user-settings-repository.js";
+import { FileWatcherService } from "./file-watcher-service.js";
 
-// Event interfaces
-export interface ServerProjectFolderValidatedEvent extends BaseEvent {
-  kind: "ServerProjectFolderValidated";
-  projectFolderPath: string;
-  isValid: boolean;
-  validationMessage?: string;
+// Define types for ProjectFolderService
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  path: string;
 }
 
-export interface ServerRequestUpdateWatchingFolderEvent extends BaseEvent {
-  kind: "ServerRequestUpdateWatchingFolder";
-  folderPath: string;
-  action: "add" | "remove";
+export interface FolderTreeNode {
+  name: string;
+  path: string; // Absolute path
+  isDirectory: boolean;
+  children?: FolderTreeNode[];
 }
 
-export interface ClientRequestStartWatchingAllProjectFoldersEvent
-  extends BaseEvent {
-  kind: "ClientRequestStartWatchingAllProjectFolders";
-}
+export type ProjectFolderUpdateType =
+  | "PROJECT_FOLDER_ADDED"
+  | "PROJECT_FOLDER_REMOVED";
 
-export interface ServerProjectFolderUpdatedEvent extends BaseEvent {
-  kind: "ServerProjectFolderUpdated";
+export interface ProjectFolderUpdatedEvent extends BaseEvent {
+  kind: "ProjectFolderUpdatedEvent";
   projectFolders: ProjectFolder[];
-  changeType: "PROJECT_FOLDER_ADDED" | "PROJECT_FOLDER_REMOVED";
+  updateType: ProjectFolderUpdateType;
 }
 
 export class ProjectFolderService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
   private readonly userSettingsRepository: UserSettingsRepository;
+  private readonly fileWatcherService: FileWatcherService;
 
   constructor(
     eventBus: IEventBus,
-    userSettingsRepository: UserSettingsRepository
+    userSettingsRepository: UserSettingsRepository,
+    fileWatcherService: FileWatcherService
   ) {
     this.logger = new Logger({ name: "ProjectFolderService" });
     this.eventBus = eventBus;
     this.userSettingsRepository = userSettingsRepository;
+    this.fileWatcherService = fileWatcherService;
   }
 
-  /**
-   * Get folder tree for a project folder path
-   */
   public async getFolderTree(
-    projectFolderPath?: string,
-    correlationId?: string
+    projectFolderPath?: string
   ): Promise<{ folderTree: FolderTreeNode | null; error?: string }> {
     this.logger.info(
       `Processing folder tree request for: ${projectFolderPath || ""}`
@@ -69,7 +63,7 @@ export class ProjectFolderService {
         throw new Error("No project folders configured");
       }
 
-      // Determine which project folder to use and the relative path
+      // Determine which project folder to use
       let fullPath: string;
       let selectedProjectFolder: ProjectFolder;
 
@@ -113,9 +107,6 @@ export class ProjectFolderService {
     }
   }
 
-  /**
-   * Add a project folder
-   */
   public async addProjectFolder(
     projectFolderPath: string,
     correlationId?: string
@@ -186,31 +177,22 @@ export class ProjectFolderService {
     // Save updated settings
     await this.userSettingsRepository.saveSettings(settings);
 
-    // Request file watcher to start watching the project folder
-    await this.eventBus.emit<ServerRequestUpdateWatchingFolderEvent>({
-      kind: "ServerRequestUpdateWatchingFolder",
-      timestamp: new Date(),
-      correlationId,
-      folderPath: projectFolderPath,
-      action: "add",
-    });
+    // Start watching the project folder
+    await this.fileWatcherService.startWatchingFolder(projectFolderPath);
 
     // Emit settings updated event
-    await this.eventBus.emit<ServerProjectFolderUpdatedEvent>({
-      kind: "ServerProjectFolderUpdated",
+    await this.eventBus.emit<ProjectFolderUpdatedEvent>({
+      kind: "ProjectFolderUpdatedEvent",
       timestamp: new Date(),
       correlationId,
       projectFolders: settings.projectFolders,
-      changeType: "PROJECT_FOLDER_ADDED",
+      updateType: "PROJECT_FOLDER_ADDED",
     });
 
     this.logger.info(`Project folder added successfully: ${projectFolderPath}`);
     return { success: true, projectFolder };
   }
 
-  /**
-   * Remove a project folder
-   */
   public async removeProjectFolder(
     projectFolderId: string,
     correlationId?: string
@@ -241,22 +223,16 @@ export class ProjectFolderService {
     // Save updated settings
     await this.userSettingsRepository.saveSettings(settings);
 
-    // Request file watcher to stop watching the project folder
-    await this.eventBus.emit<ServerRequestUpdateWatchingFolderEvent>({
-      kind: "ServerRequestUpdateWatchingFolder",
-      timestamp: new Date(),
-      correlationId,
-      folderPath: projectFolder.path,
-      action: "remove",
-    });
+    // Stop watching the project folder
+    await this.fileWatcherService.stopWatchingFolder(projectFolder.path);
 
     // Emit settings updated event
-    await this.eventBus.emit<ServerProjectFolderUpdatedEvent>({
-      kind: "ServerProjectFolderUpdated",
+    await this.eventBus.emit<ProjectFolderUpdatedEvent>({
+      kind: "ProjectFolderUpdatedEvent",
       timestamp: new Date(),
       correlationId,
       projectFolders: settings.projectFolders,
-      changeType: "PROJECT_FOLDER_REMOVED",
+      updateType: "PROJECT_FOLDER_REMOVED",
     });
 
     this.logger.info(
@@ -265,17 +241,11 @@ export class ProjectFolderService {
     return { success: true };
   }
 
-  /**
-   * Get all project folders
-   */
   public async getAllProjectFolders(): Promise<ProjectFolder[]> {
     const settings = await this.userSettingsRepository.getSettings();
     return settings.projectFolders;
   }
 
-  /**
-   * Start watching all project folders
-   */
   public async startWatchingAllProjectFolders(
     correlationId?: string
   ): Promise<{ success: boolean; count: number }> {
@@ -290,15 +260,9 @@ export class ProjectFolderService {
       return { success: true, count: 0 };
     }
 
-    // Request watching for each project folder
+    // Start watching each project folder
     for (const projectFolder of projectFolders) {
-      await this.eventBus.emit<ServerRequestUpdateWatchingFolderEvent>({
-        kind: "ServerRequestUpdateWatchingFolder",
-        timestamp: new Date(),
-        correlationId,
-        folderPath: projectFolder.path,
-        action: "add",
-      });
+      await this.fileWatcherService.startWatchingFolder(projectFolder.path);
     }
 
     this.logger.info(
@@ -307,9 +271,6 @@ export class ProjectFolderService {
     return { success: true, count: projectFolders.length };
   }
 
-  /**
-   * Validate project folder path
-   */
   private async validateProjectFolderPath(
     projectFolderPath: string
   ): Promise<boolean> {
@@ -322,15 +283,11 @@ export class ProjectFolderService {
     }
   }
 
-  /**
-   * Recursively build a folder tree structure
-   */
   private async buildFolderTree(
     projectFolderPath: string,
     targetPath: string
   ): Promise<FolderTreeNode> {
     const baseName = path.basename(targetPath);
-    const relativePath = path.relative(projectFolderPath, targetPath);
 
     const stats = await fs.stat(targetPath);
 
@@ -374,12 +331,14 @@ export class ProjectFolderService {
   }
 }
 
-/**
- * Factory function to create a project folder service
- */
 export function createProjectFolderService(
   eventBus: IEventBus,
-  userSettingsRepository: UserSettingsRepository
+  userSettingsRepository: UserSettingsRepository,
+  fileWatcherService: FileWatcherService
 ): ProjectFolderService {
-  return new ProjectFolderService(eventBus, userSettingsRepository);
+  return new ProjectFolderService(
+    eventBus,
+    userSettingsRepository,
+    fileWatcherService
+  );
 }

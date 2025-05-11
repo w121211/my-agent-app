@@ -2,36 +2,32 @@
 import path from "node:path";
 import chokidar, { FSWatcher, ChokidarOptions } from "chokidar";
 import { Logger, ILogObj } from "tslog";
-import type { IEventBus } from "../event-bus.js";
-import type {
-  ChokidarFsEventData,
-  ChokidarFsEventKind,
-  ServerFileWatcherEvent,
-  BaseServerEvent,
-  BaseEvent,
-} from "../event-types.js";
+import type { IEventBus, BaseEvent } from "../event-bus.js";
 
-/**
- * Event for project folder file watching updates
- */
-export interface ServerRequestUpdateWatchingFolderEvent extends BaseEvent {
-  kind: "ServerRequestUpdateWatchingFolder";
-  folderPath: string; // Absolute path
-  action: "add" | "remove";
+// Define the FileWatcherEvent
+export type FileEventType =
+  | "add"
+  | "addDir"
+  | "change"
+  | "unlink"
+  | "unlinkDir"
+  | "ready"
+  | "error";
+
+export interface FileWatcherEvent extends BaseEvent {
+  kind: "FileWatcherEvent";
+  eventType: FileEventType;
+  absoluteFilePath: string;
+  isDirectory: boolean;
+  error?: Error;
 }
 
-/**
- * Watches for file system changes and emits events
- */
 export class FileWatcherService {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
   private readonly chokidarOptions: ChokidarOptions;
   private watchers: Map<string, FSWatcher> = new Map();
 
-  /**
-   * Default chokidar options for file watching
-   */
   private static readonly DEFAULT_OPTIONS: ChokidarOptions = {
     persistent: true,
     ignored: [
@@ -53,32 +49,8 @@ export class FileWatcherService {
       ...FileWatcherService.DEFAULT_OPTIONS,
       ...chokidarOptions,
     };
-
-    // Subscribe to watch folder update requests
-    this.eventBus.subscribe<ServerRequestUpdateWatchingFolderEvent>(
-      "ServerRequestUpdateWatchingFolder",
-      this.handleUpdateWatchingFolder.bind(this)
-    );
   }
 
-  /**
-   * Handle requests to update watched folders
-   */
-  private async handleUpdateWatchingFolder(
-    event: ServerRequestUpdateWatchingFolderEvent
-  ): Promise<void> {
-    const { folderPath, action } = event;
-
-    if (action === "add") {
-      await this.startWatchingFolder(folderPath);
-    } else if (action === "remove") {
-      await this.stopWatchingFolder(folderPath);
-    }
-  }
-
-  /**
-   * Start watching a specific folder for file changes
-   */
   public async startWatchingFolder(folderPath: string): Promise<void> {
     if (this.watchers.has(folderPath)) {
       this.logger.warn(`Already watching folder: ${folderPath}`);
@@ -120,9 +92,6 @@ export class FileWatcherService {
     this.watchers.set(folderPath, watcher);
   }
 
-  /**
-   * Stop watching a specific folder
-   */
   public async stopWatchingFolder(folderPath: string): Promise<void> {
     const watcher = this.watchers.get(folderPath);
 
@@ -137,11 +106,8 @@ export class FileWatcherService {
     this.watchers.delete(folderPath);
   }
 
-  /**
-   * Handle file system events and emit to the event bus
-   */
   private handleFsEvent(
-    fsEventKind: ChokidarFsEventKind,
+    eventType: FileEventType,
     filePath: string,
     basePath: string,
     isDirectory: boolean,
@@ -151,33 +117,25 @@ export class FileWatcherService {
     const absolutePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath, filePath);
-    const relativePath = filePath ? path.relative(basePath, filePath) : "";
-
-    const fsEventData: ChokidarFsEventData = {
-      fsEventKind,
-      srcPath: absolutePath, // Use absolute path
-      isDirectory,
-      error,
-    };
 
     this.logger.debug(
-      `Chokidar fs event: ${fsEventKind} - ${absolutePath} (${isDirectory ? "directory" : "file"})`
+      `Chokidar fs event: ${eventType} - ${absolutePath} (${isDirectory ? "directory" : "file"})`
     );
 
     this.eventBus
-      .emit<ServerFileWatcherEvent>({
-        kind: "ServerFileWatcherEvent",
+      .emit<FileWatcherEvent>({
+        kind: "FileWatcherEvent",
         timestamp: new Date(),
-        data: fsEventData,
+        eventType,
+        absoluteFilePath: absolutePath,
+        isDirectory,
+        error,
       })
       .catch((emitError) => {
         this.logger.error(`Error emitting file system event: ${emitError}`);
       });
   }
 
-  /**
-   * Stop all file watchers
-   */
   public async stopAllWatchers(): Promise<void> {
     this.logger.info("Stopping all file watchers");
 
@@ -196,23 +154,14 @@ export class FileWatcherService {
     this.watchers.clear();
   }
 
-  /**
-   * Check if a folder is being watched
-   */
   public isWatchingFolder(folderPath: string): boolean {
     return this.watchers.has(folderPath);
   }
 
-  /**
-   * Get the number of watched folders
-   */
   public getWatchedFolderCount(): number {
     return this.watchers.size;
   }
 
-  /**
-   * Get a list of all watched folders
-   */
   public getWatchedFolders(): string[] {
     return Array.from(this.watchers.keys());
   }

@@ -1,9 +1,11 @@
 // packages/events-core/src/server/routers/notification-router.ts
 import { observable } from "@trpc/server/observable";
 import { z } from "zod";
-import { IEventBus } from "../../event-bus.js";
-import { BaseServerEvent } from "../../event-types.js";
+import { IEventBus, BaseEvent } from "../../event-bus.js";
 import { router, loggedProcedure } from "../trpc-server.js";
+import { FileWatcherEvent } from "../../services/file-watcher-service.js";
+import { ChatUpdatedEvent } from "../../services/chat-service.js";
+import { TaskUpdatedEvent } from "../../services/task-service.js";
 
 export function createNotificationRouter(eventBus: IEventBus) {
   return router({
@@ -17,36 +19,35 @@ export function createNotificationRouter(eventBus: IEventBus) {
           .optional()
       )
       .subscription(({ input }) => {
-        // Create an observable that will emit file change events
         return observable<{ event: string; path: string; timestamp: Date }>(
           (emit) => {
-            // Function to handle events from the event bus
-            const handleFileEvent = (event: BaseServerEvent) => {
-              if (event.kind === "ServerFileWatcherEvent") {
-                const { data } = event;
+            const handleFileEvent = (event: BaseEvent) => {
+              if (event.kind === "FileWatcherEvent") {
+                const fileEvent = event as FileWatcherEvent;
+
                 // If a workspace path filter is provided, only emit events for that path
                 if (
                   input?.workspacePath &&
-                  !data.srcPath.startsWith(input.workspacePath)
+                  !fileEvent.absoluteFilePath.startsWith(input.workspacePath)
                 ) {
                   return;
                 }
 
                 emit.next({
-                  event: data.fsEventKind,
-                  path: data.srcPath,
+                  event: fileEvent.eventType,
+                  path: fileEvent.absoluteFilePath,
                   timestamp: event.timestamp,
                 });
               }
             };
 
-            // Subscribe to the event bus for file watcher events
+            // Subscribe to file watcher events
             const unsubscribe = eventBus.subscribe(
-              "ServerFileWatcherEvent",
+              "FileWatcherEvent",
               handleFileEvent
             );
 
-            // Return a cleanup function that will be called when the client unsubscribes
+            // Return a cleanup function
             return () => {
               unsubscribe();
             };
@@ -54,29 +55,97 @@ export function createNotificationRouter(eventBus: IEventBus) {
         );
       }),
 
-    // Get all real-time notifications
-    allEvents: loggedProcedure.subscription(() => {
-      return observable<{ kind: string; data: any; timestamp: Date }>(
-        (emit) => {
-          // Function to handle all server events
-          const handleEvent = (event: BaseServerEvent) => {
-            emit.next({
-              kind: event.kind,
-              data: { ...event },
-              timestamp: event.timestamp,
-            });
+    // Subscribe to chat updates
+    chatUpdates: loggedProcedure
+      .input(
+        z
+          .object({
+            chatId: z.string().optional(),
+          })
+          .optional()
+      )
+      .subscription(({ input }) => {
+        return observable<{
+          chatId: string;
+          updateType: string;
+          timestamp: Date;
+          chat: unknown;
+        }>((emit) => {
+          const handleChatEvent = (event: BaseEvent) => {
+            if (event.kind === "ChatUpdatedEvent") {
+              const chatEvent = event as ChatUpdatedEvent;
+
+              // If a chat ID filter is provided, only emit events for that chat
+              if (input?.chatId && chatEvent.chatId !== input.chatId) {
+                return;
+              }
+
+              emit.next({
+                chatId: chatEvent.chatId,
+                updateType: chatEvent.updateType,
+                timestamp: event.timestamp,
+                chat: chatEvent.chat,
+              });
+            }
           };
 
-          // Subscribe to all server events
-          const unsubscribe = eventBus.subscribeToAllServerEvents(handleEvent);
+          // Subscribe to chat updated events
+          const unsubscribe = eventBus.subscribe(
+            "ChatUpdatedEvent",
+            handleChatEvent
+          );
 
-          // Return cleanup function
           return () => {
             unsubscribe();
           };
-        }
-      );
-    }),
+        });
+      }),
+
+    // Subscribe to task updates
+    taskUpdates: loggedProcedure
+      .input(
+        z
+          .object({
+            taskId: z.string().optional(),
+          })
+          .optional()
+      )
+      .subscription(({ input }) => {
+        return observable<{
+          taskId: string;
+          updateType: string;
+          timestamp: Date;
+          task: unknown;
+        }>((emit) => {
+          const handleTaskEvent = (event: BaseEvent) => {
+            if (event.kind === "TaskUpdatedEvent") {
+              const taskEvent = event as TaskUpdatedEvent;
+
+              // If a task ID filter is provided, only emit events for that task
+              if (input?.taskId && taskEvent.taskId !== input.taskId) {
+                return;
+              }
+
+              emit.next({
+                taskId: taskEvent.taskId,
+                updateType: taskEvent.updateType,
+                timestamp: event.timestamp,
+                task: taskEvent.task,
+              });
+            }
+          };
+
+          // Subscribe to task updated events
+          const unsubscribe = eventBus.subscribe(
+            "TaskUpdatedEvent",
+            handleTaskEvent
+          );
+
+          return () => {
+            unsubscribe();
+          };
+        });
+      }),
 
     // Send a test notification
     sendTestNotification: loggedProcedure
@@ -88,8 +157,9 @@ export function createNotificationRouter(eventBus: IEventBus) {
       .mutation(async ({ input }) => {
         const timestamp = new Date();
 
-        await eventBus.emit({
-          kind: "ServerTestPing",
+        // Using a basic event since we removed the test events
+        await eventBus.emit<BaseEvent>({
+          kind: "TestNotification",
           message: input.message,
           timestamp,
         });
