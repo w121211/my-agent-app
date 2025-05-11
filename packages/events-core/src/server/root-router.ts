@@ -46,7 +46,7 @@ export function createAppRouter() {
   const taskService = new TaskService(eventBus, taskRepo);
 
   // Using ChatRepository instead of ChatFileService
-  const chatRepository = new ChatRepository(eventBus);
+  const chatRepository = new ChatRepository();
   const chatService = new ChatService(eventBus, chatRepository, taskService);
 
   // Updated FileService that doesn't need WorkspacePathService

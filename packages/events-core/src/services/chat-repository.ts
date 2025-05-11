@@ -2,7 +2,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { ILogObj, Logger } from "tslog";
-import type { IEventBus, BaseEvent } from "../event-bus.js";
+import { z } from "zod";
 import {
   createDirectory,
   fileExists,
@@ -10,13 +10,7 @@ import {
   writeJsonFile,
   listDirectory,
 } from "../file-helpers.js";
-import type {
-  Chat,
-  ChatMessage,
-  ChatMetadata,
-  Role,
-  ChatStatus,
-} from "./chat-service.js";
+import type { Chat, ChatMessage, ChatStatus } from "./chat-service.js";
 
 export class ChatFileError extends Error {
   constructor(message: string) {
@@ -25,44 +19,54 @@ export class ChatFileError extends Error {
   }
 }
 
-export class ChatNotFoundError extends ChatFileError {
+export class ChatFileNotFoundError extends ChatFileError {
   constructor(filePath: string) {
     super(`Chat with path ${filePath} not found`);
-    this.name = "ChatNotFoundError";
+    this.name = "ChatFileNotFoundError";
   }
 }
 
-// Event for notifying when a chat file is created or updated
-export interface ChatFileEvent extends BaseEvent {
-  kind: "ChatFileCreatedEvent" | "ChatFileUpdatedEvent";
-  chatId: string;
-  absoluteFilePath: string;
-}
+// Define serializable versions of the types using Zod
+const RoleSchema = z.enum(["ASSISTANT", "USER", "FUNCTION_EXECUTOR"]);
 
-interface ChatFileData {
-  _type: string;
-  id: string;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-  title?: string;
-  metadata?: ChatMetadata;
-  messages: Array<{
-    id: string;
-    role: string;
-    content: string;
-    timestamp: string | Date;
-    metadata?: Record<string, unknown>;
-  }>;
-}
+const ChatMessageSchema = z.object({
+  id: z.string(),
+  role: RoleSchema,
+  content: z.string(),
+  timestamp: z.string().transform((val) => new Date(val)),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+const ChatMetadataSchema = z.object({
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  mode: z.enum(["chat", "agent"]).optional(),
+  model: z.string().optional(),
+  knowledge: z.array(z.string()).optional(),
+});
+
+// Schema for serialized chat file data
+const ChatFileDataSchema = z.object({
+  _type: z.literal("chat"),
+  id: z.string(),
+  createdAt: z.string().transform((val) => new Date(val)),
+  updatedAt: z.string().transform((val) => new Date(val)),
+  messages: z.array(ChatMessageSchema),
+  metadata: ChatMetadataSchema.optional(),
+});
+
+// Type derived from schema
+type ChatFileData = Omit<Chat, "absoluteFilePath" | "status"> & {
+  _type: "chat";
+};
 
 export class ChatRepository {
   private readonly logger: Logger<ILogObj>;
   private readonly chatCache: Map<string, Chat> = new Map(); // absoluteFilePath -> Chat
-  private readonly eventBus: IEventBus;
 
-  constructor(eventBus: IEventBus) {
+  constructor() {
     this.logger = new Logger({ name: "ChatRepository" });
-    this.eventBus = eventBus;
   }
 
   async initialize(): Promise<void> {
@@ -106,7 +110,7 @@ export class ChatRepository {
       return chat;
     }
 
-    throw new ChatNotFoundError(absoluteFilePath);
+    throw new ChatFileNotFoundError(absoluteFilePath);
   }
 
   async findAll(): Promise<Chat[]> {
@@ -129,7 +133,7 @@ export class ChatRepository {
   }
 
   async createChat(
-    chat: Omit<Chat, "filePath">,
+    chat: Omit<Chat, "absoluteFilePath">,
     targetFolderAbsolutePath: string,
     correlationId?: string
   ): Promise<Chat> {
@@ -143,20 +147,11 @@ export class ChatRepository {
 
     const newChat: Chat = {
       ...chat,
-      filePath: absoluteFilePath,
+      absoluteFilePath: absoluteFilePath,
     };
 
     // Save chat to file
     await this.saveChatToFile(newChat, absoluteFilePath);
-
-    // Emit file created event
-    await this.eventBus.emit<ChatFileEvent>({
-      kind: "ChatFileCreatedEvent",
-      chatId: newChat.id,
-      absoluteFilePath,
-      timestamp: new Date(),
-      correlationId,
-    });
 
     // Cache the chat
     this.chatCache.set(absoluteFilePath, newChat);
@@ -196,21 +191,14 @@ export class ChatRepository {
     // Save to file
     await this.saveChatToFile(chat, absoluteFilePath);
 
-    // Emit file updated event
-    await this.eventBus.emit<ChatFileEvent>({
-      kind: "ChatFileUpdatedEvent",
-      chatId: chat.id,
-      absoluteFilePath,
-      timestamp: new Date(),
-      correlationId,
-    });
-
     return chat;
   }
 
   async readChatFile(absoluteFilePath: string): Promise<Chat> {
     if (!(await fileExists(absoluteFilePath))) {
-      throw new ChatFileError(`File does not exist: ${absoluteFilePath}`);
+      throw new ChatFileNotFoundError(
+        `File does not exist: ${absoluteFilePath}`
+      );
     }
 
     return this.readChatFromFile(absoluteFilePath);
@@ -238,40 +226,26 @@ export class ChatRepository {
       id: chat.id,
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
-      title: chat.metadata?.title || "New Chat",
-      metadata: chat.metadata,
       messages: chat.messages,
+      metadata: chat.metadata,
     };
 
     await writeJsonFile(absoluteFilePath, chatFile);
   }
 
   private async readChatFromFile(absoluteFilePath: string): Promise<Chat> {
-    const chatFileData = await readJsonFile<ChatFileData>(absoluteFilePath);
+    const fileContent = await readJsonFile<unknown>(absoluteFilePath);
 
-    if (chatFileData._type !== "chat") {
-      throw new ChatFileError(`File ${absoluteFilePath} is not a chat file`);
-    }
-
-    // Convert roles to proper type without using 'as'
-    const ensureRole = (role: string): Role => {
-      const validRoles: Role[] = ["ASSISTANT", "USER", "FUNCTION_EXECUTOR"];
-      return validRoles.includes(role as Role) ? (role as Role) : "USER"; // Default to USER if invalid
-    };
+    // Parse and validate the file content using Zod
+    const chatFileData = ChatFileDataSchema.parse(fileContent);
 
     const chat: Chat = {
       id: chatFileData.id,
-      filePath: absoluteFilePath,
-      messages: chatFileData.messages.map((msg) => ({
-        id: msg.id,
-        role: ensureRole(msg.role),
-        content: msg.content,
-        timestamp: new Date(msg.timestamp),
-        metadata: msg.metadata,
-      })),
-      status: "ACTIVE" as ChatStatus,
-      createdAt: new Date(chatFileData.createdAt),
-      updatedAt: new Date(chatFileData.updatedAt),
+      absoluteFilePath: absoluteFilePath,
+      messages: chatFileData.messages,
+      status: "ACTIVE" as ChatStatus, // Always set status to ACTIVE when loading
+      createdAt: chatFileData.createdAt,
+      updatedAt: chatFileData.updatedAt,
       metadata: chatFileData.metadata,
     };
 

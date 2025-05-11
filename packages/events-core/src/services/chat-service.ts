@@ -40,7 +40,7 @@ export interface ChatMetadata {
 
 export interface Chat {
   id: string;
-  filePath: string;
+  absoluteFilePath: string;
   messages: ChatMessage[];
   status: ChatStatus;
   createdAt: Date;
@@ -104,7 +104,7 @@ export class ChatService {
       folderPath = result.folderPath;
     }
 
-    const chatData: Omit<Chat, "filePath"> = {
+    const chatData: Omit<Chat, "absoluteFilePath"> = {
       id: uuidv4(),
       status: "ACTIVE",
       messages: [],
@@ -136,13 +136,13 @@ export class ChatService {
 
       // Add message to chat
       await this.chatRepository.addMessage(
-        chat.filePath,
+        chat.absoluteFilePath,
         message,
         correlationId
       );
 
       // Get updated chat after adding message
-      const updatedChat = await this.chatRepository.findByPath(chat.filePath);
+      const updatedChat = await this.chatRepository.findByPath(chat.absoluteFilePath);
       await this.processUserMessage(updatedChat, message, correlationId);
       return updatedChat;
     }
@@ -173,7 +173,7 @@ export class ChatService {
 
     // Add message to chat
     await this.chatRepository.addMessage(
-      chat.filePath,
+      chat.absoluteFilePath,
       chatMessage,
       correlationId
     );
@@ -184,7 +184,7 @@ export class ChatService {
     }
 
     // Get updated chat after adding message
-    const updatedChat = await this.chatRepository.findByPath(chat.filePath);
+    const updatedChat = await this.chatRepository.findByPath(chat.absoluteFilePath);
     await this.processUserMessage(updatedChat, chatMessage, correlationId);
 
     return updatedChat;
@@ -260,13 +260,13 @@ export class ChatService {
 
     // Add AI message to chat
     await this.chatRepository.addMessage(
-      chat.filePath,
+      chat.absoluteFilePath,
       aiMessage,
       correlationId
     );
 
     // Get updated chat after adding message
-    const updatedChat = await this.chatRepository.findByPath(chat.filePath);
+    const updatedChat = await this.chatRepository.findByPath(chat.absoluteFilePath);
 
     // Process artifacts if any were detected
     if (artifacts && artifacts.length > 0) {
@@ -274,7 +274,7 @@ export class ChatService {
         chat.id,
         aiMessage.id,
         artifacts,
-        chat.filePath,
+        chat.absoluteFilePath,
         correlationId
       );
     }
