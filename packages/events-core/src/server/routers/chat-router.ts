@@ -1,7 +1,7 @@
 // packages/events-core/src/server/routers/chat-router.ts
 import { z } from "zod";
 import { ChatService, ChatMode } from "../../services/chat-service.js";
-import { router, loggedProcedure } from "../trpc-server.js";
+import { router, publicProcedure } from "../trpc-server.js";
 
 // Chat schemas
 export const createNewChatSchema = z.object({
@@ -40,7 +40,7 @@ export const openFileSchema = z.object({
 
 export function createChatRouter(chatService: ChatService) {
   return router({
-    createChat: loggedProcedure
+    createChat: publicProcedure
       .input(createNewChatSchema)
       .mutation(async ({ input }) => {
         return chatService.createChat(
@@ -54,7 +54,7 @@ export function createChatRouter(chatService: ChatService) {
         );
       }),
 
-    submitMessage: loggedProcedure
+    submitMessage: publicProcedure
       .input(submitMessageSchema)
       .mutation(async ({ input }) => {
         return chatService.submitMessage(
@@ -65,7 +65,7 @@ export function createChatRouter(chatService: ChatService) {
         );
       }),
 
-    getById: loggedProcedure.input(chatIdSchema).query(async ({ input }) => {
+    getById: publicProcedure.input(chatIdSchema).query(async ({ input }) => {
       const chat = await chatService.getChatById(input.chatId);
       if (!chat) {
         throw new Error(`Chat ${input.chatId} not found`);
@@ -73,11 +73,11 @@ export function createChatRouter(chatService: ChatService) {
       return chat;
     }),
 
-    getAll: loggedProcedure.query(async () => {
+    getAll: publicProcedure.query(async () => {
       return chatService.getAllChats();
     }),
 
-    openChatFile: loggedProcedure
+    openChatFile: publicProcedure
       .input(openFileSchema)
       .query(async ({ input }) => {
         return chatService.openChatFile(input.filePath, input.correlationId);

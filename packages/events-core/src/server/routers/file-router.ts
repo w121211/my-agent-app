@@ -1,7 +1,7 @@
 // packages/events-core/src/server/routers/file-router.ts
 import { z } from "zod";
 import { FileService } from "../../services/file-service.js";
-import { router, loggedProcedure } from "../trpc-server.js";
+import { router, publicProcedure } from "../trpc-server.js";
 
 // File schemas
 export const openFileSchema = z.object({
@@ -11,12 +11,12 @@ export const openFileSchema = z.object({
 
 export function createFileRouter(fileService: FileService) {
   return router({
-    openFile: loggedProcedure.input(openFileSchema).query(async ({ input }) => {
+    openFile: publicProcedure.input(openFileSchema).query(async ({ input }) => {
       // filePath is now expected to be an absolute path
       return fileService.openFile(input.filePath, input.correlationId);
     }),
 
-    getFileType: loggedProcedure
+    getFileType: publicProcedure
       .input(openFileSchema)
       .query(async ({ input }) => {
         return fileService.getFileType(input.filePath);

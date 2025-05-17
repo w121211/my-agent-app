@@ -28,7 +28,7 @@ type Context = Awaited<ReturnType<typeof createContext>>;
 const t = initTRPC.context<Context>().create();
 
 // Export base tRPC elements
-export const publicProcedure = t.procedure;
+export const baseProcedure = t.procedure;
 export const router = t.router;
 export const middleware = t.middleware;
 
@@ -55,7 +55,7 @@ export const loggerMiddleware = middleware(
 );
 
 // Base procedure with logger
-export const loggedProcedure = publicProcedure.use(loggerMiddleware);
+export const publicProcedure = baseProcedure.use(loggerMiddleware);
 
 async function startServer() {
   logger.info("Starting server...");

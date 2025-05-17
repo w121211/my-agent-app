@@ -2,12 +2,21 @@
 import { z } from "zod";
 import { tracked } from "@trpc/server";
 import { IEventBus, BaseEvent } from "../../event-bus.js";
-import { router, loggedProcedure } from "../trpc-server.js";
+import { router, publicProcedure } from "../trpc-server.js";
+
+// Define the known event kinds
+const eventKindEnum = z.enum([
+  "FileWatcherEvent",
+  "ChatUpdatedEvent",
+  "TaskUpdatedEvent",
+  "ProjectFolderUpdatedEvent",
+  "PingEvent",
+]);
 
 export function createEventRouter(eventBus: IEventBus) {
   return router({
     // Subscribe to all events (generic subscription)
-    allEvents: loggedProcedure
+    allEvents: publicProcedure
       .input(
         z
           .object({
@@ -53,8 +62,27 @@ export function createEventRouter(eventBus: IEventBus) {
         }
       }),
 
+    // Subscribe to a specific event kind
+    subscribeToEvent: publicProcedure
+      .input(
+        z.object({
+          eventKind: eventKindEnum,
+          lastEventId: z.string().optional(), // For tracked events
+        })
+      )
+      .subscription(async function* ({ input, ctx, signal }) {
+        const { eventKind, lastEventId } = input;
+
+        // Subscribe to the specific event kind
+        for await (const [event] of eventBus.toIterable<BaseEvent>(eventKind, {
+          signal,
+        })) {
+          yield tracked(event.timestamp.toISOString(), event);
+        }
+      }),
+
     // Send a ping and receive a pong
-    ping: loggedProcedure
+    ping: publicProcedure
       .input(
         z.object({
           message: z.string().optional(),

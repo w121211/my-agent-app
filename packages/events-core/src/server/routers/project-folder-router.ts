@@ -1,6 +1,6 @@
 // packages/events-core/src/server/routers/project-folder-router.ts
 import { z } from "zod";
-import { router, loggedProcedure } from "../trpc-server.js";
+import { router, publicProcedure } from "../trpc-server.js";
 import { ProjectFolderService } from "../../services/project-folder-service.js";
 
 // Project folder schemas
@@ -26,13 +26,13 @@ export function createProjectFolderRouter(
   projectFolderService: ProjectFolderService
 ) {
   return router({
-    getFolderTree: loggedProcedure
+    getFolderTree: publicProcedure
       .input(folderTreeRequestSchema)
       .query(async ({ input }) => {
         return projectFolderService.getFolderTree(input.projectFolderPath);
       }),
 
-    addProjectFolder: loggedProcedure
+    addProjectFolder: publicProcedure
       .input(addProjectFolderSchema)
       .mutation(async ({ input }) => {
         return projectFolderService.addProjectFolder(
@@ -41,7 +41,7 @@ export function createProjectFolderRouter(
         );
       }),
 
-    removeProjectFolder: loggedProcedure
+    removeProjectFolder: publicProcedure
       .input(removeProjectFolderSchema)
       .mutation(async ({ input }) => {
         return projectFolderService.removeProjectFolder(
@@ -50,11 +50,11 @@ export function createProjectFolderRouter(
         );
       }),
 
-    getAllProjectFolders: loggedProcedure.query(async () => {
+    getAllProjectFolders: publicProcedure.query(async () => {
       return projectFolderService.getAllProjectFolders();
     }),
 
-    startWatchingAllProjectFolders: loggedProcedure
+    startWatchingAllProjectFolders: publicProcedure
       .input(startWatchingAllProjectFoldersSchema)
       .mutation(async ({ input }) => {
         return projectFolderService.startWatchingAllProjectFolders(
