@@ -2,7 +2,7 @@
 import { ILogObj, Logger } from "tslog";
 import { router } from "./trpc-server.js";
 import { createServerEventBus } from "../event-bus.js";
-import { TaskRepository } from "../repositories.js";
+import { TaskRepository } from "../services/task-repository.js";
 import { TaskService } from "../services/task-service.js";
 import { ChatService } from "../services/chat-service.js";
 import { FileService } from "../services/file-service.js";
@@ -31,9 +31,6 @@ export function createAppRouter() {
   // Create repositories
   const userSettingsRepo = createUserSettingsRepository(appName);
 
-  // Default task repository - will be updated based on project folder context when needed
-  const taskRepo = new TaskRepository("");
-
   // Create services
   const fileWatcherService = new FileWatcherService(eventBus);
 
@@ -43,10 +40,46 @@ export function createAppRouter() {
     fileWatcherService
   );
 
+  // Create task repository
+  const taskRepo = new TaskRepository();
+
+  // Initialize task repository with any existing tasks
+  projectFolderService
+    .getAllProjectFolders()
+    .then(async (folders) => {
+      for (const folder of folders) {
+        await taskRepo.scanFolder(folder.path);
+      }
+      logger.info(`Task repository initialized with folders`);
+    })
+    .catch((err) =>
+      logger.error(
+        "Failed to initialize task repository with project folders:",
+        err
+      )
+    );
+
   const taskService = new TaskService(eventBus, taskRepo);
 
-  // Using ChatRepository instead of ChatFileService
+  // Using ChatRepository
   const chatRepository = new ChatRepository();
+
+  // Initialize chat repository with any existing chats
+  projectFolderService
+    .getAllProjectFolders()
+    .then(async (folders) => {
+      for (const folder of folders) {
+        await chatRepository.scanFolder(folder.path);
+      }
+      logger.info(`Chat repository initialized with folders`);
+    })
+    .catch((err) =>
+      logger.error(
+        "Failed to initialize chat repository with project folders:",
+        err
+      )
+    );
+
   const chatService = new ChatService(eventBus, chatRepository, taskService);
 
   // Updated FileService that doesn't need WorkspacePathService

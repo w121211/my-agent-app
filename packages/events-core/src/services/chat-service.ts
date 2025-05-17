@@ -92,16 +92,16 @@ export class ChatService {
     correlationId?: string
   ): Promise<Chat> {
     const now = new Date();
-    let folderPath = targetDirectoryAbsolutePath;
 
     // Create task if requested
     if (newTask) {
       const result = await this.taskService.createTask(
         "New Chat Task",
         {}, // Default empty config
+        targetDirectoryAbsolutePath,
         correlationId
       );
-      folderPath = result.folderPath;
+      targetDirectoryAbsolutePath = result.absoluteDirectoryPath;
     }
 
     const chatData: Omit<Chat, "absoluteFilePath"> = {
@@ -121,7 +121,7 @@ export class ChatService {
     // Create chat object using repository
     const chat = await this.chatRepository.createChat(
       chatData,
-      folderPath,
+      targetDirectoryAbsolutePath,
       correlationId
     );
 
@@ -142,7 +142,9 @@ export class ChatService {
       );
 
       // Get updated chat after adding message
-      const updatedChat = await this.chatRepository.findByPath(chat.absoluteFilePath);
+      const updatedChat = await this.chatRepository.findByPath(
+        chat.absoluteFilePath
+      );
       await this.processUserMessage(updatedChat, message, correlationId);
       return updatedChat;
     }
@@ -184,7 +186,9 @@ export class ChatService {
     }
 
     // Get updated chat after adding message
-    const updatedChat = await this.chatRepository.findByPath(chat.absoluteFilePath);
+    const updatedChat = await this.chatRepository.findByPath(
+      chat.absoluteFilePath
+    );
     await this.processUserMessage(updatedChat, chatMessage, correlationId);
 
     return updatedChat;
@@ -266,7 +270,9 @@ export class ChatService {
     );
 
     // Get updated chat after adding message
-    const updatedChat = await this.chatRepository.findByPath(chat.absoluteFilePath);
+    const updatedChat = await this.chatRepository.findByPath(
+      chat.absoluteFilePath
+    );
 
     // Process artifacts if any were detected
     if (artifacts && artifacts.length > 0) {

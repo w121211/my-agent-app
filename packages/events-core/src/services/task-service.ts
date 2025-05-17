@@ -2,7 +2,7 @@
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 import type { IEventBus, BaseEvent } from "../event-bus.js";
-import type { TaskRepository } from "../repositories.js";
+import type { TaskRepository } from "./task-repository.js";
 
 // Define types specific to the task service
 export type TaskStatus =
@@ -17,7 +17,7 @@ export interface Task {
   title: string;
   status: TaskStatus;
   currentSubtaskId?: string;
-  folderPath?: string;
+  absoluteDirectoryPath?: string;
   config: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -51,12 +51,13 @@ export class TaskService {
   async createTask(
     taskName: string,
     taskConfig: Record<string, unknown>,
+    parentAbsoluteDirectoryPath: string,
     correlationId?: string
-  ): Promise<{ taskId: string; folderPath: string }> {
+  ): Promise<{ taskId: string; absoluteDirectoryPath: string }> {
     const taskId = uuidv4();
     const now = new Date();
 
-    const task: Task = {
+    const task: Omit<Task, "absoluteDirectoryPath"> = {
       id: taskId,
       seqNumber: 0,
       title: taskName,
@@ -66,12 +67,15 @@ export class TaskService {
       updatedAt: now,
     };
 
-    const folderPath = await this.taskRepo.createTaskFolder(task);
-    task.folderPath = folderPath;
+    const completedTask = await this.taskRepo.createTask(
+      task,
+      parentAbsoluteDirectoryPath
+    );
 
-    await this.taskRepo.save(task);
-
-    return { taskId, folderPath };
+    return {
+      taskId: completedTask.id,
+      absoluteDirectoryPath: completedTask.absoluteDirectoryPath!,
+    };
   }
 
   async startTask(taskId: string, correlationId?: string): Promise<Task> {
@@ -84,7 +88,7 @@ export class TaskService {
     const previousStatus = task.status;
     task.status = "IN_PROGRESS";
     task.updatedAt = new Date();
-    await this.taskRepo.save(task);
+    await this.taskRepo.updateTask(task);
 
     // Emit task updated event for status change
     await this.eventBus.emit<TaskUpdatedEvent>({

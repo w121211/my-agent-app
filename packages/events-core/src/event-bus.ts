@@ -24,6 +24,10 @@ export interface IEventBus {
     eventKind: string,
     handler: EventHandler<T>
   ): void;
+  toIterable<T extends BaseEvent>(
+    eventKind: string,
+    opts?: { signal?: AbortSignal }
+  ): AsyncIterable<[T]>;
 }
 
 export type EventBusEnvironment = "client" | "server";
@@ -91,6 +95,84 @@ export class EventBus implements IEventBus {
     );
 
     await Promise.all(promises);
+  }
+
+  public toIterable<T extends BaseEvent>(
+    eventKind: string,
+    opts?: { signal?: AbortSignal }
+  ): AsyncIterable<[T]> {
+    interface QueueItem {
+      resolve: (value: IteratorResult<[T], any>) => void;
+      reject: (reason?: any) => void;
+    }
+
+    return {
+      [Symbol.asyncIterator]: () => {
+        const queue: T[] = [];
+        const waiters: QueueItem[] = [];
+        let isDone = false;
+
+        const onEvent = (event: T) => {
+          if (waiters.length > 0) {
+            const waiter = waiters.shift()!;
+            waiter.resolve({ done: false, value: [event] });
+          } else {
+            queue.push(event);
+          }
+        };
+
+        const unsubscribe = this.subscribe<T>(eventKind, onEvent);
+
+        const cleanup = () => {
+          unsubscribe();
+          isDone = true;
+
+          // Resolve any pending waiters
+          for (const waiter of waiters) {
+            waiter.resolve({ done: true, value: undefined });
+          }
+          waiters.length = 0;
+        };
+
+        // Setup AbortSignal handler
+        if (opts?.signal) {
+          // If already aborted, clean up immediately
+          if (opts.signal.aborted) {
+            cleanup();
+          } else {
+            // Otherwise listen for abort event
+            opts.signal.addEventListener("abort", cleanup, { once: true });
+          }
+        }
+
+        return {
+          next: async (): Promise<IteratorResult<[T], any>> => {
+            if (isDone) {
+              return { done: true, value: undefined };
+            }
+
+            // If we have items in the queue, return one
+            if (queue.length > 0) {
+              const event = queue.shift()!;
+              return { done: false, value: [event] };
+            }
+
+            // Otherwise wait for an event
+            return new Promise<IteratorResult<[T], any>>((resolve, reject) => {
+              waiters.push({ resolve, reject });
+            });
+          },
+          return: async (): Promise<IteratorResult<[T], any>> => {
+            cleanup();
+            return { done: true, value: undefined };
+          },
+          throw: async (err: Error): Promise<IteratorResult<[T], any>> => {
+            cleanup();
+            throw err;
+          },
+        };
+      },
+    };
   }
 
   private async executeHandler<T extends BaseEvent>(
