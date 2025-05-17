@@ -1,95 +1,11 @@
 // packages/events-core/src/server/routers/event-router.ts
-import { tracked } from "@trpc/server";
 import { z } from "zod";
+import { tracked } from "@trpc/server";
 import { IEventBus, BaseEvent } from "../../event-bus.js";
 import { router, loggedProcedure } from "../trpc-server.js";
-import { FileWatcherEvent } from "../../services/file-watcher-service.js";
-import { ChatUpdatedEvent } from "../../services/chat-service.js";
-import { TaskUpdatedEvent } from "../../services/task-service.js";
 
 export function createEventRouter(eventBus: IEventBus) {
   return router({
-    // Subscribe to file change events
-    fileChanges: loggedProcedure
-      .input(
-        z
-          .object({
-            workspacePath: z.string().optional(),
-            lastEventId: z.string().optional(), // Added for tracked events
-          })
-          .optional()
-      )
-      .subscription(async function* ({ input, ctx, signal }) {
-        // Create an iterable from the FileWatcherEvent events
-        for await (const [event] of eventBus.toIterable<FileWatcherEvent>(
-          "FileWatcherEvent",
-          { signal }
-        )) {
-          // If a workspace path filter is provided, only emit events for that path
-          if (
-            input?.workspacePath &&
-            !event.absoluteFilePath.startsWith(input.workspacePath)
-          ) {
-            continue;
-          }
-
-          // Yield the tracked event directly
-          yield tracked(event.timestamp.toISOString(), event);
-        }
-      }),
-
-    // Subscribe to chat updates
-    chatUpdates: loggedProcedure
-      .input(
-        z
-          .object({
-            chatId: z.string().optional(),
-            lastEventId: z.string().optional(), // Added for tracked events
-          })
-          .optional()
-      )
-      .subscription(async function* ({ input, ctx, signal }) {
-        // Create an iterable from the ChatUpdatedEvent events
-        for await (const [event] of eventBus.toIterable<ChatUpdatedEvent>(
-          "ChatUpdatedEvent",
-          { signal }
-        )) {
-          // If a chat ID filter is provided, only emit events for that chat
-          if (input?.chatId && event.chatId !== input.chatId) {
-            continue;
-          }
-
-          // Yield the tracked event directly
-          yield tracked(event.timestamp.toISOString(), event);
-        }
-      }),
-
-    // Subscribe to task updates
-    taskUpdates: loggedProcedure
-      .input(
-        z
-          .object({
-            taskId: z.string().optional(),
-            lastEventId: z.string().optional(), // Added for tracked events
-          })
-          .optional()
-      )
-      .subscription(async function* ({ input, ctx, signal }) {
-        // Create an iterable from the TaskUpdatedEvent events
-        for await (const [event] of eventBus.toIterable<TaskUpdatedEvent>(
-          "TaskUpdatedEvent",
-          { signal }
-        )) {
-          // If a task ID filter is provided, only emit events for that task
-          if (input?.taskId && event.taskId !== input.taskId) {
-            continue;
-          }
-
-          // Yield the tracked event directly
-          yield tracked(event.timestamp.toISOString(), event);
-        }
-      }),
-
     // Subscribe to all events (generic subscription)
     allEvents: loggedProcedure
       .input(
