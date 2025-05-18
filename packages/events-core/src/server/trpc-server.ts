@@ -61,7 +61,7 @@ async function startServer() {
   logger.info("Starting server...");
 
   try {
-    const appRouter = createAppRouter();
+    const appRouter = await createAppRouter();
 
     // Create HTTP server with tRPC handler
     const server = createHTTPServer({

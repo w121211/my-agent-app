@@ -1,6 +1,5 @@
 // packages/events-core/src/services/user-settings-service.ts
 import { Logger, ILogObj } from "tslog";
-import type { IEventBus } from "../event-bus.js";
 import type {
   UserSettingsRepository,
   UserSettings,

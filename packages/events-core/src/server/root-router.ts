@@ -18,7 +18,7 @@ import { createProjectFolderRouter } from "./routers/project-folder-router.js";
 import { createFileRouter } from "./routers/file-router.js";
 import { createUserSettingsRouter } from "./routers/user-settings-router.js";
 
-export function createAppRouter() {
+export async function createAppRouter() {
   // Setup logger
   const logger: Logger<ILogObj> = new Logger({ name: "AppServer" });
 
@@ -29,7 +29,7 @@ export function createAppRouter() {
   const appName = process.env.APP_NAME || "app";
 
   // Create repositories
-  const userSettingsRepo = createUserSettingsRepository(appName);
+  const userSettingsRepo = await createUserSettingsRepository(appName);
 
   // Create services
   const fileWatcherService = new FileWatcherService(eventBus);
@@ -108,4 +108,4 @@ export function createAppRouter() {
   });
 }
 
-export type AppRouter = ReturnType<typeof createAppRouter>;
+export type AppRouter = Awaited<ReturnType<typeof createAppRouter>>;
