@@ -4,58 +4,66 @@ import {
   CreateHTTPContextOptions,
   createHTTPServer,
 } from "@trpc/server/adapters/standalone";
-import {
-  applyWSSHandler,
-  CreateWSSContextFnOptions,
-} from "@trpc/server/adapters/ws";
 import { initTRPC } from "@trpc/server";
 import { Logger } from "tslog";
-import { WebSocketServer } from "ws";
+import superjson from "superjson";
 import { createAppRouter } from "./root-router.js";
 
 const logger = new Logger({ name: "Server" });
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 // Create context type
-function createContext(
-  opts: CreateHTTPContextOptions | CreateWSSContextFnOptions
-) {
-  return { logger };
+function createContext(opts: CreateHTTPContextOptions) {
+  return {};
 }
 type Context = Awaited<ReturnType<typeof createContext>>;
 
 // Initialize tRPC with context
-const t = initTRPC.context<Context>().create();
+const t = initTRPC.context<Context>().create({
+  transformer: superjson,
+  errorFormatter({ shape }) {
+    return shape;
+  },
+  sse: {
+    maxDurationMs: 5 * 60 * 1_000, // 5 minutes
+    ping: {
+      enabled: true,
+      intervalMs: 3_000,
+    },
+    client: {
+      reconnectAfterInactivityMs: 5_000,
+    },
+  },
+});
 
 // Export base tRPC elements
-export const baseProcedure = t.procedure;
 export const router = t.router;
-export const middleware = t.middleware;
+export const mergeRouters = t.mergeRouters;
+export const createCallerFactory = t.createCallerFactory;
 
-// Create an error handling middleware
-export const loggerMiddleware = middleware(
-  async ({ path, type, next, ctx }) => {
-    const start = Date.now();
+/**
+ * Create an unprotected procedure
+ * @see https://trpc.io/docs/v11/procedures
+ **/
+export const publicProcedure = t.procedure.use(
+  async function artificialDelayInDevelopment(opts) {
+    const res = opts.next(opts);
 
-    const result = await next();
+    if (process.env.NODE_ENV === "development") {
+      const randomNumber = (min: number, max: number) =>
+        Math.floor(Math.random() * (max - min + 1)) + min;
 
-    const durationMs = Date.now() - start;
-    if (result.ok) {
-      ctx.logger.info(`${type} ${path} completed in ${durationMs}ms`);
-    } else {
-      ctx.logger.error(
-        `${type} ${path} failed in ${durationMs}ms: ${result.error.message}`
+      const delay = randomNumber(300, 1_000);
+      logger.debug(
+        `ℹ️ doing artificial delay of ${delay} ms before returning ${opts.path}`
       );
-      // You can also log the error stack if needed
-      ctx.logger.error(result.error.stack);
+
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
 
-    return result;
+    return res;
   }
 );
-
-// Base procedure with logger
-export const publicProcedure = baseProcedure.use(loggerMiddleware);
 
 async function startServer() {
   logger.info("Starting server...");
@@ -69,34 +77,14 @@ async function startServer() {
       createContext,
     });
 
-    // Create WebSocket server for subscriptions
-    const wss = new WebSocketServer({ server });
-
-    // Apply tRPC WebSocket handler
-    const wssHandler = applyWSSHandler({
-      // @ts-expect-error WebSocketServer types mismatch between ws and @trpc/server
-      wss,
-      router: appRouter,
-      createContext,
-    });
-
     // Start the server
     server.listen(PORT, () => {
       logger.info(`Server listening on http://localhost:${PORT}`);
-      logger.info(`WebSocket server listening on ws://localhost:${PORT}`);
-      logger.info(`Connected clients: ${wss.clients.size}`);
     });
-
-    // Optional: Log connected clients periodically
-    // const clientIntervalId = setInterval(() => {
-    //   logger.debug(`Connected clients: ${wss.clients.size}`);
-    // }, 10000);
 
     // Handle shutdown
     const shutdown = () => {
       logger.info("Shutting down server...");
-      // clearInterval(clientIntervalId);
-      wssHandler.broadcastReconnectNotification();
       server.close();
       process.exit(0);
     };

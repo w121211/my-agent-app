@@ -7,6 +7,7 @@ import { router, publicProcedure } from "../trpc-server.js";
 export const createTaskSchema = z.object({
   taskName: z.string().min(1),
   taskConfig: z.record(z.unknown()).default({}),
+  parentAbsoluteDirectoryPath: z.string(),
   correlationId: z.string().optional(),
 });
 
@@ -23,6 +24,7 @@ export function createTaskRouter(taskService: TaskService) {
         return taskService.createTask(
           input.taskName,
           input.taskConfig,
+          input.parentAbsoluteDirectoryPath,
           input.correlationId
         );
       }),
