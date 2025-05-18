@@ -11,11 +11,11 @@ import { ChatRepository } from "../services/chat-repository.js";
 import { FileWatcherService } from "../services/file-watcher-service.js";
 import { createUserSettingsService } from "../services/user-settings-service.js";
 import { createProjectFolderService } from "../services/project-folder-service.js";
+import { createEventRouter } from "./routers/event-router.js";
 import { createTaskRouter } from "./routers/task-router.js";
 import { createChatRouter } from "./routers/chat-router.js";
 import { createProjectFolderRouter } from "./routers/project-folder-router.js";
 import { createFileRouter } from "./routers/file-router.js";
-import { createNotificationRouter } from "./routers/notification-router.js";
 import { createUserSettingsRouter } from "./routers/user-settings-router.js";
 
 export function createAppRouter() {
@@ -44,20 +44,19 @@ export function createAppRouter() {
   const taskRepo = new TaskRepository();
 
   // Initialize task repository with any existing tasks
-  projectFolderService
-    .getAllProjectFolders()
-    .then(async (folders) => {
-      for (const folder of folders) {
-        await taskRepo.scanFolder(folder.path);
-      }
-      logger.info(`Task repository initialized with folders`);
-    })
-    .catch((err) =>
-      logger.error(
-        "Failed to initialize task repository with project folders:",
-        err
-      )
-    );
+  projectFolderService.getAllProjectFolders();
+  // .then(async (folders) => {
+  //   for (const folder of folders) {
+  //     await taskRepo.scanFolder(folder.path);
+  //   }
+  //   logger.info(`Task repository initialized with folders`);
+  // })
+  // .catch((err) =>
+  //   logger.error(
+  //     "Failed to initialize task repository with project folders:",
+  //     err
+  //   )
+  // );
 
   const taskService = new TaskService(eventBus, taskRepo);
 
@@ -104,7 +103,7 @@ export function createAppRouter() {
     chat: createChatRouter(chatService),
     projectFolder: createProjectFolderRouter(projectFolderService),
     file: createFileRouter(fileService),
-    notification: createNotificationRouter(eventBus),
+    event: createEventRouter(eventBus),
     userSettings: createUserSettingsRouter(userSettingsService),
   });
 }

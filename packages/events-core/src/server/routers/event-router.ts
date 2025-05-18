@@ -2,6 +2,10 @@
 import { z } from "zod";
 import { tracked } from "@trpc/server";
 import { IEventBus, BaseEvent } from "../../event-bus.js";
+import { FileWatcherEvent } from "../../services/file-watcher-service.js";
+import { ChatUpdatedEvent } from "../../services/chat-service.js";
+import { TaskUpdatedEvent } from "../../services/task-service.js";
+import { ProjectFolderUpdatedEvent } from "../../services/project-folder-service.js";
 import { router, publicProcedure } from "../trpc-server.js";
 
 // Define the known event kinds
@@ -10,8 +14,19 @@ const eventKindEnum = z.enum([
   "ChatUpdatedEvent",
   "TaskUpdatedEvent",
   "ProjectFolderUpdatedEvent",
-  "PingEvent",
-]);
+] as const);
+
+// Get the enum values as an array
+const eventKinds = eventKindEnum.options;
+
+// Map event kinds to their event types
+interface EventTypeMap {
+  FileWatcherEvent: FileWatcherEvent;
+  ChatUpdatedEvent: ChatUpdatedEvent;
+  TaskUpdatedEvent: TaskUpdatedEvent;
+  ProjectFolderUpdatedEvent: ProjectFolderUpdatedEvent;
+  PingEvent: BaseEvent & { message: string };
+}
 
 export function createEventRouter(eventBus: IEventBus) {
   return router({
@@ -20,16 +35,13 @@ export function createEventRouter(eventBus: IEventBus) {
       .input(
         z
           .object({
-            lastEventId: z.string().optional(), // For tracked events
+            // TODO: lastEventId need to be used
+            lastEventId: z.string().nullable(), // For tracked events
           })
           .optional()
       )
       .subscription(async function* ({ input, ctx, signal }) {
-        const kinds = [
-          "FileWatcherEvent",
-          "ChatUpdatedEvent",
-          "TaskUpdatedEvent",
-        ];
+        const kinds = eventKinds;
 
         // This function will yield events from a specific kind
         async function* streamEvents<T extends BaseEvent>(kind: string) {
@@ -67,14 +79,17 @@ export function createEventRouter(eventBus: IEventBus) {
       .input(
         z.object({
           eventKind: eventKindEnum,
-          lastEventId: z.string().optional(), // For tracked events
+          // TODO: lastEventId need to be used
+          lastEventId: z.string().nullable(), // For tracked events
         })
       )
       .subscription(async function* ({ input, ctx, signal }) {
         const { eventKind, lastEventId } = input;
 
         // Subscribe to the specific event kind
-        for await (const [event] of eventBus.toIterable<BaseEvent>(eventKind, {
+        for await (const [event] of eventBus.toIterable<
+          EventTypeMap[typeof eventKind]
+        >(eventKind, {
           signal,
         })) {
           yield tracked(event.timestamp.toISOString(), event);
