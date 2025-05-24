@@ -75,11 +75,15 @@ async function startServer() {
     const server = createHTTPServer({
       router: appRouter,
       createContext,
+      basePath: "/api/trpc/",
     });
 
     // Start the server
     server.listen(PORT, () => {
       logger.info(`Server listening on http://localhost:${PORT}`);
+      logger.info(
+        `tRPC endpoint available at http://localhost:${PORT}/api/trpc`
+      );
     });
 
     // Handle shutdown

@@ -85,10 +85,7 @@ export async function createAppRouter() {
   const fileService = new FileService(eventBus);
 
   // Create user settings service
-  const userSettingsService = createUserSettingsService(
-    userSettingsRepo,
-    projectFolderService
-  );
+  const userSettingsService = createUserSettingsService(userSettingsRepo);
 
   // Start watching all project folders
   projectFolderService

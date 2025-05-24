@@ -4,20 +4,18 @@ import type {
   UserSettingsRepository,
   UserSettings,
 } from "./user-settings-repository.js";
-import type { ProjectFolderService } from "./project-folder-service.js";
+
+// Define safe user settings update type that excludes projectFolders
+type SafeUserSettingsUpdate = Omit<Partial<UserSettings>, "projectFolders"> &
+  Record<string, unknown>;
 
 export class UserSettingsService {
   private readonly logger: Logger<ILogObj>;
   private readonly userSettingsRepository: UserSettingsRepository;
-  private readonly projectFolderService: ProjectFolderService;
 
-  constructor(
-    userSettingsRepository: UserSettingsRepository,
-    projectFolderService: ProjectFolderService
-  ) {
+  constructor(userSettingsRepository: UserSettingsRepository) {
     this.logger = new Logger({ name: "UserSettingsService" });
     this.userSettingsRepository = userSettingsRepository;
-    this.projectFolderService = projectFolderService;
   }
 
   public async getUserSettings(): Promise<UserSettings> {
@@ -25,7 +23,7 @@ export class UserSettingsService {
   }
 
   public async updateUserSettings(
-    settingsUpdate: Record<string, unknown>
+    settingsUpdate: SafeUserSettingsUpdate // Type-safe: prevents projectFolders updates at compile time
   ): Promise<{ success: boolean; message?: string; settings?: UserSettings }> {
     try {
       this.logger.info("Updating user settings");
@@ -33,24 +31,12 @@ export class UserSettingsService {
       // Get current settings
       const currentSettings = await this.userSettingsRepository.getSettings();
 
-      // Create updated settings by merging with current settings
-      const updatedSettings: UserSettings = { ...currentSettings };
-
-      // Update settings fields
       // Note: projectFolders should be updated through the ProjectFolderService,
-      // so we'll ignore that field here
-      if (settingsUpdate.projectFolders !== undefined) {
-        this.logger.warn(
-          "Attempting to update projectFolders directly. This should be done through ProjectFolderService."
-        );
-      }
-
-      // Update all fields except projectFolders
-      Object.entries(settingsUpdate).forEach(([key, value]) => {
-        if (key !== "projectFolders") {
-          (updatedSettings as Record<string, unknown>)[key] = value;
-        }
-      });
+      // so we exclude that field here using type constraints at compile time
+      const updatedSettings: UserSettings = {
+        ...currentSettings,
+        ...settingsUpdate,
+      };
 
       // Save updated settings
       await this.userSettingsRepository.saveSettings(updatedSettings);
@@ -68,8 +54,7 @@ export class UserSettingsService {
 }
 
 export function createUserSettingsService(
-  userSettingsRepository: UserSettingsRepository,
-  projectFolderService: ProjectFolderService
+  userSettingsRepository: UserSettingsRepository
 ): UserSettingsService {
-  return new UserSettingsService(userSettingsRepository, projectFolderService);
+  return new UserSettingsService(userSettingsRepository);
 }

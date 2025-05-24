@@ -61,15 +61,8 @@ export class UserSettingsRepository {
 }
 
 export async function createUserSettingsRepository(
-  appName: string = "my-agent-app"
+  userDataDir: string
 ): Promise<UserSettingsRepository> {
-  // Use user's home directory
-  const homeDir = os.homedir();
-  const appDir = path.join(homeDir, `${appName}`);
-
-  // Ensure app directory exists
-  await createDirectory(appDir);
-
-  const filePath = path.join(appDir, "userSettings.json");
+  const filePath = path.join(userDataDir, "userSettings.json");
   return new UserSettingsRepository(filePath);
 }
