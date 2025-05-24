@@ -63,7 +63,7 @@ async function main() {
   logger.info("Starting Events Core client demo...");
 
   // Set up a test folder path (current working directory)
-  const testFolderPath = process.cwd();
+  const testFolderPath = process.cwd() + "/my-demo/demo-project";
   let projectFolderId: string | undefined;
   let chatId: string | undefined;
   let taskId: string | undefined;
@@ -81,7 +81,8 @@ async function main() {
       }
     },
     onError(err) {
-      logger.error("Event subscription error:", err);
+      // logger.error("Event subscription error:", err);
+      throw err;
     },
   });
 
@@ -179,6 +180,8 @@ async function main() {
   // Get all tasks
   const allTasks = await trpc.task.getAll.query();
   logger.info(`Found ${allTasks.length} tasks`);
+
+  return;
 
   // 5. Chat API examples
   logger.info("\n--- Chat API ---");

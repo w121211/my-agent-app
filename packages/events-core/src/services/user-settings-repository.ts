@@ -1,13 +1,7 @@
 // packages/events-core/src/services/user-settings-repository.ts
 import path from "node:path";
-import os from "node:os";
 import { Logger, ILogObj } from "tslog";
-import {
-  fileExists,
-  readJsonFile,
-  writeJsonFile,
-  createDirectory,
-} from "../file-helpers.js";
+import { fileExists, readJsonFile, writeJsonFile } from "../file-helpers.js";
 import { ProjectFolder } from "./project-folder-service.js";
 
 export interface UserSettings {
@@ -37,22 +31,12 @@ export class UserSettingsRepository {
       return { ...DEFAULT_USER_SETTINGS };
     }
 
-    try {
-      return await readJsonFile<UserSettings>(this.filePath);
-    } catch (error) {
-      this.logger.error(`Error reading settings file: ${error}`);
-      throw new Error(`Failed to read settings file: ${error}`);
-    }
+    return await readJsonFile<UserSettings>(this.filePath);
   }
 
   public async saveSettings(settings: UserSettings): Promise<void> {
-    try {
-      await writeJsonFile(this.filePath, settings);
-      this.logger.debug(`Settings saved successfully to ${this.filePath}`);
-    } catch (error) {
-      this.logger.error(`Error saving settings file: ${error}`);
-      throw new Error(`Failed to save settings file: ${error}`);
-    }
+    await writeJsonFile(this.filePath, settings);
+    this.logger.debug(`Settings saved successfully to ${this.filePath}`);
   }
 
   public getFilePath(): string {
@@ -60,9 +44,9 @@ export class UserSettingsRepository {
   }
 }
 
-export async function createUserSettingsRepository(
+export function createUserSettingsRepository(
   userDataDir: string
-): Promise<UserSettingsRepository> {
+): UserSettingsRepository {
   const filePath = path.join(userDataDir, "userSettings.json");
   return new UserSettingsRepository(filePath);
 }

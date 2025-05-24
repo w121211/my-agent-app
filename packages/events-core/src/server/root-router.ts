@@ -18,18 +18,15 @@ import { createProjectFolderRouter } from "./routers/project-folder-router.js";
 import { createFileRouter } from "./routers/file-router.js";
 import { createUserSettingsRouter } from "./routers/user-settings-router.js";
 
-export async function createAppRouter() {
+export async function createAppRouter(userDataDir: string) {
   // Setup logger
   const logger: Logger<ILogObj> = new Logger({ name: "AppServer" });
 
   // Create event bus for server-side events
   const eventBus = createServerEventBus({ logger });
 
-  // Set app name
-  const appName = process.env.APP_NAME || "app";
-
   // Create repositories
-  const userSettingsRepo = await createUserSettingsRepository(appName);
+  const userSettingsRepo = createUserSettingsRepository(userDataDir);
 
   // Create services
   const fileWatcherService = new FileWatcherService(eventBus);
@@ -44,7 +41,7 @@ export async function createAppRouter() {
   const taskRepo = new TaskRepository();
 
   // Initialize task repository with any existing tasks
-  projectFolderService.getAllProjectFolders();
+  // projectFolderService.getAllProjectFolders();
   // .then(async (folders) => {
   //   for (const folder of folders) {
   //     await taskRepo.scanFolder(folder.path);
@@ -64,20 +61,12 @@ export async function createAppRouter() {
   const chatRepository = new ChatRepository();
 
   // Initialize chat repository with any existing chats
-  projectFolderService
-    .getAllProjectFolders()
-    .then(async (folders) => {
-      for (const folder of folders) {
-        await chatRepository.scanFolder(folder.path);
-      }
-      logger.info(`Chat repository initialized with folders`);
-    })
-    .catch((err) =>
-      logger.error(
-        "Failed to initialize chat repository with project folders:",
-        err
-      )
-    );
+  const folders = await projectFolderService.getAllProjectFolders();
+  for (const folder of folders) {
+    logger.info(`Scanning folder: ${folder.path}`);
+    await chatRepository.scanFolder(folder.path);
+  }
+  logger.info(`Chat repository initialized with folders`);
 
   const chatService = new ChatService(eventBus, chatRepository, taskService);
 

@@ -69,7 +69,9 @@ async function startServer() {
   logger.info("Starting server...");
 
   try {
-    const appRouter = await createAppRouter();
+    // Get user data directory from environment or use default
+    const userDataDir = process.cwd() + "/my-demo/user-data";
+    const appRouter = await createAppRouter(userDataDir);
 
     // Create HTTP server with tRPC handler
     const server = createHTTPServer({
