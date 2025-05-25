@@ -16,9 +16,6 @@ const eventKindEnum = z.enum([
   "ProjectFolderUpdatedEvent",
 ] as const);
 
-// Get the enum values as an array
-const eventKinds = eventKindEnum.options;
-
 // Map event kinds to their event types
 interface EventTypeMap {
   FileWatcherEvent: FileWatcherEvent;
@@ -28,73 +25,57 @@ interface EventTypeMap {
   PingEvent: BaseEvent & { message: string };
 }
 
+// Helper function to create type-safe event subscriptions
+function createEventSubscription<K extends keyof EventTypeMap>(
+  eventBus: IEventBus,
+  eventKind: K
+) {
+  return publicProcedure
+    .input(
+      z.object({
+        lastEventId: z.string().nullable().optional(),
+      })
+    )
+    .subscription(async function* ({ input, signal }) {
+      for await (const [event] of eventBus.toIterable<EventTypeMap[K]>(
+        eventKind,
+        { signal }
+      )) {
+        yield tracked(event.timestamp.toISOString(), event);
+      }
+    });
+}
+
 export function createEventRouter(eventBus: IEventBus) {
   return router({
-    // Subscribe to all events (generic subscription)
-    allEvents: publicProcedure
-      .input(
-        z
-          .object({
-            // TODO: lastEventId need to be used
-            lastEventId: z.string().nullable(), // For tracked events
-          })
-          .optional()
-      )
-      .subscription(async function* ({ input, ctx, signal }) {
-        const kinds = eventKinds;
-
-        // This function will yield events from a specific kind
-        async function* streamEvents<T extends BaseEvent>(kind: string) {
-          for await (const [event] of eventBus.toIterable<T>(kind, {
-            signal,
-          })) {
-            yield event;
-          }
-        }
-
-        // Create combined streams
-        const streams = kinds.map((kind) => streamEvents(kind));
-
-        // Race condition handling - process events as they come in from any stream
-        while (true) {
-          const results = await Promise.race(
-            streams.map(async (stream) => {
-              const { value, done } = await stream.next();
-              return { value, done, stream };
-            })
-          );
-
-          if (results.done) {
-            break;
-          }
-
-          if (results.value) {
-            yield tracked(results.value.timestamp.toISOString(), results.value);
-          }
-        }
-      }),
+    fileWatcherEvents: createEventSubscription(eventBus, "FileWatcherEvent"),
+    chatEvents: createEventSubscription(eventBus, "ChatUpdatedEvent"),
+    taskEvents: createEventSubscription(eventBus, "TaskUpdatedEvent"),
+    projectFolderEvents: createEventSubscription(
+      eventBus,
+      "ProjectFolderUpdatedEvent"
+    ),
 
     // Subscribe to a specific event kind
-    subscribeToEvent: publicProcedure
-      .input(
-        z.object({
-          eventKind: eventKindEnum,
-          // TODO: lastEventId need to be used
-          lastEventId: z.string().nullable(), // For tracked events
-        })
-      )
-      .subscription(async function* ({ input, ctx, signal }) {
-        const { eventKind, lastEventId } = input;
+    // subscribeToEvent: publicProcedure
+    //   .input(
+    //     z.object({
+    //       eventKind: eventKindEnum,
+    //       lastEventId: z.string().nullable().optional(), // For tracked events
+    //     })
+    //   )
+    //   .subscription(async function* ({ input, signal }) {
+    //     const { eventKind } = input;
 
-        // Subscribe to the specific event kind
-        for await (const [event] of eventBus.toIterable<
-          EventTypeMap[typeof eventKind]
-        >(eventKind, {
-          signal,
-        })) {
-          yield tracked(event.timestamp.toISOString(), event);
-        }
-      }),
+    //     // Subscribe to the specific event kind
+    //     for await (const [event] of eventBus.toIterable<
+    //       EventTypeMap[typeof eventKind]
+    //     >(eventKind, {
+    //       signal,
+    //     })) {
+    //       yield tracked(event.timestamp.toISOString(), event);
+    //     }
+    //   }),
 
     // Send a ping and receive a pong
     ping: publicProcedure

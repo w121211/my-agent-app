@@ -187,24 +187,80 @@ async function main() {
   logger.info(`User data directory: ${userDataDir}`);
   logger.info(`Demo project directory: ${demoProjectDir}`);
 
-  // 1. Subscribe to all events
-  logger.info("\n--- Setting up Event Subscription ---");
-  const eventSubscription = trpc.event.allEvents.subscribe(undefined, {
-    onData(event) {
-      logger.info(
-        `Event: ${event.data.kind} - ${new Date(event.data.timestamp).toISOString()}`
-      );
-      if (event.data.kind === "ChatUpdatedEvent") {
-        logger.info(`  Chat update type: ${(event.data as any).updateType}`);
-      }
-    },
-    onError(err) {
-      logger.error("Event subscription error:", err);
-      // Don't throw here to prevent the demo from crashing
-    },
-  });
+  // 1. Subscribe to specific events using type-safe subscriptions
+  logger.info("\n--- Setting up Type-Safe Event Subscriptions ---");
 
-  logger.info("Event subscription active, events will be logged as they occur");
+  // Subscribe to chat events - Now properly typed as ChatUpdatedEvent
+  const chatEventSubscription = trpc.event.chatEvents.subscribe(
+    { lastEventId: null },
+    {
+      onData(event) {
+        // event.data is now properly typed as ChatUpdatedEvent!
+        logger.info(
+          `ChatEvent: ${event.data.updateType} - ${new Date(event.data.timestamp).toISOString()}`
+        );
+        logger.info(`  Chat ID: ${event.data.chatId}`);
+      },
+      onError(err) {
+        logger.error("Chat event subscription error:", err);
+      },
+    }
+  );
+
+  // Subscribe to task events - Now properly typed as TaskUpdatedEvent
+  const taskEventSubscription = trpc.event.taskEvents.subscribe(
+    { lastEventId: null },
+    {
+      onData(event) {
+        // event.data is now properly typed as TaskUpdatedEvent!
+        logger.info(
+          `TaskEvent: ${event.data.updateType} - ${new Date(event.data.timestamp).toISOString()}`
+        );
+        logger.info(`  Task ID: ${event.data.taskId}`);
+      },
+      onError(err) {
+        logger.error("Task event subscription error:", err);
+      },
+    }
+  );
+
+  // Subscribe to project folder events - Now properly typed as ProjectFolderUpdatedEvent
+  const projectFolderEventSubscription =
+    trpc.event.projectFolderEvents.subscribe(
+      { lastEventId: null },
+      {
+        onData(event) {
+          // event.data is now properly typed as ProjectFolderUpdatedEvent!
+          logger.info(
+            `ProjectFolderEvent: ${event.data.updateType} - ${new Date(event.data.timestamp).toISOString()}`
+          );
+        },
+        onError(err) {
+          logger.error("Project folder event subscription error:", err);
+        },
+      }
+    );
+
+  // Subscribe to file watcher events - Now properly typed as FileWatcherEvent
+  const fileWatcherEventSubscription = trpc.event.fileWatcherEvents.subscribe(
+    { lastEventId: null },
+    {
+      onData(event) {
+        // event.data is now properly typed as FileWatcherEvent!
+        logger.info(
+          `FileEvent: ${event.data.eventType} - ${new Date(event.data.timestamp).toISOString()}`
+        );
+        logger.info(`  File: ${event.data.absoluteFilePath}`);
+      },
+      onError(err) {
+        logger.error("File watcher event subscription error:", err);
+      },
+    }
+  );
+
+  logger.info(
+    "Type-safe event subscriptions active, events will be logged as they occur"
+  );
 
   // 2. Initial app loading - Simulating app initialization
   logger.info("\n--- App Initialization ---");
@@ -425,9 +481,12 @@ async function main() {
   logger.info("\n--- Waiting for 2 seconds to observe final events ---");
   await wait(2000);
 
-  // Unsubscribe from events
+  // Unsubscribe from all events
   logger.info("Unsubscribing from events");
-  eventSubscription.unsubscribe();
+  chatEventSubscription.unsubscribe();
+  taskEventSubscription.unsubscribe();
+  projectFolderEventSubscription.unsubscribe();
+  fileWatcherEventSubscription.unsubscribe();
 
   logger.info("\n--- Demo completed successfully ---");
   logger.info(`Demo files remain in: ${baseDir}`);
