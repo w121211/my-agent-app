@@ -6,9 +6,9 @@ import fs from "node:fs/promises";
 import {
   createTRPCClient,
   httpBatchStreamLink,
+  httpSubscriptionLink,
   loggerLink,
   splitLink,
-  httpSubscriptionLink,
 } from "@trpc/client";
 import SuperJSON from "superjson";
 import { Logger } from "tslog";

@@ -17,6 +17,7 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@types/cors": "^2.8.18",
     "@types/event-source-polyfill": "^1.0.5",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.13.5",
@@ -29,9 +30,10 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
-    "@trpc/client": "^11.1.2",
-    "@trpc/server": "^11.1.2",
+    "@trpc/client": "^11.1.4",
+    "@trpc/server": "^11.1.4",
     "chokidar": "^4.0.3",
+    "cors": "^2.8.5",
     "event-source-polyfill": "^1.0.31",
     "superjson": "^2.2.2",
     "tslog": "^4.9.3",

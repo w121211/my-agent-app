@@ -5,12 +5,13 @@ import {
   createHTTPServer,
 } from "@trpc/server/adapters/standalone";
 import { initTRPC } from "@trpc/server";
+import cors from "cors";
 import { Logger } from "tslog";
 import superjson from "superjson";
 import { createAppRouter } from "./root-router.js";
 
 const logger = new Logger({ name: "Server" });
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3333;
 
 // Create context type
 function createContext(opts: CreateHTTPContextOptions) {
@@ -75,6 +76,7 @@ async function startServer() {
 
     // Create HTTP server with tRPC handler
     const server = createHTTPServer({
+      middleware: cors(),
       router: appRouter,
       createContext,
       basePath: "/api/trpc/",
