@@ -252,7 +252,9 @@ export class ChatService {
     const model = chat.metadata?.model || "default";
 
     // Placeholder for AI service integration
-    const aiResponse = "This is a placeholder AI response";
+    const lastMessage = chat.messages[chat.messages.length - 1];
+    const aiResponse = `Echo: "${lastMessage?.content || "No message"}"\n\nThis is a placeholder AI response`;
+
     const artifacts = this.detectArtifacts(aiResponse);
 
     const aiMessage: ChatMessage = {

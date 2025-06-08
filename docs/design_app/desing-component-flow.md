@@ -62,7 +62,7 @@ interface AppStore {
 
 **On Mount:**
 
-- Call `trpc.projectFolder.getAllProjectFolders` to populate folder tree
+- Call `trpc.projectFolder. ` to populate folder tree
 - For each project folder, call `trpc.projectFolder.getFolderTree` to get complete tree
 - Store complete folder trees in Zustand store
 - Subscribe to `trpc.event.fileWatcherEvents` (component-level subscription)
