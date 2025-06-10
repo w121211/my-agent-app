@@ -73,7 +73,7 @@ const TreeNode: React.FC<{ node: any; level: number }> = ({ node, level }) => {
   return (
     <div>
       <div
-        className="flex items-center hover:bg-gray-100 cursor-pointer py-1 px-2"
+        className="group flex items-center hover:bg-gray-100 cursor-pointer py-1 px-2"
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
       >
@@ -103,7 +103,7 @@ const TreeNode: React.FC<{ node: any; level: number }> = ({ node, level }) => {
         <div>
           {node.isDirectory && level === 0 && (
             <div
-              className="flex items-center hover:bg-gray-50 cursor-pointer py-1 px-2 text-blue-600"
+              className="group flex items-center hover:bg-gray-50 cursor-pointer py-1 px-2 text-blue-600"
               style={{ paddingLeft: `${(level + 1) * 16 + 8}px` }}
               onClick={handleNewChat}
             >
@@ -254,7 +254,7 @@ export const ExplorerPanel: React.FC = () => {
         {projectFolders.map((folder) => {
           const tree = folderTrees[folder.id];
           return (
-            <div key={folder.id} className="group">
+            <div key={folder.id}>
               {tree && <TreeNode node={tree} level={0} />}
             </div>
           );
