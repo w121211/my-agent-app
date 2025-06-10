@@ -4,9 +4,11 @@ import { useMutation } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
+import { useToast } from "./toast-provider";
 
 export const NewChatModal: React.FC = () => {
   const trpc = useTRPC();
+  const { showToast } = useToast();
 
   const {
     isNewChatModalOpen,
@@ -35,10 +37,14 @@ export const NewChatModal: React.FC = () => {
         prompt: "",
         createNewTask: false,
       });
+      showToast("Chat created successfully", "success");
     },
     onError: (error) => {
       console.error("Failed to create chat:", error);
-      alert("Failed to create chat. Please try again.");
+      showToast(
+        `Failed to create chat: ${error.message || "Unknown error"}`,
+        "error"
+      );
     },
   });
 
@@ -48,7 +54,7 @@ export const NewChatModal: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!formData.targetDirectory) {
-      alert("Please select a target directory");
+      showToast("Please select a target directory", "error");
       return;
     }
 

@@ -3,6 +3,7 @@ import React, { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
+import { useToast } from "./toast-provider";
 import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 
 const getFileIcon = (fileName: string, isDirectory: boolean) => {
@@ -123,6 +124,7 @@ const TreeNode: React.FC<{ node: any; level: number }> = ({ node, level }) => {
 export const ExplorerPanel: React.FC = () => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   const {
     projectFolders,
@@ -132,9 +134,16 @@ export const ExplorerPanel: React.FC = () => {
     openNewChatModal,
   } = useAppStore();
 
-  // Query for project folders
+  // Query for project folders with error handling
   const projectFoldersQuery = useQuery(
-    trpc.projectFolder.getAllProjectFolders.queryOptions()
+    trpc.projectFolder.getAllProjectFolders.queryOptions({
+      onError: (error) => {
+        showToast(
+          `Failed to load project folders: ${error.message}`,
+          "error"
+        );
+      },
+    })
   );
 
   // Effect to handle successful project folders fetch
@@ -143,6 +152,16 @@ export const ExplorerPanel: React.FC = () => {
       setProjectFolders(projectFoldersQuery.data);
     }
   }, [projectFoldersQuery.data, setProjectFolders]);
+
+  // Effect to show error if project folders query fails
+  useEffect(() => {
+    if (projectFoldersQuery.error) {
+      showToast(
+        `Failed to load project folders: ${projectFoldersQuery.error.message}`,
+        "error"
+      );
+    }
+  }, [projectFoldersQuery.error, showToast]);
 
   // Effect to load folder trees when project folders change
   useEffect(() => {
@@ -163,21 +182,26 @@ export const ExplorerPanel: React.FC = () => {
               `Failed to load folder tree for ${folder.path}:`,
               error
             );
+            showToast(
+              `Failed to load folder tree for ${folder.name}`,
+              "error"
+            );
           }
         }
       }
     };
 
     loadFolderTrees();
-  }, [projectFoldersQuery.data, queryClient, trpc, updateFolderTree]);
+  }, [projectFoldersQuery.data, queryClient, trpc, updateFolderTree, showToast]);
 
-  // Add project folder mutation
+  // Add project folder mutation with proper error handling
   const addProjectFolderMutation = useMutation(
     trpc.projectFolder.addProjectFolder.mutationOptions({
       onSuccess: async (result) => {
         if (result.success && result.projectFolder) {
           const updatedFolders = [...projectFolders, result.projectFolder];
           setProjectFolders(updatedFolders);
+          showToast("Project folder added successfully", "success");
 
           // Load folder tree for new project
           try {
@@ -194,8 +218,20 @@ export const ExplorerPanel: React.FC = () => {
               `Failed to load folder tree for new folder ${result.projectFolder.path}:`,
               error
             );
+            showToast(
+              `Folder added but failed to load tree for ${result.projectFolder.name}`,
+              "error"
+            );
           }
+        } else if (result.message) {
+          showToast(result.message, "info");
         }
+      },
+      onError: (error) => {
+        showToast(
+          `Failed to add project folder: ${error.message}`,
+          "error"
+        );
       },
     })
   );
@@ -246,8 +282,16 @@ export const ExplorerPanel: React.FC = () => {
         )}
 
         {projectFoldersQuery.error && (
-          <div className="p-4 text-red-500">
-            Error loading project folders: {projectFoldersQuery.error.message}
+          <div className="p-4">
+            <div className="text-red-500 text-sm mb-2">
+              Failed to load project folders
+            </div>
+            <button
+              onClick={() => projectFoldersQuery.refetch()}
+              className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+            >
+              Try Again
+            </button>
           </div>
         )}
 

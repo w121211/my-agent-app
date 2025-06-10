@@ -4,6 +4,7 @@ import { Send, Paperclip, Zap, MessageSquare, File } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
+import { useToast } from "./toast-provider";
 
 // Local type definitions (in real app would be imported)
 interface ChatMessage {
@@ -31,6 +32,7 @@ interface Chat {
 export const ChatPanel: React.FC = () => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const { selectedChatFile } = useAppStore();
   const [messageInput, setMessageInput] = useState("");
   const [chat, setChat] = useState<Chat | null>(null);
@@ -45,7 +47,7 @@ export const ChatPanel: React.FC = () => {
   );
 
   // Load chat when selectedChatFile changes
-  const { data: loadedChat, isLoading } = useQuery(openChatFileQueryOptions);
+  const { data: loadedChat, isLoading, error: chatLoadError } = useQuery(openChatFileQueryOptions);
 
   // Handle data changes with useEffect instead of onSuccess
   useEffect(() => {
@@ -54,11 +56,22 @@ export const ChatPanel: React.FC = () => {
     }
   }, [loadedChat]);
 
+  // Handle chat loading errors
+  useEffect(() => {
+    if (chatLoadError) {
+      showToast(
+        `Failed to load chat: ${chatLoadError.message}`,
+        "error"
+      );
+    }
+  }, [chatLoadError, showToast]);
+
   // Create mutation options for submitting message
   const submitMessageMutationOptions = trpc.chat.submitMessage.mutationOptions({
     onSuccess: (updatedChat) => {
       setChat(updatedChat);
       setMessageInput("");
+      showToast("Message sent successfully", "success");
 
       // Invalidate and refetch the chat query to ensure consistency
       queryClient.invalidateQueries({
@@ -67,15 +80,13 @@ export const ChatPanel: React.FC = () => {
         }),
       });
     },
-  });
-
-  // Submit message mutation
-  const submitMessageMutation = useMutation(submitMessageMutationOptions);
-
-  // Handle mutation errors with useEffect
-  useEffect(() => {
-    if (submitMessageMutation.error) {
-      console.error("Failed to send message:", submitMessageMutation.error);
+    onError: (error) => {
+      console.error("Failed to send message:", error);
+      showToast(
+        `Failed to send message: ${error.message || "Unknown error"}`,
+        "error"
+      );
+      
       // Remove temp message on error
       setChat((prev) =>
         prev
@@ -85,8 +96,11 @@ export const ChatPanel: React.FC = () => {
             }
           : null
       );
-    }
-  }, [submitMessageMutation.error]);
+    },
+  });
+
+  // Submit message mutation
+  const submitMessageMutation = useMutation(submitMessageMutationOptions);
 
   // Create query filter for chat-related queries (example usage)
   const chatQueryFilter = trpc.chat.openChatFile.queryFilter(
@@ -161,6 +175,23 @@ export const ChatPanel: React.FC = () => {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-gray-500">Loading chat...</div>
+      </div>
+    );
+  }
+
+  if (chatLoadError) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50">
+        <div className="text-center text-red-500">
+          <MessageSquare size={48} className="mx-auto mb-4" />
+          <p className="mb-2">Failed to load chat</p>
+          <button
+            onClick={() => queryClient.refetchQueries({ queryKey: openChatFileQueryOptions.queryKey })}
+            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
