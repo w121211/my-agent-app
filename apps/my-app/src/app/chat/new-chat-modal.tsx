@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Logger } from "tslog";
-import { ChatMode } from "@repo/events-core/event-types";
+import { ChatMode } from "@repo/events-core/services/chat-service";
 import { useChatPanelService } from "../../lib/di/di-provider";
 
 const logger = new Logger({ name: "new-chat-modal" });

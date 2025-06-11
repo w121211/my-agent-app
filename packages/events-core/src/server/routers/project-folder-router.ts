@@ -1,15 +1,28 @@
 // packages/events-core/src/server/routers/project-folder-router.ts
 import { z } from "zod";
+import path from "node:path";
 import { router, publicProcedure } from "../trpc-server.js";
 import { ProjectFolderService } from "../../services/project-folder-service.js";
 
+// Validation helper for absolute paths
+const absolutePathSchema = z
+  .string()
+  .refine((value) => path.isAbsolute(value), {
+    message: "Path must be absolute",
+  });
+
 // Project folder schemas
 export const folderTreeRequestSchema = z.object({
-  projectFolderPath: z.string().optional(),
+  absoluteProjectFolderPath: z
+    .string()
+    .optional()
+    .refine((value) => !value || path.isAbsolute(value), {
+      message: "Path must be absolute when provided",
+    }),
 });
 
 export const addProjectFolderSchema = z.object({
-  projectFolderPath: z.string(),
+  absoluteProjectFolderPath: absolutePathSchema,
   correlationId: z.string().optional(),
 });
 
@@ -29,14 +42,16 @@ export function createProjectFolderRouter(
     getFolderTree: publicProcedure
       .input(folderTreeRequestSchema)
       .query(async ({ input }) => {
-        return projectFolderService.getFolderTree(input.projectFolderPath);
+        return projectFolderService.getFolderTree(
+          input.absoluteProjectFolderPath
+        );
       }),
 
     addProjectFolder: publicProcedure
       .input(addProjectFolderSchema)
       .mutation(async ({ input }) => {
         return projectFolderService.addProjectFolder(
-          input.projectFolderPath,
+          input.absoluteProjectFolderPath,
           input.correlationId
         );
       }),

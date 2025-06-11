@@ -47,6 +47,6 @@ export class UserSettingsRepository {
 export function createUserSettingsRepository(
   userDataDir: string
 ): UserSettingsRepository {
-  const filePath = path.join(userDataDir, "userSettings.json");
+  const filePath = path.join(userDataDir, "user-settings.json");
   return new UserSettingsRepository(filePath);
 }

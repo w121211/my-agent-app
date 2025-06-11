@@ -1,11 +1,22 @@
 // apps/my-app-trpc-2/src/components/explorer-panel.tsx
 import React, { useEffect, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@trpc/tanstack-react-query";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
 import { useToast } from "./toast-provider";
-import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  MessageSquare,
+  MoreHorizontal,
+  Copy,
+  Trash2,
+  Edit,
+  FileText,
+  FolderPlus,
+} from "lucide-react";
 
 // Type definitions
 interface FolderTreeNode {
@@ -47,6 +58,119 @@ const getTaskStatusIcon = (status: string) => {
   }
 };
 
+const FileOperationsMenu: React.FC<{
+  node: FolderTreeNode;
+  onNewChat: () => void;
+}> = ({ node, onNewChat }) => {
+  const { showToast } = useToast();
+
+  const handleCopyPath = () => {
+    navigator.clipboard.writeText(node.path);
+    showToast(`Path copied: ${node.path}`, "success");
+  };
+
+  const handleRename = () => {
+    const newName = prompt(`Rename ${node.name}:`, node.name);
+    if (newName && newName !== node.name) {
+      // In a real app, this would call a rename API
+      showToast(`Rename functionality not implemented yet`, "info");
+    }
+  };
+
+  const handleDelete = () => {
+    if (confirm(`Are you sure you want to delete ${node.name}?`)) {
+      // In a real app, this would call a delete API
+      showToast(`Delete functionality not implemented yet`, "info");
+    }
+  };
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded cursor-pointer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal size={12} />
+        </button>
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="min-w-[200px] bg-white rounded-md border border-gray-200 shadow-lg z-50"
+          sideOffset={5}
+        >
+          {node.isDirectory && (
+            <>
+              <DropdownMenu.Item
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+                onClick={onNewChat}
+              >
+                <MessageSquare size={14} className="mr-2" />
+                New Chat
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+                onClick={() =>
+                  showToast(
+                    "New Folder functionality not implemented yet",
+                    "info"
+                  )
+                }
+              >
+                <FolderPlus size={14} className="mr-2" />
+                New Folder
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+            </>
+          )}
+
+          {!node.isDirectory && (
+            <>
+              <DropdownMenu.Item
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+                onClick={() =>
+                  showToast("Open functionality not implemented yet", "info")
+                }
+              >
+                <FileText size={14} className="mr-2" />
+                Open
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+            </>
+          )}
+
+          <DropdownMenu.Item
+            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+            onClick={handleCopyPath}
+          >
+            <Copy size={14} className="mr-2" />
+            Copy Path
+          </DropdownMenu.Item>
+
+          <DropdownMenu.Item
+            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+            onClick={handleRename}
+          >
+            <Edit size={14} className="mr-2" />
+            Rename
+          </DropdownMenu.Item>
+
+          <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+
+          <DropdownMenu.Item
+            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-red-50 text-red-600 outline-none"
+            onClick={handleDelete}
+          >
+            <Trash2 size={14} className="mr-2" />
+            Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+};
+
 const TreeNode: React.FC<{
   node: FolderTreeNode;
   level: number;
@@ -58,10 +182,12 @@ const TreeNode: React.FC<{
     setSelectedChatFile,
     setSelectedPreviewFile,
     setSelectedTreeNode,
+    selectedTreeNode,
     openNewChatModal,
   } = useAppStore();
 
   const isExpanded = expandedNodes.has(node.path);
+  const isSelected = selectedTreeNode === node.path;
   const icon = getFileIcon(node.name, node.isDirectory);
   const isTaskFolder = node.isDirectory && node.name.startsWith("task-");
 
@@ -78,8 +204,8 @@ const TreeNode: React.FC<{
     }
   };
 
-  const handleNewChat = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleNewChat = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setSelectedTreeNode(node.path);
     openNewChatModal();
   };
@@ -87,7 +213,11 @@ const TreeNode: React.FC<{
   return (
     <div>
       <div
-        className="group flex items-center hover:bg-gray-100 cursor-pointer py-1 px-2"
+        className={`group flex items-center cursor-pointer py-1 px-2 ${
+          isSelected
+            ? "bg-blue-100 border-r-2 border-blue-500"
+            : "hover:bg-gray-100"
+        }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
       >
@@ -113,29 +243,23 @@ const TreeNode: React.FC<{
           )}
         </span>
 
-        {node.isDirectory && (
-          <button
-            onClick={handleNewChat}
-            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded"
-            title="New Chat"
-          >
-            <MessageSquare size={12} />
-          </button>
-        )}
+        <div className="flex items-center">
+          {node.isDirectory && (
+            <button
+              onClick={handleNewChat}
+              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded cursor-pointer mr-1"
+              title="New Chat"
+            >
+              <MessageSquare size={12} />
+            </button>
+          )}
+
+          <FileOperationsMenu node={node} onNewChat={handleNewChat} />
+        </div>
       </div>
 
       {node.isDirectory && isExpanded && node.children && (
         <div>
-          {node.isDirectory && level === 0 && (
-            <div
-              className="group flex items-center hover:bg-gray-50 cursor-pointer py-1 px-2 text-blue-600"
-              style={{ paddingLeft: `${(level + 1) * 16 + 8}px` }}
-              onClick={handleNewChat}
-            >
-              <MessageSquare size={14} className="mr-2" />
-              <span className="text-sm">[+ New Chat]</span>
-            </div>
-          )}
           {node.children.map((child: FolderTreeNode) => (
             <TreeNode key={child.path} node={child} level={level + 1} />
           ))}
@@ -143,6 +267,97 @@ const TreeNode: React.FC<{
       )}
     </div>
   );
+};
+
+// Helper function to directly update folder tree based on file events
+const updateTreeNodeDirectly = (
+  tree: FolderTreeNode,
+  fileEvent: {
+    eventType: string;
+    absoluteFilePath: string;
+    isDirectory: boolean;
+  }
+): FolderTreeNode => {
+  const filePath = fileEvent.absoluteFilePath;
+  // const fileName = filePath.split("/").pop() || "";
+
+  // Clone the tree to avoid mutating original
+  const newTree = { ...tree };
+
+  // Helper function to find parent directory and update
+  const updateNode = (
+    node: FolderTreeNode,
+    pathSegments: string[]
+  ): FolderTreeNode => {
+    if (pathSegments.length === 0) return node;
+
+    const [currentSegment, ...remainingSegments] = pathSegments;
+
+    // If this is the target file/folder
+    if (remainingSegments.length === 0) {
+      if (!node.children) node.children = [];
+
+      const existingIndex = node.children.findIndex(
+        (child) => child.name === currentSegment
+      );
+
+      if (fileEvent.eventType === "add" || fileEvent.eventType === "addDir") {
+        // Add new file/folder if it doesn't exist
+        if (existingIndex === -1) {
+          const newChild: FolderTreeNode = {
+            name: currentSegment,
+            path: filePath,
+            isDirectory: fileEvent.isDirectory,
+            children: fileEvent.isDirectory ? [] : undefined,
+          };
+          node.children.push(newChild);
+          // Sort children: directories first, then files
+          node.children.sort((a, b) => {
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            return a.name.localeCompare(b.name);
+          });
+        }
+      } else if (
+        fileEvent.eventType === "unlink" ||
+        fileEvent.eventType === "unlinkDir"
+      ) {
+        // Remove file/folder
+        if (existingIndex !== -1) {
+          node.children.splice(existingIndex, 1);
+        }
+      }
+
+      return { ...node, children: [...(node.children || [])] };
+    }
+
+    // Navigate deeper into the tree
+    if (node.children) {
+      const targetChildIndex = node.children.findIndex(
+        (child) => child.name === currentSegment && child.isDirectory
+      );
+
+      if (targetChildIndex !== -1) {
+        const updatedChildren = [...node.children];
+        updatedChildren[targetChildIndex] = updateNode(
+          updatedChildren[targetChildIndex],
+          remainingSegments
+        );
+        return { ...node, children: updatedChildren };
+      }
+    }
+
+    return node;
+  };
+
+  // Get relative path from tree root
+  const treePath = tree.path;
+  if (!filePath.startsWith(treePath)) return newTree;
+
+  const relativePath = filePath.substring(treePath.length + 1);
+  const pathSegments = relativePath.split("/");
+
+  return updateNode(newTree, pathSegments);
 };
 
 export const ExplorerPanel: React.FC = () => {
@@ -240,7 +455,7 @@ export const ExplorerPanel: React.FC = () => {
     showToast,
   ]);
 
-  // Subscribe to file watcher events to automatically update folder trees
+  // Subscribe to file watcher events and directly update folder trees
   const fileWatcherSubscription = useSubscription(
     trpc.event.fileWatcherEvents.subscriptionOptions(
       { lastEventId: null },
@@ -261,7 +476,7 @@ export const ExplorerPanel: React.FC = () => {
           );
 
           if (affectedProjectFolder) {
-            // For add/delete events, refetch the folder tree to reflect changes
+            // For add/delete events, directly update the folder tree
             if (
               fileEvent.eventType === "add" ||
               fileEvent.eventType === "addDir" ||
@@ -269,35 +484,51 @@ export const ExplorerPanel: React.FC = () => {
               fileEvent.eventType === "unlinkDir"
             ) {
               console.log(
-                `Refreshing folder tree for project: ${affectedProjectFolder.name}`
+                `Directly updating folder tree for project: ${affectedProjectFolder.name}`
               );
 
-              // Refetch the folder tree for the affected project
-              const treeQueryOptions =
-                trpc.projectFolder.getFolderTree.queryOptions({
-                  projectFolderPath: affectedProjectFolder.path,
-                });
-
-              queryClient
-                .fetchQuery(treeQueryOptions)
-                .then((treeResult) => {
-                  if (treeResult.folderTree) {
-                    updateFolderTree(
-                      affectedProjectFolder.id,
-                      treeResult.folderTree
-                    );
-                  }
-                })
-                .catch((error) => {
+              const currentTree = folderTrees[affectedProjectFolder.id];
+              if (currentTree) {
+                try {
+                  const updatedTree = updateTreeNodeDirectly(
+                    currentTree,
+                    fileEvent
+                  );
+                  updateFolderTree(affectedProjectFolder.id, updatedTree);
+                } catch (error) {
                   console.error(
-                    `Failed to refresh folder tree for ${affectedProjectFolder.path}:`,
+                    `Failed to directly update folder tree for ${affectedProjectFolder.path}:`,
                     error
                   );
-                  showToast(
-                    `Failed to refresh folder tree for ${affectedProjectFolder.name}`,
-                    "error"
-                  );
-                });
+
+                  // Fallback to refetching if direct update fails
+                  const treeQueryOptions =
+                    trpc.projectFolder.getFolderTree.queryOptions({
+                      projectFolderPath: affectedProjectFolder.path,
+                    });
+
+                  queryClient
+                    .fetchQuery(treeQueryOptions)
+                    .then((treeResult) => {
+                      if (treeResult.folderTree) {
+                        updateFolderTree(
+                          affectedProjectFolder.id,
+                          treeResult.folderTree
+                        );
+                      }
+                    })
+                    .catch((refetchError) => {
+                      console.error(
+                        `Fallback refetch also failed for ${affectedProjectFolder.path}:`,
+                        refetchError
+                      );
+                      showToast(
+                        `Failed to update folder tree for ${affectedProjectFolder.name}`,
+                        "error"
+                      );
+                    });
+                }
+              }
             }
           }
         },
@@ -437,7 +668,7 @@ export const ExplorerPanel: React.FC = () => {
 
         <button
           onClick={openNewChatModal}
-          className="w-full mb-2 px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+          className="w-full mb-2 px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors cursor-pointer"
         >
           + New Chat
         </button>
@@ -445,7 +676,7 @@ export const ExplorerPanel: React.FC = () => {
         <button
           onClick={handleAddProjectFolder}
           disabled={addProjectFolderMutation.isPending}
-          className="w-full px-3 py-2 text-sm bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
+          className="w-full px-3 py-2 text-sm bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
         >
           {addProjectFolderMutation.isPending
             ? "Adding..."
@@ -497,7 +728,7 @@ export const ExplorerPanel: React.FC = () => {
             </div>
             <button
               onClick={() => projectFoldersQuery.refetch()}
-              className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+              className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 cursor-pointer"
             >
               Try Again
             </button>
@@ -515,7 +746,7 @@ export const ExplorerPanel: React.FC = () => {
       </div>
 
       <div className="p-4 border-t border-gray-200">
-        <button className="text-sm text-gray-600 hover:text-gray-800">
+        <button className="text-sm text-gray-600 hover:text-gray-800 cursor-pointer">
           ⚙️ SETTINGS
         </button>
       </div>

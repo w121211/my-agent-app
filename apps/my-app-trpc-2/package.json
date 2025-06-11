@@ -12,11 +12,12 @@
     "test": "jest"
   },
   "dependencies": {
-    "@repo/events-core": "workspace:*",
-    "@repo/events-relay": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-toast": "^1.2.14",
+    "@repo/events-core": "workspace:*",
+    "@repo/events-relay": "workspace:*",
     "@tanstack/react-query": "^5.74.7",
     "@trpc/client": "^11.1.4",
     "@trpc/server": "^11.1.4",

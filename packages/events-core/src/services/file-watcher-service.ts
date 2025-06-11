@@ -51,75 +51,101 @@ export class FileWatcherService {
     };
   }
 
-  public async startWatchingFolder(folderPath: string): Promise<void> {
-    if (this.watchers.has(folderPath)) {
-      this.logger.warn(`Already watching folder: ${folderPath}`);
+  public async startWatchingFolder(absoluteFolderPath: string): Promise<void> {
+    if (!path.isAbsolute(absoluteFolderPath)) {
+      throw new Error(
+        `Folder path must be absolute, got: ${absoluteFolderPath}`
+      );
+    }
+
+    if (this.watchers.has(absoluteFolderPath)) {
+      this.logger.warn(`Already watching folder: ${absoluteFolderPath}`);
       return;
     }
 
-    this.logger.info(`Starting file watcher on ${folderPath}`);
+    this.logger.info(`Starting file watcher on ${absoluteFolderPath}`);
 
-    const watcher = chokidar.watch(folderPath, this.chokidarOptions);
+    const watcher = chokidar.watch(absoluteFolderPath, this.chokidarOptions);
 
     // Set up event handlers
     watcher
       .on("add", (filePath) =>
-        this.handleFsEvent("add", filePath, folderPath, false)
+        this.handleFsEvent("add", filePath, absoluteFolderPath, false)
       )
       .on("change", (filePath) =>
-        this.handleFsEvent("change", filePath, folderPath, false)
+        this.handleFsEvent("change", filePath, absoluteFolderPath, false)
       )
       .on("unlink", (filePath) =>
-        this.handleFsEvent("unlink", filePath, folderPath, false)
+        this.handleFsEvent("unlink", filePath, absoluteFolderPath, false)
       )
       .on("addDir", (dirPath) =>
-        this.handleFsEvent("addDir", dirPath, folderPath, true)
+        this.handleFsEvent("addDir", dirPath, absoluteFolderPath, true)
       )
       .on("unlinkDir", (dirPath) =>
-        this.handleFsEvent("unlinkDir", dirPath, folderPath, true)
+        this.handleFsEvent("unlinkDir", dirPath, absoluteFolderPath, true)
       )
       .on("error", (error) => {
-        this.logger.error(`File watcher error in ${folderPath}: ${error}`);
+        this.logger.error(
+          `File watcher error in ${absoluteFolderPath}: ${error}`
+        );
         const errorObj =
           error instanceof Error ? error : new Error(String(error));
-        this.handleFsEvent("error", "", folderPath, false, errorObj);
+        // For error events, use the folder path as the absoluteFilePath
+        this.handleFsEvent(
+          "error",
+          absoluteFolderPath,
+          absoluteFolderPath,
+          true,
+          errorObj
+        );
       })
       .on("ready", () => {
-        this.logger.info(`Initial file scan complete for ${folderPath}`);
-        this.handleFsEvent("ready", "", folderPath, false);
+        this.logger.info(
+          `Initial file scan complete for ${absoluteFolderPath}`
+        );
+        // For ready events, use the folder path as the absoluteFilePath
+        this.handleFsEvent(
+          "ready",
+          absoluteFolderPath,
+          absoluteFolderPath,
+          true
+        );
       });
 
-    this.watchers.set(folderPath, watcher);
+    this.watchers.set(absoluteFolderPath, watcher);
   }
 
-  public async stopWatchingFolder(folderPath: string): Promise<void> {
-    const watcher = this.watchers.get(folderPath);
+  public async stopWatchingFolder(absoluteFolderPath: string): Promise<void> {
+    const watcher = this.watchers.get(absoluteFolderPath);
 
     if (!watcher) {
-      this.logger.warn(`Not currently watching folder: ${folderPath}`);
+      this.logger.warn(`Not currently watching folder: ${absoluteFolderPath}`);
       return;
     }
 
-    this.logger.info(`Stopping file watcher on ${folderPath}`);
+    this.logger.info(`Stopping file watcher on ${absoluteFolderPath}`);
 
     await watcher.close();
-    this.watchers.delete(folderPath);
+    this.watchers.delete(absoluteFolderPath);
   }
 
   private handleFsEvent(
     eventType: FileEventType,
-    filePath: string,
-    basePath: string,
+    filePath: string, // Should be absolute since we pass absolute path to chokidar
+    absoluteBasePath: string,
     isDirectory: boolean,
     error?: Error
   ): void {
-    // Always use absolute paths in the event data
-    const absolutePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(basePath, filePath);
+    // chokidar should return absolute paths when watching absolute paths
+    if (!path.isAbsolute(filePath)) {
+      throw new Error(
+        `Expected absolute path from chokidar, got relative path: ${filePath}. ` +
+          `This indicates a problem with file watcher configuration or chokidar behavior.`
+      );
+    }
 
     this.logger.debug(
-      `Chokidar fs event: ${eventType} - ${absolutePath} (${isDirectory ? "directory" : "file"})`
+      `Chokidar fs event: ${eventType} - ${filePath} (${isDirectory ? "directory" : "file"})`
     );
 
     this.eventBus
@@ -127,7 +153,7 @@ export class FileWatcherService {
         kind: "FileWatcherEvent",
         timestamp: new Date(),
         eventType,
-        absoluteFilePath: absolutePath,
+        absoluteFilePath: filePath, // Now we know it's absolute
         isDirectory,
         error,
       })
@@ -154,8 +180,8 @@ export class FileWatcherService {
     this.watchers.clear();
   }
 
-  public isWatchingFolder(folderPath: string): boolean {
-    return this.watchers.has(folderPath);
+  public isWatchingFolder(absoluteFolderPath: string): boolean {
+    return this.watchers.has(absoluteFolderPath);
   }
 
   public getWatchedFolderCount(): number {

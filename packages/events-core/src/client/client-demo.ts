@@ -25,7 +25,7 @@ const getUrl = () => {
   const base = (() => {
     if (typeof window !== "undefined") return window.location.origin;
     if (process.env.APP_URL) return process.env.APP_URL;
-    return `http://localhost:${process.env.PORT ?? 3000}`;
+    return `http://localhost:${process.env.PORT ?? 3333}`;
   })();
 
   return `${base}/api/trpc`;
@@ -68,7 +68,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function setupDemoEnvironment() {
   logger.info("Setting up demo environment...");
 
-  const baseDir = path.join(process.cwd(), "my-demo-project");
+  const baseDir = path.join(process.cwd(), "my-demo-space");
   const userDataDir = path.join(baseDir, "user-data");
   const demoProjectDir = path.join(baseDir, "demo-project");
 
@@ -280,7 +280,7 @@ async function main() {
   for (const folder of initialProjectFolders) {
     logger.info(`Getting folder tree for: ${folder.path}`);
     const folderTree = await trpc.projectFolder.getFolderTree.query({
-      projectFolderPath: folder.path,
+      absoluteProjectFolderPath: folder.path,
     });
     logger.info(`Folder tree for ${folder.name} retrieved`);
   }
@@ -298,7 +298,7 @@ async function main() {
   // Add a new project folder
   logger.info(`Adding test project folder at: ${testFolderPath}`);
   const addFolderResult = await trpc.projectFolder.addProjectFolder.mutate({
-    projectFolderPath: testFolderPath,
+    absoluteProjectFolderPath: testFolderPath,
     correlationId: uuidv4(),
   });
 
@@ -320,7 +320,7 @@ async function main() {
 
   // Get folder tree for the new/existing folder
   const folderTree = await trpc.projectFolder.getFolderTree.query({
-    projectFolderPath: testFolderPath,
+    absoluteProjectFolderPath: testFolderPath,
   });
   logger.info("Folder tree retrieved");
 
