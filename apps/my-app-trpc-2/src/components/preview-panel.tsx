@@ -12,10 +12,10 @@ export const PreviewPanel: React.FC = () => {
   const { showToast } = useToast();
   const { selectedPreviewFile } = useAppStore();
 
-  const { 
-    data: fileContent, 
-    isLoading, 
-    error: fileLoadError 
+  const {
+    data: fileContent,
+    isLoading,
+    error: fileLoadError,
   } = useQuery(
     trpc.file.openFile.queryOptions(
       { filePath: selectedPreviewFile! },
@@ -29,10 +29,7 @@ export const PreviewPanel: React.FC = () => {
   // Handle file loading errors
   useEffect(() => {
     if (fileLoadError) {
-      showToast(
-        `Failed to load file: ${fileLoadError.message}`,
-        "error"
-      );
+      showToast(`Failed to load file: ${fileLoadError.message}`, "error");
     }
   }, [fileLoadError, showToast]);
 
@@ -109,7 +106,7 @@ export const PreviewPanel: React.FC = () => {
             <Share size={12} />
             <span>Share</span>
           </button>
-          <button 
+          <button
             onClick={handleRefresh}
             className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
             title="Refresh file"
@@ -140,11 +137,10 @@ export const PreviewPanel: React.FC = () => {
       {/* File info footer */}
       {fileContent && (
         <div className="border-t border-gray-200 p-2 text-xs text-gray-500 bg-gray-50">
-          Type: {fileContent.fileType} | 
-          Size: {fileContent.isBase64 
-            ? `${fileContent.content.length} bytes (base64)` 
-            : `${fileContent.content.length} characters`
-          }
+          Type: {fileContent.fileType} | Size:{" "}
+          {fileContent.isBase64
+            ? `${fileContent.content.length} bytes (base64)`
+            : `${fileContent.content.length} characters`}
         </div>
       )}
     </div>

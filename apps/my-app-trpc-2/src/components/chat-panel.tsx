@@ -1,7 +1,15 @@
 // apps/my-app-trpc-2/src/components/chat-panel.tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Send, Paperclip, Zap, MessageSquare, File } from "lucide-react";
+import {
+  Send,
+  Paperclip,
+  Zap,
+  MessageSquare,
+  File,
+  ChevronDown,
+} from "lucide-react";
 import React, { useState, useEffect } from "react";
+import * as Select from "@radix-ui/react-select";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
 import { useToast } from "./toast-provider";
@@ -29,6 +37,64 @@ interface Chat {
   };
 }
 
+const ChatModeSelect: React.FC<{
+  value: string;
+  onValueChange: (value: string) => void;
+}> = ({ value, onValueChange }) => (
+  <Select.Root value={value} onValueChange={onValueChange}>
+    <Select.Trigger className="inline-flex items-center justify-between gap-1 rounded px-3 py-1 text-sm bg-white border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[80px]">
+      <Select.Value />
+      <Select.Icon>
+        <ChevronDown size={12} />
+      </Select.Icon>
+    </Select.Trigger>
+    <Select.Portal>
+      <Select.Content className="overflow-hidden bg-white rounded border border-gray-200 shadow-lg">
+        <Select.Viewport className="p-1">
+          <Select.Item
+            value="chat"
+            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-gray-100 focus:bg-gray-100 outline-none"
+          >
+            <Select.ItemText>Chat</Select.ItemText>
+          </Select.Item>
+          <Select.Item
+            value="agent"
+            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-gray-100 focus:bg-gray-100 outline-none"
+          >
+            <Select.ItemText>Agent</Select.ItemText>
+          </Select.Item>
+        </Select.Viewport>
+      </Select.Content>
+    </Select.Portal>
+  </Select.Root>
+);
+
+const ModelSelect: React.FC<{
+  value: string;
+  onValueChange: (value: string) => void;
+}> = ({ value, onValueChange }) => (
+  <Select.Root value={value} onValueChange={onValueChange}>
+    <Select.Trigger className="inline-flex items-center justify-between gap-1 rounded px-3 py-1 text-sm bg-white border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[80px]">
+      <Select.Value />
+      <Select.Icon>
+        <ChevronDown size={12} />
+      </Select.Icon>
+    </Select.Trigger>
+    <Select.Portal>
+      <Select.Content className="overflow-hidden bg-white rounded border border-gray-200 shadow-lg">
+        <Select.Viewport className="p-1">
+          <Select.Item
+            value="claude"
+            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-gray-100 focus:bg-gray-100 outline-none"
+          >
+            <Select.ItemText>Claude</Select.ItemText>
+          </Select.Item>
+        </Select.Viewport>
+      </Select.Content>
+    </Select.Portal>
+  </Select.Root>
+);
+
 export const ChatPanel: React.FC = () => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
@@ -36,6 +102,8 @@ export const ChatPanel: React.FC = () => {
   const { selectedChatFile } = useAppStore();
   const [messageInput, setMessageInput] = useState("");
   const [chat, setChat] = useState<Chat | null>(null);
+  const [chatMode, setChatMode] = useState("chat");
+  const [model, setModel] = useState("claude");
 
   // Create query options for opening chat file
   const openChatFileQueryOptions = trpc.chat.openChatFile.queryOptions(
@@ -47,22 +115,30 @@ export const ChatPanel: React.FC = () => {
   );
 
   // Load chat when selectedChatFile changes
-  const { data: loadedChat, isLoading, error: chatLoadError } = useQuery(openChatFileQueryOptions);
+  const {
+    data: loadedChat,
+    isLoading,
+    error: chatLoadError,
+  } = useQuery(openChatFileQueryOptions);
 
   // Handle data changes with useEffect instead of onSuccess
   useEffect(() => {
     if (loadedChat) {
       setChat(loadedChat);
+      // Update local state from chat metadata
+      if (loadedChat.metadata?.mode) {
+        setChatMode(loadedChat.metadata.mode);
+      }
+      if (loadedChat.metadata?.model) {
+        setModel(loadedChat.metadata.model);
+      }
     }
   }, [loadedChat]);
 
   // Handle chat loading errors
   useEffect(() => {
     if (chatLoadError) {
-      showToast(
-        `Failed to load chat: ${chatLoadError.message}`,
-        "error"
-      );
+      showToast(`Failed to load chat: ${chatLoadError.message}`, "error");
     }
   }, [chatLoadError, showToast]);
 
@@ -86,7 +162,7 @@ export const ChatPanel: React.FC = () => {
         `Failed to send message: ${error.message || "Unknown error"}`,
         "error"
       );
-      
+
       // Remove temp message on error
       setChat((prev) =>
         prev
@@ -101,17 +177,6 @@ export const ChatPanel: React.FC = () => {
 
   // Submit message mutation
   const submitMessageMutation = useMutation(submitMessageMutationOptions);
-
-  // Create query filter for chat-related queries (example usage)
-  const chatQueryFilter = trpc.chat.openChatFile.queryFilter(
-    { filePath: selectedChatFile! },
-    {
-      predicate: (query) => {
-        // Only include queries that are not stale
-        return query.state.status === "success";
-      },
-    }
-  );
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !chat) return;
@@ -186,7 +251,11 @@ export const ChatPanel: React.FC = () => {
           <MessageSquare size={48} className="mx-auto mb-4" />
           <p className="mb-2">Failed to load chat</p>
           <button
-            onClick={() => queryClient.refetchQueries({ queryKey: openChatFileQueryOptions.queryKey })}
+            onClick={() =>
+              queryClient.refetchQueries({
+                queryKey: openChatFileQueryOptions.queryKey,
+              })
+            }
             className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
           >
             Try Again
@@ -284,13 +353,8 @@ export const ChatPanel: React.FC = () => {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <select className="text-sm border rounded px-2 py-1">
-                <option>Chat</option>
-                <option>Agent</option>
-              </select>
-              <select className="text-sm border rounded px-2 py-1">
-                <option>Claude</option>
-              </select>
+              <ChatModeSelect value={chatMode} onValueChange={setChatMode} />
+              <ModelSelect value={model} onValueChange={setModel} />
             </div>
 
             <div className="flex items-center space-x-2">

@@ -14,6 +14,18 @@
     "check-types": "tsc --noEmit",
     "example": "tsx examples/example-script.ts"
   },
+  "dependencies": {
+    "@trpc/client": "^11.1.4",
+    "@trpc/server": "^11.1.4",
+    "chokidar": "^4.0.3",
+    "cors": "^2.8.5",
+    "event-source-polyfill": "^1.0.31",
+    "superjson": "^2.2.2",
+    "tslog": "^4.9.3",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1",
+    "zod": "^3.24.2"
+  },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
@@ -28,17 +40,5 @@
     "ts-jest": "^29.2.6",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3"
-  },
-  "dependencies": {
-    "@trpc/client": "^11.1.4",
-    "@trpc/server": "^11.1.4",
-    "chokidar": "^4.0.3",
-    "cors": "^2.8.5",
-    "event-source-polyfill": "^1.0.31",
-    "superjson": "^2.2.2",
-    "tslog": "^4.9.3",
-    "uuid": "^11.1.0",
-    "ws": "^8.18.1",
-    "zod": "^3.24.2"
   }
 }

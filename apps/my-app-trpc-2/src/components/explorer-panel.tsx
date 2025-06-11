@@ -134,16 +134,9 @@ export const ExplorerPanel: React.FC = () => {
     openNewChatModal,
   } = useAppStore();
 
-  // Query for project folders with error handling
+  // Query for project folders
   const projectFoldersQuery = useQuery(
-    trpc.projectFolder.getAllProjectFolders.queryOptions({
-      onError: (error) => {
-        showToast(
-          `Failed to load project folders: ${error.message}`,
-          "error"
-        );
-      },
-    })
+    trpc.projectFolder.getAllProjectFolders.queryOptions()
   );
 
   // Effect to handle successful project folders fetch
@@ -182,17 +175,20 @@ export const ExplorerPanel: React.FC = () => {
               `Failed to load folder tree for ${folder.path}:`,
               error
             );
-            showToast(
-              `Failed to load folder tree for ${folder.name}`,
-              "error"
-            );
+            showToast(`Failed to load folder tree for ${folder.name}`, "error");
           }
         }
       }
     };
 
     loadFolderTrees();
-  }, [projectFoldersQuery.data, queryClient, trpc, updateFolderTree, showToast]);
+  }, [
+    projectFoldersQuery.data,
+    queryClient,
+    trpc,
+    updateFolderTree,
+    showToast,
+  ]);
 
   // Add project folder mutation with proper error handling
   const addProjectFolderMutation = useMutation(
@@ -228,10 +224,7 @@ export const ExplorerPanel: React.FC = () => {
         }
       },
       onError: (error) => {
-        showToast(
-          `Failed to add project folder: ${error.message}`,
-          "error"
-        );
+        showToast(`Failed to add project folder: ${error.message}`, "error");
       },
     })
   );
