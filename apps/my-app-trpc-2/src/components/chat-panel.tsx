@@ -1,13 +1,7 @@
 // apps/my-app-trpc-2/src/components/chat-panel.tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Send,
-  Paperclip,
-  Zap,
-  MessageSquare,
-  File,
-  ChevronDown,
-} from "lucide-react";
+import { useSubscription } from "@trpc/tanstack-react-query";
+import { Send, Paperclip, Zap, MessageSquare, ChevronDown } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import * as Select from "@radix-ui/react-select";
 import { useTRPC } from "../lib/trpc";
@@ -120,6 +114,56 @@ export const ChatPanel: React.FC = () => {
     isLoading,
     error: chatLoadError,
   } = useQuery(openChatFileQueryOptions);
+
+  // Subscribe to chat events
+  const chatEventsSubscription = useSubscription(
+    trpc.event.chatEvents.subscriptionOptions(
+      { lastEventId: null },
+      {
+        enabled: !!chat, // Only enable when we have a chat loaded
+        onData: (event) => {
+          // Handle the chat event - only update if it's for the current chat
+          if (event.data.chatId === chat?.id) {
+            console.log(
+              "Chat event received:",
+              event.data.updateType,
+              event.data
+            );
+
+            // Update the chat with the new data from the event
+            setChat(event.data.chat);
+
+            // Show toast for different event types
+            switch (event.data.updateType) {
+              case "MESSAGE_ADDED":
+                // Don't show toast for user messages (they added them)
+                break;
+              case "AI_RESPONSE_ADDED":
+                showToast("AI response received", "success");
+                break;
+              case "METADATA_UPDATED":
+                showToast("Chat metadata updated", "info");
+                break;
+            }
+
+            // Invalidate the chat query to keep it in sync
+            queryClient.invalidateQueries({
+              queryKey: trpc.chat.openChatFile.queryKey({
+                filePath: selectedChatFile!,
+              }),
+            });
+          }
+        },
+        onError: (error) => {
+          console.error("Chat event subscription error:", error);
+          showToast(`Chat subscription error: ${error.message}`, "error");
+        },
+        onConnectionStateChange: (state) => {
+          console.log("Chat subscription connection state:", state);
+        },
+      }
+    )
+  );
 
   // Handle data changes with useEffect instead of onSuccess
   useEffect(() => {
@@ -277,12 +321,28 @@ export const ChatPanel: React.FC = () => {
           <span>
             {">"} 💬 {selectedChatFile.split("/").pop()}
           </span>
-          <button
-            onClick={invalidateChatQueries}
-            className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-          >
-            🔄 Refresh
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={invalidateChatQueries}
+              className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+            >
+              🔄 Refresh
+            </button>
+            <div className="text-xs text-gray-500">
+              {chatEventsSubscription.status === "pending" && (
+                <span className="text-green-600">🟢 Live</span>
+              )}
+              {chatEventsSubscription.status === "connecting" && (
+                <span className="text-yellow-600">🟡 Connecting</span>
+              )}
+              {chatEventsSubscription.status === "error" && (
+                <span className="text-red-600">🔴 Disconnected</span>
+              )}
+              {chatEventsSubscription.status === "idle" && (
+                <span className="text-gray-400">⚪ Idle</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

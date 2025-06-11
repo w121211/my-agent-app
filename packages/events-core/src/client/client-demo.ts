@@ -68,7 +68,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 async function setupDemoEnvironment() {
   logger.info("Setting up demo environment...");
 
-  const baseDir = path.join(process.cwd(), "my-demo");
+  const baseDir = path.join(process.cwd(), "my-demo-project");
   const userDataDir = path.join(baseDir, "user-data");
   const demoProjectDir = path.join(baseDir, "demo-project");
 

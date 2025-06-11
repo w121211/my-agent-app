@@ -1,45 +1,57 @@
 // apps/my-app-trpc-2/src/components/explorer-panel.tsx
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSubscription } from "@trpc/tanstack-react-query";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
 import { useToast } from "./toast-provider";
 import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 
+// Type definitions
+interface FolderTreeNode {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  children?: FolderTreeNode[];
+}
+
+interface TaskInfo {
+  id: string;
+  status: "CREATED" | "INITIALIZED" | "IN_PROGRESS" | "COMPLETED";
+  title: string;
+  absoluteDirectoryPath: string;
+}
+
 const getFileIcon = (fileName: string, isDirectory: boolean) => {
   if (isDirectory) {
-    if (fileName.startsWith("task-") || fileName.includes("task")) {
-      return "📋";
-    }
-    return "📁";
+    return null; // No emoji for directories, just use chevron
   }
 
   if (fileName.endsWith(".chat.json")) {
     return "💬";
   }
 
-  const ext = fileName.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "py":
-    case "ts":
-    case "js":
-    case "tsx":
-    case "jsx":
-      return "📄";
-    case "md":
-    case "txt":
-      return "📝";
-    case "jpg":
-    case "jpeg":
-    case "png":
-    case "gif":
-      return "🖼️";
+  return "📄"; // All other files get document icon
+};
+
+const getTaskStatusIcon = (status: string) => {
+  switch (status) {
+    case "COMPLETED":
+      return "✓";
+    case "IN_PROGRESS":
+      return "🏃";
+    case "CREATED":
+    case "INITIALIZED":
     default:
-      return "📄";
+      return "⚠️";
   }
 };
 
-const TreeNode: React.FC<{ node: any; level: number }> = ({ node, level }) => {
+const TreeNode: React.FC<{
+  node: FolderTreeNode;
+  level: number;
+  taskInfo?: TaskInfo;
+}> = ({ node, level, taskInfo }) => {
   const {
     expandedNodes,
     toggleNodeExpansion,
@@ -51,6 +63,7 @@ const TreeNode: React.FC<{ node: any; level: number }> = ({ node, level }) => {
 
   const isExpanded = expandedNodes.has(node.path);
   const icon = getFileIcon(node.name, node.isDirectory);
+  const isTaskFolder = node.isDirectory && node.name.startsWith("task-");
 
   const handleClick = () => {
     if (node.isDirectory) {
@@ -87,8 +100,19 @@ const TreeNode: React.FC<{ node: any; level: number }> = ({ node, level }) => {
             )}
           </div>
         )}
-        <span className="mr-2">{icon}</span>
-        <span className="text-sm flex-1">{node.name}</span>
+
+        {icon && <span className="mr-2">{icon}</span>}
+
+        <span className="text-sm flex-1">
+          {isTaskFolder && taskInfo ? (
+            <>
+              {node.name} {getTaskStatusIcon(taskInfo.status)}
+            </>
+          ) : (
+            node.name
+          )}
+        </span>
+
         {node.isDirectory && (
           <button
             onClick={handleNewChat}
@@ -112,7 +136,7 @@ const TreeNode: React.FC<{ node: any; level: number }> = ({ node, level }) => {
               <span className="text-sm">[+ New Chat]</span>
             </div>
           )}
-          {node.children.map((child: any) => (
+          {node.children.map((child: FolderTreeNode) => (
             <TreeNode key={child.path} node={child} level={level + 1} />
           ))}
         </div>
@@ -134,10 +158,18 @@ export const ExplorerPanel: React.FC = () => {
     openNewChatModal,
   } = useAppStore();
 
+  // Track task information by directory path
+  const [tasksByPath, setTasksByPath] = useState<Map<string, TaskInfo>>(
+    new Map()
+  );
+
   // Query for project folders
   const projectFoldersQuery = useQuery(
     trpc.projectFolder.getAllProjectFolders.queryOptions()
   );
+
+  // Query for all tasks to get initial task status
+  const allTasksQuery = useQuery(trpc.task.getAll.queryOptions());
 
   // Effect to handle successful project folders fetch
   useEffect(() => {
@@ -145,6 +177,24 @@ export const ExplorerPanel: React.FC = () => {
       setProjectFolders(projectFoldersQuery.data);
     }
   }, [projectFoldersQuery.data, setProjectFolders]);
+
+  // Effect to handle tasks data and build task mapping
+  useEffect(() => {
+    if (allTasksQuery.data) {
+      const newTasksByPath = new Map<string, TaskInfo>();
+      allTasksQuery.data.forEach((task) => {
+        if (task.absoluteDirectoryPath) {
+          newTasksByPath.set(task.absoluteDirectoryPath, {
+            id: task.id,
+            status: task.status,
+            title: task.title,
+            absoluteDirectoryPath: task.absoluteDirectoryPath,
+          });
+        }
+      });
+      setTasksByPath(newTasksByPath);
+    }
+  }, [allTasksQuery.data]);
 
   // Effect to show error if project folders query fails
   useEffect(() => {
@@ -190,6 +240,138 @@ export const ExplorerPanel: React.FC = () => {
     showToast,
   ]);
 
+  // Subscribe to file watcher events to automatically update folder trees
+  const fileWatcherSubscription = useSubscription(
+    trpc.event.fileWatcherEvents.subscriptionOptions(
+      { lastEventId: null },
+      {
+        enabled: projectFolders.length > 0,
+        onStarted: () => {
+          console.log("File watcher subscription started");
+        },
+        onData: (event) => {
+          const fileEvent = event.data;
+          console.log(
+            `File event: ${fileEvent.eventType} - ${fileEvent.absoluteFilePath}`
+          );
+
+          // Find which project folder this file belongs to
+          const affectedProjectFolder = projectFolders.find((folder) =>
+            fileEvent.absoluteFilePath.startsWith(folder.path)
+          );
+
+          if (affectedProjectFolder) {
+            // For add/delete events, refetch the folder tree to reflect changes
+            if (
+              fileEvent.eventType === "add" ||
+              fileEvent.eventType === "addDir" ||
+              fileEvent.eventType === "unlink" ||
+              fileEvent.eventType === "unlinkDir"
+            ) {
+              console.log(
+                `Refreshing folder tree for project: ${affectedProjectFolder.name}`
+              );
+
+              // Refetch the folder tree for the affected project
+              const treeQueryOptions =
+                trpc.projectFolder.getFolderTree.queryOptions({
+                  projectFolderPath: affectedProjectFolder.path,
+                });
+
+              queryClient
+                .fetchQuery(treeQueryOptions)
+                .then((treeResult) => {
+                  if (treeResult.folderTree) {
+                    updateFolderTree(
+                      affectedProjectFolder.id,
+                      treeResult.folderTree
+                    );
+                  }
+                })
+                .catch((error) => {
+                  console.error(
+                    `Failed to refresh folder tree for ${affectedProjectFolder.path}:`,
+                    error
+                  );
+                  showToast(
+                    `Failed to refresh folder tree for ${affectedProjectFolder.name}`,
+                    "error"
+                  );
+                });
+            }
+          }
+        },
+        onError: (error) => {
+          console.error("File watcher subscription error:", error);
+          showToast(
+            `File watcher error: ${error.message || "Unknown error"}`,
+            "error"
+          );
+        },
+        onConnectionStateChange: (state) => {
+          console.log(`File watcher connection state: ${state}`);
+        },
+      }
+    )
+  );
+
+  // Subscribe to task events to update task status in real-time
+  const taskEventSubscription = useSubscription(
+    trpc.event.taskEvents.subscriptionOptions(
+      { lastEventId: null },
+      {
+        enabled: true,
+        onStarted: () => {
+          console.log("Task event subscription started");
+        },
+        onData: (event) => {
+          const taskEvent = event.data;
+          console.log(
+            `Task event: ${taskEvent.updateType} - ${taskEvent.taskId}`
+          );
+
+          // Update the task in our local state
+          const updatedTask = taskEvent.task;
+          if (updatedTask.absoluteDirectoryPath) {
+            setTasksByPath((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(updatedTask.absoluteDirectoryPath!, {
+                id: updatedTask.id,
+                status: updatedTask.status,
+                title: updatedTask.title,
+                absoluteDirectoryPath: updatedTask.absoluteDirectoryPath!,
+              });
+              return newMap;
+            });
+
+            // Show status change notification
+            if (taskEvent.updateType === "STATUS_CHANGED") {
+              showToast(
+                `Task "${updatedTask.title}" status changed to ${updatedTask.status}`,
+                "info"
+              );
+            }
+          }
+
+          // Also invalidate the tasks query to keep it in sync
+          queryClient.invalidateQueries({
+            queryKey: trpc.task.getAll.queryKey(),
+          });
+        },
+        onError: (error) => {
+          console.error("Task event subscription error:", error);
+          showToast(
+            `Task event error: ${error.message || "Unknown error"}`,
+            "error"
+          );
+        },
+        onConnectionStateChange: (state) => {
+          console.log(`Task event connection state: ${state}`);
+        },
+      }
+    )
+  );
+
   // Add project folder mutation with proper error handling
   const addProjectFolderMutation = useMutation(
     trpc.projectFolder.addProjectFolder.mutationOptions({
@@ -229,13 +411,6 @@ export const ExplorerPanel: React.FC = () => {
     })
   );
 
-  // Subscribe to file watcher events
-  useEffect(() => {
-    // Note: In a real app, you'd use the proper tRPC subscription pattern
-    // For now, we'll just poll for changes or use other update mechanisms
-    console.log("File watcher subscription would be set up here");
-  }, [projectFolders, updateFolderTree]);
-
   const handleAddProjectFolder = async () => {
     // In a real app, this would open a file dialog
     const folderPath = prompt("Enter project folder path:");
@@ -244,6 +419,15 @@ export const ExplorerPanel: React.FC = () => {
     addProjectFolderMutation.mutate({
       projectFolderPath: folderPath,
     });
+  };
+
+  // Enhanced TreeNode with task info
+  const EnhancedTreeNode: React.FC<{ node: FolderTreeNode; level: number }> = ({
+    node,
+    level,
+  }) => {
+    const taskInfo = tasksByPath.get(node.path);
+    return <TreeNode node={node} level={level} taskInfo={taskInfo} />;
   };
 
   return (
@@ -267,6 +451,38 @@ export const ExplorerPanel: React.FC = () => {
             ? "Adding..."
             : "+ Add Project Folder"}
         </button>
+
+        {/* Connection status indicators */}
+        <div className="mt-2 text-xs text-gray-500">
+          <div className="flex items-center mb-1">
+            <div
+              className={`w-2 h-2 rounded-full mr-2 ${
+                fileWatcherSubscription.status === "pending"
+                  ? "bg-green-500"
+                  : fileWatcherSubscription.status === "connecting"
+                    ? "bg-yellow-500"
+                    : fileWatcherSubscription.status === "error"
+                      ? "bg-red-500"
+                      : "bg-gray-400"
+              }`}
+            />
+            File watcher: {fileWatcherSubscription.status}
+          </div>
+          <div className="flex items-center">
+            <div
+              className={`w-2 h-2 rounded-full mr-2 ${
+                taskEventSubscription.status === "pending"
+                  ? "bg-green-500"
+                  : taskEventSubscription.status === "connecting"
+                    ? "bg-yellow-500"
+                    : taskEventSubscription.status === "error"
+                      ? "bg-red-500"
+                      : "bg-gray-400"
+              }`}
+            />
+            Task events: {taskEventSubscription.status}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -292,7 +508,7 @@ export const ExplorerPanel: React.FC = () => {
           const tree = folderTrees[folder.id];
           return (
             <div key={folder.id}>
-              {tree && <TreeNode node={tree} level={0} />}
+              {tree && <EnhancedTreeNode node={tree} level={0} />}
             </div>
           );
         })}
