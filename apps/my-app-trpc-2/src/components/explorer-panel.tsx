@@ -429,7 +429,7 @@ export const ExplorerPanel: React.FC = () => {
           try {
             const treeQueryOptions =
               trpc.projectFolder.getFolderTree.queryOptions({
-                projectFolderPath: folder.path,
+                absoluteProjectFolderPath: folder.path,
               });
             const treeResult = await queryClient.fetchQuery(treeQueryOptions);
             if (treeResult.folderTree) {
@@ -504,7 +504,7 @@ export const ExplorerPanel: React.FC = () => {
                   // Fallback to refetching if direct update fails
                   const treeQueryOptions =
                     trpc.projectFolder.getFolderTree.queryOptions({
-                      projectFolderPath: affectedProjectFolder.path,
+                      absoluteProjectFolderPath: affectedProjectFolder.path,
                     });
 
                   queryClient
@@ -616,7 +616,7 @@ export const ExplorerPanel: React.FC = () => {
           try {
             const treeQueryOptions =
               trpc.projectFolder.getFolderTree.queryOptions({
-                projectFolderPath: result.projectFolder.path,
+                absoluteProjectFolderPath: result.projectFolder.path,
               });
             const treeResult = await queryClient.fetchQuery(treeQueryOptions);
             if (treeResult.folderTree) {
@@ -648,7 +648,7 @@ export const ExplorerPanel: React.FC = () => {
     if (!folderPath) return;
 
     addProjectFolderMutation.mutate({
-      projectFolderPath: folderPath,
+      absoluteProjectFolderPath: folderPath,
     });
   };
 

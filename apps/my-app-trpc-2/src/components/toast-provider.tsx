@@ -34,9 +34,13 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
     setToasts((prev) => [...prev, { id, message, type }]);
 
     // Auto remove after 5 seconds
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((toast) => toast.id !== id));
-    }, 5000);
+    if (type !== "error") {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((toast) => toast.id !== id));
+      }, 5000);
+    }
+
+    // For error toasts, we don't auto-remove, allowing user to close manually
   };
 
   const removeToast = (id: string) => {
