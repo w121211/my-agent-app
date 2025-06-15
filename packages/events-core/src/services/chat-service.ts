@@ -158,13 +158,8 @@ export class ChatService {
     attachments?: Array<{ fileName: string; content: string }>,
     correlationId?: string
   ): Promise<Chat> {
-    // Find the chat by ID
-    const chat = await this.chatRepository.findById(chatId);
-
-    if (!chat) {
-      this.logger.error(`Chat not found with ID: ${chatId}`);
-      throw new Error(`Chat not found with ID: ${chatId}`);
-    }
+    // Find the chat by ID - throws if not found
+    const chat = await this.getChatById(chatId);
 
     const chatMessage: ChatMessage = {
       id: uuidv4(),
@@ -194,8 +189,16 @@ export class ChatService {
     return updatedChat;
   }
 
-  async getChatById(chatId: string): Promise<Chat | undefined> {
+  async findChatById(chatId: string): Promise<Chat | undefined> {
     return this.chatRepository.findById(chatId);
+  }
+
+  async getChatById(chatId: string): Promise<Chat> {
+    const chat = await this.chatRepository.findById(chatId);
+    if (!chat) {
+      throw new Error(`Chat not found with ID: ${chatId}`);
+    }
+    return chat;
   }
 
   async getAllChats(): Promise<Chat[]> {
@@ -206,12 +209,7 @@ export class ChatService {
     absoluteFilePath: string,
     correlationId?: string
   ): Promise<Chat> {
-    try {
-      return await this.chatRepository.findByPath(absoluteFilePath);
-    } catch (error) {
-      this.logger.error(`Failed to open chat file: ${absoluteFilePath}`, error);
-      throw error;
-    }
+    return this.chatRepository.findByPath(absoluteFilePath);
   }
 
   private async processUserMessage(

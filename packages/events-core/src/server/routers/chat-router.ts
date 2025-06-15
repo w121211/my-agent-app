@@ -66,11 +66,7 @@ export function createChatRouter(chatService: ChatService) {
       }),
 
     getById: publicProcedure.input(chatIdSchema).query(async ({ input }) => {
-      const chat = await chatService.getChatById(input.chatId);
-      if (!chat) {
-        throw new Error(`Chat ${input.chatId} not found`);
-      }
-      return chat;
+      return chatService.getChatById(input.chatId);
     }),
 
     getAll: publicProcedure.query(async () => {

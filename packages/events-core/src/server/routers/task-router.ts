@@ -34,11 +34,7 @@ export function createTaskRouter(taskService: TaskService) {
     }),
 
     getById: publicProcedure.input(taskIdSchema).query(async ({ input }) => {
-      const task = await taskService.getTaskById(input.taskId);
-      if (!task) {
-        throw new Error(`Task ${input.taskId} not found`);
-      }
-      return task;
+      return taskService.getTaskById(input.taskId);
     }),
 
     getAll: publicProcedure.query(async () => {

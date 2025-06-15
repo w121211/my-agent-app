@@ -24,32 +24,24 @@ export class UserSettingsService {
 
   public async updateUserSettings(
     settingsUpdate: SafeUserSettingsUpdate // Type-safe: prevents projectFolders updates at compile time
-  ): Promise<{ success: boolean; message?: string; settings?: UserSettings }> {
-    try {
-      this.logger.info("Updating user settings");
+  ): Promise<UserSettings> {
+    this.logger.info("Updating user settings");
 
-      // Get current settings
-      const currentSettings = await this.userSettingsRepository.getSettings();
+    // Get current settings
+    const currentSettings = await this.userSettingsRepository.getSettings();
 
-      // Note: projectFolders should be updated through the ProjectFolderService,
-      // so we exclude that field here using type constraints at compile time
-      const updatedSettings: UserSettings = {
-        ...currentSettings,
-        ...settingsUpdate,
-      };
+    // Note: projectFolders should be updated through the ProjectFolderService,
+    // so we exclude that field here using type constraints at compile time
+    const updatedSettings: UserSettings = {
+      ...currentSettings,
+      ...settingsUpdate,
+    };
 
-      // Save updated settings
-      await this.userSettingsRepository.saveSettings(updatedSettings);
+    // Save updated settings
+    await this.userSettingsRepository.saveSettings(updatedSettings);
 
-      this.logger.info("User settings updated successfully");
-      return { success: true, settings: updatedSettings };
-    } catch (error) {
-      this.logger.error(`Error updating user settings: ${error}`);
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : String(error),
-      };
-    }
+    this.logger.info("User settings updated successfully");
+    return updatedSettings;
   }
 }
 

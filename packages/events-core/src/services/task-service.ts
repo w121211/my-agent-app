@@ -79,11 +79,7 @@ export class TaskService {
   }
 
   async startTask(taskId: string, correlationId?: string): Promise<Task> {
-    const task = await this.taskRepo.findById(taskId);
-
-    if (!task) {
-      throw new Error(`Task ${taskId} not found`);
-    }
+    const task = await this.getTaskById(taskId);
 
     const previousStatus = task.status;
     task.status = "IN_PROGRESS";
@@ -109,8 +105,16 @@ export class TaskService {
     return task;
   }
 
-  async getTaskById(taskId: string): Promise<Task | undefined> {
+  async findTaskById(taskId: string): Promise<Task | undefined> {
     return this.taskRepo.findById(taskId);
+  }
+
+  async getTaskById(taskId: string): Promise<Task> {
+    const task = await this.taskRepo.findById(taskId);
+    if (!task) {
+      throw new Error(`Task not found with ID: ${taskId}`);
+    }
+    return task;
   }
 
   async getAllTasks(): Promise<Task[]> {

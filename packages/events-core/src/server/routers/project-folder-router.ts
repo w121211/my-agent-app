@@ -59,7 +59,7 @@ export function createProjectFolderRouter(
     removeProjectFolder: publicProcedure
       .input(removeProjectFolderSchema)
       .mutation(async ({ input }) => {
-        return projectFolderService.removeProjectFolder(
+        await projectFolderService.removeProjectFolder(
           input.projectFolderId,
           input.correlationId
         );
@@ -72,9 +72,10 @@ export function createProjectFolderRouter(
     startWatchingAllProjectFolders: publicProcedure
       .input(startWatchingAllProjectFoldersSchema)
       .mutation(async ({ input }) => {
-        return projectFolderService.startWatchingAllProjectFolders(
+        const count = await projectFolderService.startWatchingAllProjectFolders(
           input.correlationId
         );
+        return { count };
       }),
   });
 }

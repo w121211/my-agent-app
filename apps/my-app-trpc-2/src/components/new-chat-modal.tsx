@@ -75,7 +75,7 @@ export const NewChatModal: React.FC = () => {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black bg-opacity-50 animate-in fade-in-0 z-50" />
+        <Dialog.Overlay className="fixed inset-0 bg-black/50 animate-in fade-in-0 z-50" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 animate-in fade-in-0 zoom-in-95 duration-200">
           <div className="bg-white rounded-lg shadow-xl mx-4">
             <div className="flex items-center justify-between p-6 border-b">
@@ -173,7 +173,7 @@ export const NewChatModal: React.FC = () => {
                       }
                     />
                     <label htmlFor="createNewTask" className="text-sm">
-                      ☑️ Create New Task
+                      Create New Task
                     </label>
                   </div>
 

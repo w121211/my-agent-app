@@ -182,6 +182,7 @@ async function main() {
   let chatId: string | undefined;
   let taskId: string | undefined;
   let chatFilePath: string | undefined;
+  let folderWasAdded = false;
 
   logger.info(`Demo base directory: ${baseDir}`);
   logger.info(`User data directory: ${userDataDir}`);
@@ -297,16 +298,17 @@ async function main() {
 
   // Add a new project folder
   logger.info(`Adding test project folder at: ${testFolderPath}`);
-  const addFolderResult = await trpc.projectFolder.addProjectFolder.mutate({
-    absoluteProjectFolderPath: testFolderPath,
-    correlationId: uuidv4(),
-  });
+  try {
+    const addedFolder = await trpc.projectFolder.addProjectFolder.mutate({
+      absoluteProjectFolderPath: testFolderPath,
+      correlationId: uuidv4(),
+    });
 
-  if (addFolderResult.success && addFolderResult.projectFolder) {
-    projectFolderId = addFolderResult.projectFolder.id;
+    projectFolderId = addedFolder.id;
+    folderWasAdded = true;
     logger.info(`Added project folder with ID: ${projectFolderId}`);
-  } else {
-    logger.warn(`Note: ${addFolderResult.message}`);
+  } catch (error) {
+    logger.info(`Note: ${error instanceof Error ? error.message : error}`);
 
     // If the folder already exists, find its ID
     const allFolders = await trpc.projectFolder.getAllProjectFolders.query();
@@ -458,18 +460,19 @@ async function main() {
   logger.info("\n--- Cleanup ---");
 
   // Only remove the project folder if we added it during this run
-  if (projectFolderId && addFolderResult.success) {
-    const removeResult = await trpc.projectFolder.removeProjectFolder.mutate({
-      projectFolderId,
-      correlationId: uuidv4(),
-    });
-
-    if (removeResult.success) {
+  if (projectFolderId && folderWasAdded) {
+    try {
+      await trpc.projectFolder.removeProjectFolder.mutate({
+        projectFolderId,
+        correlationId: uuidv4(),
+      });
       logger.info(
         `Successfully removed project folder with ID: ${projectFolderId}`
       );
-    } else {
-      logger.warn(`Failed to remove project folder: ${removeResult.message}`);
+    } catch (error) {
+      logger.warn(
+        `Failed to remove project folder: ${error instanceof Error ? error.message : error}`
+      );
     }
   } else {
     logger.info(

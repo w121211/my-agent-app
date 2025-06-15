@@ -50,86 +50,66 @@ export class ProjectFolderService {
 
   public async getFolderTree(
     absoluteProjectFolderPath?: string
-  ): Promise<{ folderTree: FolderTreeNode | null; error?: string }> {
+  ): Promise<FolderTreeNode> {
     this.logger.info(
       `Processing folder tree request for: ${absoluteProjectFolderPath || ""}`
     );
 
-    try {
-      // Get settings to verify project folders
-      const settings = await this.userSettingsRepository.getSettings();
+    // Get settings to verify project folders
+    const settings = await this.userSettingsRepository.getSettings();
 
-      if (settings.projectFolders.length === 0) {
-        throw new Error("No project folders configured");
-      }
-
-      // Determine which project folder to use
-      let fullPath: string;
-      let selectedProjectFolder: ProjectFolder;
-
-      if (!absoluteProjectFolderPath) {
-        // If no path specified, use the first project folder
-        if (settings.projectFolders.length === 0) {
-          throw new Error("No project folders configured");
-        }
-        selectedProjectFolder = settings.projectFolders[0]!;
-        fullPath = selectedProjectFolder.path;
-      } else {
-        // Validate that the path is absolute
-        if (!path.isAbsolute(absoluteProjectFolderPath)) {
-          throw new Error(
-            `Path must be absolute, received: ${absoluteProjectFolderPath}`
-          );
-        }
-
-        // Find matching project folder
-        const matchingProjectFolder = settings.projectFolders.find(
-          (folder) =>
-            absoluteProjectFolderPath === folder.path ||
-            absoluteProjectFolderPath.startsWith(folder.path + path.sep)
-        );
-
-        if (!matchingProjectFolder) {
-          throw new Error(
-            `Path ${absoluteProjectFolderPath} is not within any registered project folder`
-          );
-        }
-
-        selectedProjectFolder = matchingProjectFolder;
-        fullPath = absoluteProjectFolderPath;
-      }
-
-      // Build the folder tree
-      const folderTree = await this.buildFolderTree(
-        selectedProjectFolder.path,
-        fullPath
-      );
-      return { folderTree };
-    } catch (error) {
-      this.logger.error(`Error building folder tree: ${error}`);
-      return {
-        folderTree: null,
-        error: error instanceof Error ? error.message : String(error),
-      };
+    if (settings.projectFolders.length === 0) {
+      throw new Error("No project folders configured");
     }
+
+    // Determine which project folder to use
+    let fullPath: string;
+    let selectedProjectFolder: ProjectFolder;
+
+    if (!absoluteProjectFolderPath) {
+      // If no path specified, use the first project folder
+      selectedProjectFolder = settings.projectFolders[0]!;
+      fullPath = selectedProjectFolder.path;
+    } else {
+      // Validate that the path is absolute
+      if (!path.isAbsolute(absoluteProjectFolderPath)) {
+        throw new Error(
+          `Path must be absolute, received: ${absoluteProjectFolderPath}`
+        );
+      }
+
+      // Find matching project folder
+      const matchingProjectFolder = settings.projectFolders.find(
+        (folder) =>
+          absoluteProjectFolderPath === folder.path ||
+          absoluteProjectFolderPath.startsWith(folder.path + path.sep)
+      );
+
+      if (!matchingProjectFolder) {
+        throw new Error(
+          `Path ${absoluteProjectFolderPath} is not within any registered project folder`
+        );
+      }
+
+      selectedProjectFolder = matchingProjectFolder;
+      fullPath = absoluteProjectFolderPath;
+    }
+
+    // Build and return the folder tree
+    return this.buildFolderTree(selectedProjectFolder.path, fullPath);
   }
 
   public async addProjectFolder(
     absoluteProjectFolderPath: string,
     correlationId?: string
-  ): Promise<{
-    success: boolean;
-    message?: string;
-    projectFolder?: ProjectFolder;
-  }> {
+  ): Promise<ProjectFolder> {
     this.logger.info(`Adding project folder: ${absoluteProjectFolderPath}`);
 
     // Validate that the path is absolute
     if (!path.isAbsolute(absoluteProjectFolderPath)) {
-      return {
-        success: false,
-        message: `Path must be absolute, received: ${absoluteProjectFolderPath}`,
-      };
+      throw new Error(
+        `Path must be absolute, received: ${absoluteProjectFolderPath}`
+      );
     }
 
     // Validate if project folder path exists and is a directory
@@ -138,28 +118,24 @@ export class ProjectFolderService {
     );
 
     if (!isValid) {
-      return {
-        success: false,
-        message: `Invalid project folder path: ${absoluteProjectFolderPath}`,
-      };
+      throw new Error(
+        `Invalid project folder path: ${absoluteProjectFolderPath}`
+      );
     }
 
     // Get current settings
     const settings = await this.userSettingsRepository.getSettings();
 
-    // Check if project folder already exists
-    if (
-      settings.projectFolders.some(
-        (folder) => folder.path === absoluteProjectFolderPath
-      )
-    ) {
-      this.logger.warn(
+    // Check if project folder already exists (idempotent operation)
+    const existingFolder = settings.projectFolders.find(
+      (folder) => folder.path === absoluteProjectFolderPath
+    );
+
+    if (existingFolder) {
+      this.logger.info(
         `Project folder already exists: ${absoluteProjectFolderPath}`
       );
-      return {
-        success: true,
-        message: `Project folder already exists: ${absoluteProjectFolderPath}`,
-      };
+      return existingFolder;
     }
 
     // Check if the new folder is a subfolder of an existing project folder
@@ -167,10 +143,9 @@ export class ProjectFolderService {
       if (
         absoluteProjectFolderPath.startsWith(existingFolder.path + path.sep)
       ) {
-        return {
-          success: false,
-          message: `Cannot add a subfolder of an existing project folder: ${existingFolder.path}`,
-        };
+        throw new Error(
+          `Cannot add a subfolder of an existing project folder: ${existingFolder.path}`
+        );
       }
     }
 
@@ -179,10 +154,9 @@ export class ProjectFolderService {
       if (
         existingFolder.path.startsWith(absoluteProjectFolderPath + path.sep)
       ) {
-        return {
-          success: false,
-          message: `Cannot add a project folder that contains an existing project folder: ${existingFolder.path}`,
-        };
+        throw new Error(
+          `Cannot add a project folder that contains an existing project folder: ${existingFolder.path}`
+        );
       }
     }
 
@@ -217,13 +191,13 @@ export class ProjectFolderService {
     this.logger.info(
       `Project folder added successfully: ${absoluteProjectFolderPath}`
     );
-    return { success: true, projectFolder };
+    return projectFolder;
   }
 
   public async removeProjectFolder(
     projectFolderId: string,
     correlationId?: string
-  ): Promise<{ success: boolean; message?: string }> {
+  ): Promise<void> {
     this.logger.info(`Removing project folder with ID: ${projectFolderId}`);
 
     // Get current settings
@@ -235,11 +209,7 @@ export class ProjectFolderService {
     );
 
     if (!projectFolder) {
-      this.logger.warn(`Project folder with ID ${projectFolderId} not found`);
-      return {
-        success: false,
-        message: `Project folder with ID ${projectFolderId} not found`,
-      };
+      throw new Error(`Project folder with ID ${projectFolderId} not found`);
     }
 
     // Remove project folder from settings
@@ -265,7 +235,6 @@ export class ProjectFolderService {
     this.logger.info(
       `Project folder removed successfully: ${projectFolder.path}`
     );
-    return { success: true };
   }
 
   public async getAllProjectFolders(): Promise<ProjectFolder[]> {
@@ -275,7 +244,7 @@ export class ProjectFolderService {
 
   public async startWatchingAllProjectFolders(
     correlationId?: string
-  ): Promise<{ success: boolean; count: number }> {
+  ): Promise<number> {
     this.logger.info("Starting to watch all project folders");
 
     // Get all project folder paths from settings
@@ -284,7 +253,7 @@ export class ProjectFolderService {
 
     if (projectFolders.length === 0) {
       this.logger.info("No project folders found to watch");
-      return { success: true, count: 0 };
+      return 0;
     }
 
     // Start watching each project folder
@@ -295,7 +264,7 @@ export class ProjectFolderService {
     this.logger.info(
       `Started watching ${projectFolders.length} project folders`
     );
-    return { success: true, count: projectFolders.length };
+    return projectFolders.length;
   }
 
   private async validateProjectFolderPath(
