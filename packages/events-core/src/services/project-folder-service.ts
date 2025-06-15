@@ -267,6 +267,54 @@ export class ProjectFolderService {
     return projectFolders.length;
   }
 
+  /**
+   * Check if the given absolute path is within any registered project folder
+   */
+  public async isPathInProjectFolder(absolutePath: string): Promise<boolean> {
+    if (!path.isAbsolute(absolutePath)) {
+      throw new Error(`Path must be absolute, received: ${absolutePath}`);
+    }
+
+    const settings = await this.userSettingsRepository.getSettings();
+    const projectFolders = settings.projectFolders;
+
+    for (const folder of projectFolders) {
+      if (
+        absolutePath === folder.path ||
+        absolutePath.startsWith(folder.path + path.sep)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Get the project folder that contains the given absolute path
+   */
+  public async getProjectFolderForPath(
+    absolutePath: string
+  ): Promise<ProjectFolder | null> {
+    if (!path.isAbsolute(absolutePath)) {
+      throw new Error(`Path must be absolute, received: ${absolutePath}`);
+    }
+
+    const settings = await this.userSettingsRepository.getSettings();
+    const projectFolders = settings.projectFolders;
+
+    for (const folder of projectFolders) {
+      if (
+        absolutePath === folder.path ||
+        absolutePath.startsWith(folder.path + path.sep)
+      ) {
+        return folder;
+      }
+    }
+
+    return null;
+  }
+
   private async validateProjectFolderPath(
     absoluteProjectFolderPath: string
   ): Promise<boolean> {

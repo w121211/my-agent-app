@@ -68,12 +68,13 @@ export async function createAppRouter(userDataDir: string) {
   }
   logger.info(`Chat repository initialized with folders`);
 
-  const chatService = new ChatService(eventBus, chatRepository, taskService);
-
-  // Updated FileService that doesn't need WorkspacePathService
+  const chatService = new ChatService(
+    eventBus,
+    chatRepository,
+    taskService,
+    projectFolderService
+  );
   const fileService = new FileService(eventBus);
-
-  // Create user settings service
   const userSettingsService = createUserSettingsService(userSettingsRepo);
 
   // Start watching all project folders

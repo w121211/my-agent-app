@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { IEventBus, BaseEvent } from "../event-bus.js";
 import type { ChatRepository } from "./chat-repository.js";
 import type { TaskService } from "./task-service.js";
+import type { ProjectFolderService } from "./project-folder-service.js";
 
 // Define types specific to chat service
 export type ChatStatus = "ACTIVE" | "CLOSED";
@@ -70,16 +71,19 @@ export class ChatService {
   private readonly eventBus: IEventBus;
   private readonly chatRepository: ChatRepository;
   private readonly taskService: TaskService;
+  private readonly projectFolderService: ProjectFolderService;
 
   constructor(
     eventBus: IEventBus,
     chatRepository: ChatRepository,
-    taskService: TaskService
+    taskService: TaskService,
+    projectFolderService: ProjectFolderService
   ) {
     this.logger = new Logger({ name: "ChatService" });
     this.eventBus = eventBus;
     this.chatRepository = chatRepository;
     this.taskService = taskService;
+    this.projectFolderService = projectFolderService;
   }
 
   async createChat(
@@ -91,6 +95,28 @@ export class ChatService {
     model: string = "default",
     correlationId?: string
   ): Promise<Chat> {
+    // Validate that the target directory is within a project folder
+    const isInProjectFolder =
+      await this.projectFolderService.isPathInProjectFolder(
+        targetDirectoryAbsolutePath
+      );
+
+    if (!isInProjectFolder) {
+      const projectFolder =
+        await this.projectFolderService.getProjectFolderForPath(
+          targetDirectoryAbsolutePath
+        );
+
+      throw new Error(
+        `Cannot create chat outside of project folders. Path ${targetDirectoryAbsolutePath} is not within any registered project folder. ` +
+          `Please add a project folder first or create the chat within an existing project folder.`
+      );
+    }
+
+    this.logger.info(
+      `Creating new chat in project folder at: ${targetDirectoryAbsolutePath}`
+    );
+
     const now = new Date();
 
     // Create task if requested
