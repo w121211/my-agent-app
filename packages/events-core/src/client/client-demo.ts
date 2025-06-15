@@ -1,5 +1,5 @@
 // packages/events-core/src/client/client-demo.ts
-// Run this code with `pnpm tsx src/client/client-demo.ts`
+// Run with: `pnpm run dev` (server), then `pnpm tsx src/client/client-demo.ts` (client)
 import path from "node:path";
 import process from "node:process";
 import fs from "node:fs/promises";
