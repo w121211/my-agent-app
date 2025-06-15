@@ -26,9 +26,10 @@ export const NewChatModal: React.FC = () => {
     createNewTask: false,
   });
 
-  // Create mutation options using the new TanStack React Query pattern
+  // UPDATED: Create mutation options now expect Chat directly
   const createChatMutationOptions = trpc.chat.createChat.mutationOptions({
     onSuccess: (newChat) => {
+      // newChat is now Chat directly, not wrapped in success object
       setSelectedChatFile(newChat.absoluteFilePath);
       closeNewChatModal();
       setFormData({

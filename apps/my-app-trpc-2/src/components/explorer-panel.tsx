@@ -432,9 +432,7 @@ export const ExplorerPanel: React.FC = () => {
                 absoluteProjectFolderPath: folder.path,
               });
             const treeResult = await queryClient.fetchQuery(treeQueryOptions);
-            if (treeResult.folderTree) {
-              updateFolderTree(folder.id, treeResult.folderTree);
-            }
+            updateFolderTree(folder.id, treeResult);
           } catch (error) {
             console.error(
               `Failed to load folder tree for ${folder.path}:`,
@@ -510,12 +508,7 @@ export const ExplorerPanel: React.FC = () => {
                   queryClient
                     .fetchQuery(treeQueryOptions)
                     .then((treeResult) => {
-                      if (treeResult.folderTree) {
-                        updateFolderTree(
-                          affectedProjectFolder.id,
-                          treeResult.folderTree
-                        );
-                      }
+                      updateFolderTree(affectedProjectFolder.id, treeResult);
                     })
                     .catch((refetchError) => {
                       console.error(
@@ -603,37 +596,32 @@ export const ExplorerPanel: React.FC = () => {
     )
   );
 
-  // Add project folder mutation with proper error handling
+  // UPDATED: Add project folder mutation now expects ProjectFolder directly
   const addProjectFolderMutation = useMutation(
     trpc.projectFolder.addProjectFolder.mutationOptions({
-      onSuccess: async (result) => {
-        if (result.success && result.projectFolder) {
-          const updatedFolders = [...projectFolders, result.projectFolder];
-          setProjectFolders(updatedFolders);
-          showToast("Project folder added successfully", "success");
+      onSuccess: async (projectFolder) => {
+        // projectFolder is now directly returned, not wrapped in success object
+        const updatedFolders = [...projectFolders, projectFolder];
+        setProjectFolders(updatedFolders);
+        showToast("Project folder added successfully", "success");
 
-          // Load folder tree for new project
-          try {
-            const treeQueryOptions =
-              trpc.projectFolder.getFolderTree.queryOptions({
-                absoluteProjectFolderPath: result.projectFolder.path,
-              });
-            const treeResult = await queryClient.fetchQuery(treeQueryOptions);
-            if (treeResult.folderTree) {
-              updateFolderTree(result.projectFolder.id, treeResult.folderTree);
-            }
-          } catch (error) {
-            console.error(
-              `Failed to load folder tree for new folder ${result.projectFolder.path}:`,
-              error
-            );
-            showToast(
-              `Folder added but failed to load tree for ${result.projectFolder.name}`,
-              "error"
-            );
-          }
-        } else if (result.message) {
-          showToast(result.message, "info");
+        // Load folder tree for new project
+        try {
+          const treeQueryOptions =
+            trpc.projectFolder.getFolderTree.queryOptions({
+              absoluteProjectFolderPath: projectFolder.path,
+            });
+          const treeResult = await queryClient.fetchQuery(treeQueryOptions);
+          updateFolderTree(projectFolder.id, treeResult);
+        } catch (error) {
+          console.error(
+            `Failed to load folder tree for new folder ${projectFolder.path}:`,
+            error
+          );
+          showToast(
+            `Folder added but failed to load tree for ${projectFolder.name}`,
+            "error"
+          );
         }
       },
       onError: (error) => {

@@ -186,9 +186,10 @@ export const ChatPanel: React.FC = () => {
     }
   }, [chatLoadError, showToast]);
 
-  // Create mutation options for submitting message
+  // UPDATED: Submit message mutation now expects Chat directly
   const submitMessageMutationOptions = trpc.chat.submitMessage.mutationOptions({
     onSuccess: (updatedChat) => {
+      // updatedChat is now Chat directly, not wrapped in success object
       setChat(updatedChat);
       setMessageInput("");
       showToast("Message sent successfully", "success");

@@ -12,6 +12,7 @@ export const PreviewPanel: React.FC = () => {
   const { showToast } = useToast();
   const { selectedPreviewFile } = useAppStore();
 
+  // UPDATED: File API returns FileContent directly
   const {
     data: fileContent,
     isLoading,
