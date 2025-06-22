@@ -289,10 +289,27 @@
         </div>
         <!-- Input Area -->
         <footer class="border-t border-border-main px-6 py-4 bg-bg-panel">
-          <div class="relative">
-            <textarea rows="3" placeholder="Type your message..." class="w-full bg-input-bg border border-input-border rounded-md px-3 py-3 resize-none focus:outline-none focus:border-accent transition-all placeholder-text-dim text-text-main text-[15px]"></textarea>
-            <!-- Left bottom icons -->
-            <div class="absolute bottom-2 left-3 flex gap-2">
+          <!-- Dropdowns Row with Icons -->
+          <div class="flex gap-4 mb-2 items-center">
+            <!-- Chat Mode Dropdown -->
+            <div class="relative">
+              <select class="appearance-none bg-input-bg border border-input-border text-text-main text-xs rounded-md px-8 py-2 pr-8 focus:outline-none focus:border-accent transition-all min-w-[110px]">
+                <option>Chat</option>
+                <option>Agent</option>
+              </select>
+              <i class="bi bi-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none text-xs"></i>
+            </div>
+            <!-- Model Dropdown -->
+            <div class="relative">
+              <select class="appearance-none bg-input-bg border border-input-border text-text-main text-xs rounded-md px-8 py-2 pr-8 focus:outline-none focus:border-accent transition-all min-w-[150px]">
+                <option>Claude 3.7</option>
+                <option>Gemini 2.5 Pro</option>
+              </select>
+              <i class="bi bi-cpu absolute left-2 top-1/2 -translate-y-1/2 text-text-dim text-xs"></i>
+              <i class="bi bi-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-text-dim pointer-events-none text-xs"></i>
+            </div>
+            <!-- Attach and Reference Icons -->
+            <div class="flex gap-2 ml-2">
               <button class="text-text-dim hover:text-accent transition-all p-1 rounded" title="Attach">
                 <i class="bi bi-paperclip"></i>
               </button>
@@ -300,6 +317,9 @@
                 <i class="bi bi-link-45deg"></i>
               </button>
             </div>
+          </div>
+          <div class="relative">
+            <textarea rows="3" placeholder="Type your message..." class="w-full bg-input-bg border border-input-border rounded-md px-3 py-3 resize-none focus:outline-none focus:border-accent transition-all placeholder-text-dim text-text-main text-[15px]"></textarea>
             <!-- Right bottom submit -->
             <div class="absolute bottom-2 right-3 flex gap-2">
               <button class="text-text-dim hover:text-accent hover:bg-accent/10 transition-all p-1 rounded" title="Send">

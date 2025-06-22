@@ -43,8 +43,6 @@
     .status-badge { font-size: 10px; padding: 1px 5px; border-radius: 9px; }
     .status-running { background-color: rgba(59, 130, 246, 0.2); color: #3B82F6; }
     .status-completed { background-color: rgba(34, 197, 94, 0.2); color: #22C55E; }
-    .workflow-button { transition: all 0.15s; }
-    .workflow-button:hover { opacity: 0.85; }
   </style>
 </head>
 <body class="bg-bg-main text-text-main font-sans text-[15px] h-screen overflow-hidden">
@@ -129,8 +127,8 @@
                 <div class="flex items-center py-1 px-2 hover:bg-hover rounded cursor-pointer group relative" onclick="toggleFolder(this)">
                   <i class="bi bi-chevron-right text-xs mr-1 text-text-dim"></i>
                   <!-- Added task-specific icon -->
-                  <i class="bi bi-rocket-takeoff text-accent/80 mr-1.5"></i>
-                  <span class="text-sm">workflow</span>
+                  <!-- <i class="bi bi-rocket-takeoff text-accent/80 mr-1.5"></i> -->
+                  <span class="text-sm truncate">workflow-demo</span>
                   <!-- Enhanced status indicator -->
                   <span class="ml-2 status-badge status-running">running</span>
                   <!-- Workflow control icon (stop) -->
@@ -240,11 +238,11 @@
               <button class="text-text-dim hover:text-accent transition-all" title="Edit"><i class="bi bi-pencil"></i></button>
               <button class="text-text-dim hover:text-accent transition-all" title="Copy"><i class="bi bi-copy"></i></button>
               <button class="text-text-dim hover:text-accent transition-all" title="More"><i class="bi bi-three-dots"></i></button>
-              <!-- Add workflow buttons -->
-              <button class="text-accent hover:text-accent/80 workflow-button flex items-center gap-1 text-xs ml-2 px-1.5 py-0.5 rounded bg-accent/10" title="What's next">
+              <!-- Add extension buttons -->
+              <button class="text-text-dim hover:text-accent flex items-center gap-1 text-xs ml-2 px-1.5 py-0.5 rounded bg-accent/10" title="What's next">
                 <span>What's next</span> <i class="bi bi-play-fill"></i><i class="bi bi-stars"></i>
               </button>
-              <button class="text-accent hover:text-accent/80 workflow-button flex items-center gap-1 text-xs ml-1 px-1.5 py-0.5 rounded bg-accent/10" title="Summarize">
+              <button class="text-text-dim hover:text-accent flex items-center gap-1 text-xs ml-1 px-1.5 py-0.5 rounded bg-accent/10" title="Summarize">
                 <span>Summarize</span> <i class="bi bi-stars"></i>
               </button>
             </div>

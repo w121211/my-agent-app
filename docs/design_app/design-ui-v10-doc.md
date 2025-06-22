@@ -109,29 +109,35 @@ A modern, professional AI chat application with a VS Code-inspired interface. Th
 
 This document serves as a reference for developers implementing the chat application UI, ensuring consistency with the provided design mockup.
 
-# Prompt
+# Prompt log
 
 ````
 <需求>
 請設計一個ai chat app ui
+
 - 整體 ui 參考: claude, gemini, grok, chatgpt
 - style 參考 vs code，例如 file explorer
 - MVP階段，需要基本簡約的設計，不要過度設計
 - 輸出 HTML Artifacts：HTML + Tailwind CSS (使用 tailwind CSS CDN)- 使用Bootstrap Icons CDN，避免自己寫 svg
 - 輸出英文
-</需求>
+  </需求>
 
 <修改意見>
+
 <!-- newest first -->
+
 請按照以下意見修改 html artifact
+
 - 輸出英文
 
 Project context
+
 - 改成用text 方式呈現，例如
+
 ```txt
 #<demo-project>/demo.md #/path/to/outside/file.md
 Text is also allowed
-````
+```
 
 - 允許 multiple lines，類似 user message，references 是 text button
 - context 允許使用者編輯(textbox)、儲存
@@ -304,7 +310,4 @@ File preview
 - 靜態網頁，不需要 js
 - 可以輸出多個 html 展示不同的區塊
 - 輸出英文
-
-```
-
-```
+````
