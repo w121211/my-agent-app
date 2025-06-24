@@ -1,0 +1,627 @@
+<!-- docs/design_app/design-ui-v10_3.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Chat App UI - Refactored</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        fontFamily: {
+          sans: ['Inter', 'Segoe UI', 'Arial', 'sans-serif'],
+        },
+        extend: {
+          colors: {
+            'background': '#0d1117',
+            'surface': '#161b22',
+            'panel': '#161b22',
+            'border': '#30363d',
+            'foreground': '#e6edf3',
+            'muted': '#8b949e',
+            'accent': '#58a6ff',
+            'hover': '#21262d',
+            'selected': '#2f363e',
+            'input': {
+              'background': '#0d1117',
+              'border': '#30363d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .scrollbar-thin::-webkit-scrollbar { width: 8px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #21262d; border-radius: 4px; }
+    .explorer-node.selected { background-color: #2f363e !important; color: #fff !important; }
+    .message-actions { opacity: 0; transition: opacity 0.2s; }
+    .group:hover .message-actions { opacity: 1; }
+    .icon { width: 1rem; height: 1rem; }
+    .icon-xs { width: 0.75rem; height: 0.75rem; }
+    .icon-sm { width: 0.875rem; height: 0.875rem; }
+  </style>
+</head>
+<body class="bg-background text-foreground font-sans text-[15px] h-screen overflow-hidden">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-surface border-r border-border flex flex-col">
+      <div class="p-3 border-b border-border flex items-center justify-between">
+        <span class="text-xs font-semibold uppercase tracking-wide text-muted">Projects</span>
+        <button class="p-1 text-muted hover:text-accent" title="Add Project">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto scrollbar-thin">
+        <div class="p-1">
+          <!-- Project Folder 1 -->
+          <div>
+            <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer group relative text-[13px] min-h-[28px]" onclick="toggleFolder(this)">
+              <svg class="icon-xs mr-1 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+              <span class="text-sm">my-ai-project</span>
+              <button class="ml-auto mr-1 text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="New Chat" onclick="event.stopPropagation();">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+            </div>
+            <div class="ml-3 pl-0 folder-content">
+              <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node selected group relative text-[13px] min-h-[28px]" onclick="selectNode(this); openChat('design-discussion')">
+                <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span class="text-sm truncate max-w-[120px]">design-discussion.chat.json</span>
+                <button class="ml-auto text-muted hover:text-accent" title="Menu" onclick="event.stopPropagation();">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); previewFile('README.md')">
+                <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-sm truncate max-w-[120px]">README.md</span>
+                <svg class="icon-xs ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="In Project Context">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); previewFile('api.md')">
+                <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-sm">api.md</span>
+                <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+              </div>
+              <!-- Nested Folder -->
+              <div>
+                <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer group relative text-[13px] min-h-[28px]" onclick="toggleFolder(this)">
+                  <svg class="icon-xs mr-1 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span class="text-sm">src</span>
+                  <button class="ml-auto mr-1 text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="New Chat" onclick="event.stopPropagation();">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </button>
+                  <button class="text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="ml-3 pl-0 folder-content">
+                  <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); previewFile('main.ts')">
+                    <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="text-sm">main.ts</span>
+                    <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); previewFile('utils.ts')">
+                    <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="text-sm">utils.ts</span>
+                    <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <!-- Workflow Folder (Demo) -->
+              <div class="mt-1">
+                <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer group relative text-[13px] min-h-[28px]" onclick="toggleFolder(this)">
+                  <svg class="icon-xs mr-1 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  <span class="text-sm truncate">workflow-demo</span>
+                  <span class="ml-2 px-2 py-0.5 rounded text-xs font-mono bg-blue-600/20 text-blue-400 border border-blue-600/40 align-middle">running</span>
+                  <button class="ml-1 text-muted hover:text-red-400 opacity-0 group-hover:opacity-100" title="Stop Workflow" onclick="event.stopPropagation();">
+                    <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                      <path fill-rule="evenodd" d="M4.5 7.5a3 3 0 013-3h9a3 3 0 013 3v9a3 3 0 01-3 3h-9a3 3 0 01-3-3v-9z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                  <button class="ml-auto mr-1 text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="New Chat" onclick="event.stopPropagation();">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </button>
+                  <button class="text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="ml-3 pl-0 folder-content hidden">
+                  <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); previewFile('release.log')">
+                    <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="text-sm">release.log</span>
+                    <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); previewFile('build.yaml')">
+                    <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="text-sm">build.yaml</span>
+                    <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Project Folder 2 -->
+          <div class="mt-1">
+            <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer group relative text-[13px] min-h-[28px]" onclick="toggleFolder(this)">
+              <svg class="icon-xs mr-1 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+              <span class="text-sm">demo-project</span>
+              <button class="ml-auto mr-1 text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="New Chat" onclick="event.stopPropagation();">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+            </div>
+            <div class="ml-3 pl-0 folder-content hidden">
+              <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); openChat('demo-chat')">
+                <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span class="text-sm">demo-chat.chat.json</span>
+                <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="flex items-center py-0.5 px-1 hover:bg-hover rounded cursor-pointer explorer-node group relative text-[13px] min-h-[28px]" onclick="selectNode(this); previewFile('demo.md')">
+                <svg class="icon-xs mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="text-sm">demo.md</span>
+                <button class="ml-auto text-muted hover:text-accent opacity-0 group-hover:opacity-100" title="Menu" onclick="event.stopPropagation();">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Settings -->
+      <div class="p-3 border-t border-border">
+        <button class="w-full py-2 px-3 text-muted hover:text-accent text-xs font-medium flex items-center justify-center">
+          <svg class="icon mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>Settings
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex min-w-0">
+      <!-- Chat Conversation Panel -->
+      <section class="flex-1 flex flex-col min-w-0">
+        <!-- Breadcrumb Header -->
+        <header class="h-12 bg-surface border-b border-border flex items-center px-4 gap-2">
+          <svg class="icon text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+          <span class="text-muted text-xs">my-ai-project</span>
+          <svg class="icon-xs text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <span class="text-muted text-xs">design-discussion.chat.json</span>
+        </header>
+        <!-- Messages -->
+        <div class="flex-1 overflow-y-auto scrollbar-thin px-8 py-6 space-y-5 bg-background">
+          <!-- AI Message -->
+          <div class="flex flex-col items-start group">
+            <div class="flex items-center mb-0.5 gap-2">
+              <span class="w-5 h-5 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">C</span>
+              <span class="text-xs text-muted font-medium">Claude Sonnet 4</span>
+            </div>
+            <div class="pl-7 text-foreground leading-normal">
+              Hi! How can I help with your product design? Let me know your focus today.
+            </div>
+            <div class="flex items-center gap-3 mt-1 ml-7 message-actions">
+              <button class="text-muted hover:text-accent" title="Edit">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent" title="Copy">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent" title="More">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- User Message -->
+          <div class="flex flex-col items-end group">
+            <div class="bg-accent/20 border border-accent/30 rounded-lg px-4 py-2 max-w-xl text-foreground ml-auto">
+              <a href="javascript:void(0)" class="text-accent ml-1 hover:text-accent/80"
+                onclick="previewFile('vscode-screenshot.png')">#vscode-screenshot.png</a>
+              <a href="javascript:void(0)" class="text-accent ml-1 hover:text-accent/80"
+                onclick="previewFile('vscode-screenshot.png')">#claude-screenshot.png</a>
+              I want a chat UI that feels modern and professional, like VS Code but for conversations.
+            </div>
+            <div class="flex items-center gap-2 mt-1 mr-2 message-actions">
+              <button class="text-muted hover:text-accent" title="Edit">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- AI Message -->
+          <div class="flex flex-col items-start group">
+            <div class="flex items-center mb-0.5 gap-2">
+              <span class="w-5 h-5 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">C</span>
+              <span class="text-xs text-muted font-medium">Claude Sonnet 4</span>
+            </div>
+            <div class="pl-7 text-foreground leading-normal">
+              Great! Here are some key principles:<br>
+              <ul class="list-disc pl-5 mt-1 text-[15px] text-foreground space-y-0.5">
+                <li>Minimal dark theme, subtle contrast</li>
+                <li>Three-panel layout: explorer, chat, preview</li>
+                <li>Modern sans-serif font</li>
+                <li>Contextual file management</li>
+              </ul>
+            </div>
+            <div class="flex items-center gap-3 mt-1 ml-7 message-actions">
+              <button class="text-muted hover:text-accent" title="Edit">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent" title="Copy">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent" title="More">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- AI Message with Artifact -->
+          <div class="flex flex-col items-start group">
+            <div class="flex items-center mb-0.5 gap-2">
+              <span class="w-5 h-5 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">C</span>
+              <span class="text-xs text-muted font-medium">Claude Sonnet 4</span>
+            </div>
+            <div class="pl-7 text-foreground leading-normal">
+              Here's a wireframe artifact for your chat UI. You can preview or download it.<br>
+              <div class="mt-2">
+                <button class="flex items-center gap-2 border border-border rounded px-3 py-1 bg-panel hover:bg-hover text-foreground text-sm font-medium" onclick="previewFile('wireframe.html')">
+                  wireframe.html
+                  <span class="ml-1 text-xs text-muted">v3</span>
+                  <svg class="icon ml-2 text-muted hover:text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 mt-1 ml-7 message-actions">
+              <button class="text-muted hover:text-accent" title="Edit">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent" title="Copy">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+              <button class="text-muted hover:text-accent" title="More">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- Input Area -->
+        <footer class="border-t border-border px-6 py-4 bg-panel">
+          <div class="relative">
+            <textarea rows="3" placeholder="Type your message..." class="w-full bg-input-background border border-input-border rounded-md px-3 py-3 resize-none focus:outline-none focus:border-accent placeholder-muted text-foreground text-[15px]"></textarea>
+          </div>
+          <!-- Controls below input -->
+          <div class="flex flex-wrap items-center gap-3 mt-2">
+            <button class="text-muted hover:text-accent" title="Attach">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+            </button>
+            <!-- Chat mode dropdown -->
+            <div class="relative inline-block">
+              <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-muted hover:text-accent flex items-center gap-1 text-xs" title="Chat Mode">
+                <span id="selected-mode">Chat</span>
+                <svg class="icon-xs ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div class="absolute left-0 mt-1 w-28 bg-panel border border-border rounded-md shadow-lg z-10 hidden">
+                <div class="py-1">
+                  <a href="#" class="block px-3 py-1 text-sm text-foreground hover:bg-hover">Chat</a>
+                  <a href="#" class="block px-3 py-1 text-sm text-foreground hover:bg-hover">Agent</a>
+                </div>
+              </div>
+            </div>
+            <!-- Model selection dropdown -->
+            <div class="relative inline-block">
+              <button onclick="this.nextElementSibling.classList.toggle('hidden')" class="text-muted hover:text-accent flex items-center gap-1 text-xs" title="Select Model">
+                <span id="selected-model">Claude 3.7</span>
+                <svg class="icon-xs ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div class="absolute left-0 mt-1 w-36 bg-panel border border-border rounded-md shadow-lg z-10 hidden">
+                <div class="py-1">
+                  <a href="#" class="block px-3 py-1 text-sm text-foreground hover:bg-hover">Claude 3.7</a>
+                  <a href="#" class="block px-3 py-1 text-sm text-foreground hover:bg-hover">Gemini 2.5 Pro</a>
+                </div>
+              </div>
+            </div>
+            <button class="text-muted hover:text-accent text-xs" onclick="openWhatsNextModal()">
+              <svg class="icon mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>What's next
+            </button>
+            <button class="text-muted hover:text-accent text-xs" onclick="summarizeChat()">
+              <svg class="icon mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>Summarize
+            </button>
+            <!-- Send button - keep it more prominent -->
+            <button class="hover:bg-accent/80 text-muted px-3 py-1.5 rounded ml-auto" title="Send">
+              <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
+        </footer>
+      </section>
+
+      <!-- Right Panel -->
+      <aside class="w-96 bg-surface border-l border-border flex flex-col relative">
+        <!-- Preview Overlay -->
+        <div class="absolute inset-0 bg-surface z-20 hidden" id="preview-panel">
+          <div class="h-12 border-b border-border flex items-center justify-between px-4">
+            <div class="flex items-center">
+              <span class="font-medium" id="preview-title">README.md</span>
+              <span class="ml-2 text-xs text-muted">Preview</span>
+            </div>
+            <div class="flex items-center space-x-3">
+              <button class="text-muted hover:text-accent">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </button>
+              <button onclick="closePreview()" class="text-muted hover:text-accent">
+                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 p-4 overflow-y-auto scrollbar-thin" id="preview-content">
+            <div class="prose prose-invert max-w-none">
+              <h1 class="text-xl font-bold mb-4 text-foreground">README</h1>
+              <p class="text-foreground mb-4">This is a markdown file preview. Actual file content would be loaded here.</p>
+              <ul class="list-disc pl-5 text-foreground">
+                <li>Dynamic content loading</li>
+                <li>Syntax highlighting</li>
+                <li>Live preview updates</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <!-- Chat Control Base Layer -->
+        <div class="flex flex-col h-full">
+          <!-- Panel Header -->
+          <div class="h-12 border-b border-border flex items-center px-4">
+            <span class="text-xs font-semibold uppercase tracking-wide text-muted">Chat Control</span>
+          </div>
+          <div class="flex-1 overflow-y-auto scrollbar-thin">
+            <!-- Project Context -->
+            <div class="p-4 border-b border-border" id="project-context-section">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-xs font-semibold tracking-wide text-muted">Project Context</h3>
+                <button id="edit-context-btn" class="text-xs text-muted hover:text-accent" title="Edit" onclick="toggleContextEdit(true)">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button id="save-context-btn" class="text-xs text-muted hover:text-accent hidden" title="Save" onclick="saveContext()">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+              </div>
+              <!-- View mode -->
+              <div id="context-view" class="space-y-2">
+                <div class="bg-input-background border border-input-border rounded p-3 text-sm text-muted min-h-[100px] cursor-text" onclick="toggleContextEdit(true)">
+                  <button class="text-accent hover:text-accent/80 underline mr-2" onclick="previewFile('demo.md'); event.stopPropagation();">#&lt;demo-project&gt;/demo.md</button><br />
+                  <button class="text-accent hover:text-accent/80 underline mr-2" onclick="previewFile('outside-file.md'); event.stopPropagation();">#/path/to/outside/file.md</button><br />
+                  Text is also allowed
+                </div>
+              </div>
+              <!-- Edit mode -->
+              <div id="context-edit" class="hidden">
+                <textarea id="context-textarea" rows="4" class="text-foreground text-sm w-full bg-input-background border border-input-border rounded-md px-3 py-2 resize-none focus:outline-none focus:border-accent placeholder-muted" placeholder="#&lt;demo-project&gt;/demo.md #/path/to/outside/file.md&#10;Text is also allowed"></textarea>
+              </div>
+            </div>
+            <!-- Artifacts -->
+            <div class="p-4 border-b border-border">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-xs font-semibold tracking-wide text-muted">Artifacts</h3>
+                <button class="text-xs text-muted hover:text-accent" title="Download All">
+                  <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </button>
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between p-2 bg-panel rounded cursor-pointer hover:bg-hover" onclick="previewFile('wireframe.html')">
+                  <div class="flex items-center">
+                    <svg class="icon mr-2 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span class="text-sm text-foreground">wireframe.html</span>
+                    <span class="ml-1 text-xs text-muted">v3</span>
+                  </div>
+                  <button class="text-xs text-muted hover:text-accent" title="Download">
+                    <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <script>
+    let selectedNode = document.querySelector('.explorer-node.selected');
+    function selectNode(element) {
+      if (selectedNode) selectedNode.classList.remove('selected');
+      selectedNode = element;
+      element.classList.add('selected');
+    }
+    function openChat(chatName) {
+      document.querySelector('header span.text-muted.text-xs:last-child').textContent = chatName + '.chat.json';
+      closePreview();
+    }
+    function previewFile(fileName) {
+      document.getElementById('preview-title').textContent = fileName;
+      document.getElementById('preview-panel').classList.remove('hidden');
+    }
+    function closePreview() {
+      document.getElementById('preview-panel').classList.add('hidden');
+    }
+    function toggleFolder(element) {
+      const icon = element.querySelector('svg');
+      const folderContent = element.nextElementSibling;
+      if (!folderContent) return;
+      if (folderContent.classList.contains('hidden')) {
+        folderContent.classList.remove('hidden');
+        // Change chevron-right to chevron-down
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />';
+      } else {
+        folderContent.classList.add('hidden');
+        // Change chevron-down to chevron-right
+        icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />';
+      }
+    }
+    function toggleContextEdit(editing) {
+      const view = document.getElementById('context-view');
+      const edit = document.getElementById('context-edit');
+      const editBtn = document.getElementById('edit-context-btn');
+      const saveBtn = document.getElementById('save-context-btn');
+      if (editing) {
+        view.classList.add('hidden');
+        edit.classList.remove('hidden');
+        editBtn.classList.add('hidden');
+        saveBtn.classList.remove('hidden');
+        const textarea = document.getElementById('context-textarea');
+        textarea.focus();
+        textarea.select();
+      } else {
+        view.classList.remove('hidden');
+        edit.classList.add('hidden');
+        editBtn.classList.remove('hidden');
+        saveBtn.classList.add('hidden');
+      }
+    }
+    function saveContext() {
+      const textarea = document.getElementById('context-textarea');
+      const content = textarea.value;
+      console.log('Saved context:', content);
+      toggleContextEdit(false);
+    }
+    function openWhatsNextModal() {
+      alert("What's Next: Refactor your utils.ts for better modularity.");
+    }
+    function summarizeChat() {
+      alert("Chat summary saved to #./chat-summary.md");
+    }
+  </script>
+</body>
+</html>
