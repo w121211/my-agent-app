@@ -1,14 +1,28 @@
 // apps/my-app-trpc-2/src/components/chat-panel.tsx
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSubscription } from "@trpc/tanstack-react-query";
-import { Send, Paperclip, Zap, MessageSquare, ChevronDown } from "lucide-react";
+import {
+  Send,
+  Paperclip,
+  ChevronDown,
+  MessageSquare,
+  Edit,
+  Copy,
+  MoreHorizontal,
+  Home,
+  ChevronRight,
+  Download,
+  Lightbulb,
+  FileText,
+} from "lucide-react";
 import React, { useState, useEffect } from "react";
 import * as Select from "@radix-ui/react-select";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
 import { useToast } from "./toast-provider";
 
-// Local type definitions (in real app would be imported)
+// Local type definitions
 interface ChatMessage {
   id: string;
   role: "USER" | "ASSISTANT" | "FUNCTION_EXECUTOR";
@@ -36,24 +50,24 @@ const ChatModeSelect: React.FC<{
   onValueChange: (value: string) => void;
 }> = ({ value, onValueChange }) => (
   <Select.Root value={value} onValueChange={onValueChange}>
-    <Select.Trigger className="inline-flex items-center justify-between gap-1 rounded px-3 py-1 text-sm bg-white border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[80px]">
+    <Select.Trigger className="inline-flex items-center justify-center gap-1 rounded px-3 py-1 text-xs bg-panel border border-border hover:bg-hover focus:outline-none focus:border-accent min-w-[80px] text-muted">
       <Select.Value />
       <Select.Icon>
         <ChevronDown size={12} />
       </Select.Icon>
     </Select.Trigger>
     <Select.Portal>
-      <Select.Content className="overflow-hidden bg-white rounded border border-gray-200 shadow-lg">
+      <Select.Content className="overflow-hidden bg-panel rounded border border-border shadow-lg">
         <Select.Viewport className="p-1">
           <Select.Item
             value="chat"
-            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-gray-100 focus:bg-gray-100 outline-none"
+            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
           >
             <Select.ItemText>Chat</Select.ItemText>
           </Select.Item>
           <Select.Item
             value="agent"
-            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-gray-100 focus:bg-gray-100 outline-none"
+            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
           >
             <Select.ItemText>Agent</Select.ItemText>
           </Select.Item>
@@ -68,26 +82,209 @@ const ModelSelect: React.FC<{
   onValueChange: (value: string) => void;
 }> = ({ value, onValueChange }) => (
   <Select.Root value={value} onValueChange={onValueChange}>
-    <Select.Trigger className="inline-flex items-center justify-between gap-1 rounded px-3 py-1 text-sm bg-white border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[80px]">
+    <Select.Trigger className="inline-flex items-center justify-center gap-1 rounded px-3 py-1 text-xs bg-panel border border-border hover:bg-hover focus:outline-none focus:border-accent min-w-[120px] text-muted">
       <Select.Value />
       <Select.Icon>
         <ChevronDown size={12} />
       </Select.Icon>
     </Select.Trigger>
     <Select.Portal>
-      <Select.Content className="overflow-hidden bg-white rounded border border-gray-200 shadow-lg">
+      <Select.Content className="overflow-hidden bg-panel rounded border border-border shadow-lg">
         <Select.Viewport className="p-1">
           <Select.Item
             value="claude"
-            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-gray-100 focus:bg-gray-100 outline-none"
+            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
           >
-            <Select.ItemText>Claude</Select.ItemText>
+            <Select.ItemText>Claude 3.7</Select.ItemText>
+          </Select.Item>
+          <Select.Item
+            value="gemini"
+            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
+          >
+            <Select.ItemText>Gemini 2.5 Pro</Select.ItemText>
           </Select.Item>
         </Select.Viewport>
       </Select.Content>
     </Select.Portal>
   </Select.Root>
 );
+
+const MessageActions: React.FC<{
+  message: ChatMessage;
+  isUserMessage: boolean;
+}> = ({ message, isUserMessage }) => {
+  const { showToast } = useToast();
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content);
+    showToast("Message copied to clipboard", "success");
+  };
+
+  const handleEdit = () => {
+    showToast("Edit functionality not implemented yet", "info");
+  };
+
+  const moreMenuItems = [
+    {
+      label: "Clone Chat",
+      action: () => showToast("Clone chat functionality coming soon", "info"),
+    },
+    {
+      label: "What's Next",
+      action: () => showToast("What's next analysis coming soon", "info"),
+    },
+    {
+      label: "Summarize",
+      action: () => showToast("Summarize functionality coming soon", "info"),
+    },
+    {
+      label: "Retry",
+      action: () => showToast("Retry functionality coming soon", "info"),
+    },
+  ];
+
+  return (
+    <div
+      className={`flex items-center gap-3 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUserMessage ? "mr-2" : "ml-7"}`}
+    >
+      <button
+        onClick={handleEdit}
+        className="text-muted hover:text-accent"
+        title="Edit"
+      >
+        <Edit size={14} />
+      </button>
+      <button
+        onClick={handleCopy}
+        className="text-muted hover:text-accent"
+        title="Copy"
+      >
+        <Copy size={14} />
+      </button>
+
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button className="text-muted hover:text-accent" title="More">
+            <MoreHorizontal size={14} />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            className="min-w-[180px] bg-panel rounded-md border border-border shadow-lg z-50"
+            sideOffset={5}
+          >
+            {moreMenuItems.map((item) => (
+              <DropdownMenu.Item
+                key={item.label}
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
+                onClick={item.action}
+              >
+                {item.label}
+              </DropdownMenu.Item>
+            ))}
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
+  );
+};
+
+const ArtifactButton: React.FC<{
+  fileName: string;
+  version?: string;
+}> = ({ fileName, version }) => {
+  const { showToast } = useToast();
+
+  const handleDownload = () => {
+    showToast(`Download ${fileName} functionality coming soon`, "info");
+  };
+
+  const handlePreview = () => {
+    showToast(`Preview ${fileName} functionality coming soon`, "info");
+  };
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={handlePreview}
+        className="flex items-center gap-2 border border-border rounded px-3 py-1 bg-panel hover:bg-hover text-foreground text-sm font-medium"
+      >
+        <FileText size={14} />
+        {fileName}
+        {version && <span className="ml-1 text-xs text-muted">{version}</span>}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDownload();
+          }}
+          className="ml-2 text-muted hover:text-accent"
+          title="Download"
+        >
+          <Download size={14} />
+        </button>
+      </button>
+    </div>
+  );
+};
+
+const MessageBubble: React.FC<{
+  message: ChatMessage;
+  isUserMessage: boolean;
+}> = ({ message, isUserMessage }) => {
+  // Detect artifacts in message (placeholder logic)
+  const hasArtifacts =
+    message.content.includes("artifact") ||
+    message.content.includes("wireframe");
+
+  // Detect file references in message
+  const fileReferences =
+    message.content.match(/#[\w\-\.\/]+\.(png|jpg|jpeg|md|html|ts|js)/g) || [];
+
+  if (isUserMessage) {
+    return (
+      <div className="flex flex-col items-end group">
+        <div className="bg-accent/20 border border-accent/30 rounded-lg px-4 py-2 max-w-xl text-foreground ml-auto">
+          {/* Render file references as clickable links */}
+          {fileReferences.length > 0 && (
+            <div className="mb-2">
+              {fileReferences.map((ref, index) => (
+                <button
+                  key={index}
+                  className="text-accent ml-1 hover:text-accent/80 text-sm"
+                  onClick={() => console.log("Open file:", ref)}
+                >
+                  {ref}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="leading-normal">{message.content}</div>
+        </div>
+        <MessageActions message={message} isUserMessage={true} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-start group">
+      <div className="flex items-center mb-0.5 gap-2">
+        <span className="w-5 h-5 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">
+          C
+        </span>
+        <span className="text-xs text-muted font-medium">Claude Sonnet 4</span>
+      </div>
+      <div className="pl-7 text-foreground leading-normal">
+        {message.content}
+
+        {/* Placeholder artifacts */}
+        {hasArtifacts && (
+          <ArtifactButton fileName="wireframe.html" version="v3" />
+        )}
+      </div>
+      <MessageActions message={message} isUserMessage={false} />
+    </div>
+  );
+};
 
 export const ChatPanel: React.FC = () => {
   const trpc = useTRPC();
@@ -120,24 +317,17 @@ export const ChatPanel: React.FC = () => {
     trpc.event.chatEvents.subscriptionOptions(
       { lastEventId: null },
       {
-        enabled: !!chat, // Only enable when we have a chat loaded
+        enabled: !!chat,
         onData: (event) => {
-          // Handle the chat event - only update if it's for the current chat
           if (event.data.chatId === chat?.id) {
             console.log(
               "Chat event received:",
               event.data.updateType,
               event.data
             );
-
-            // Update the chat with the new data from the event
             setChat(event.data.chat);
 
-            // Show toast for different event types
             switch (event.data.updateType) {
-              case "MESSAGE_ADDED":
-                // Don't show toast for user messages (they added them)
-                break;
               case "AI_RESPONSE_ADDED":
                 showToast("AI response received", "success");
                 break;
@@ -146,7 +336,6 @@ export const ChatPanel: React.FC = () => {
                 break;
             }
 
-            // Invalidate the chat query to keep it in sync
             queryClient.invalidateQueries({
               queryKey: trpc.chat.openChatFile.queryKey({
                 filePath: selectedChatFile!,
@@ -165,11 +354,10 @@ export const ChatPanel: React.FC = () => {
     )
   );
 
-  // Handle data changes with useEffect instead of onSuccess
+  // Handle data changes
   useEffect(() => {
     if (loadedChat) {
       setChat(loadedChat);
-      // Update local state from chat metadata
       if (loadedChat.metadata?.mode) {
         setChatMode(loadedChat.metadata.mode);
       }
@@ -186,15 +374,13 @@ export const ChatPanel: React.FC = () => {
     }
   }, [chatLoadError, showToast]);
 
-  // UPDATED: Submit message mutation now expects Chat directly
+  // Submit message mutation
   const submitMessageMutationOptions = trpc.chat.submitMessage.mutationOptions({
     onSuccess: (updatedChat) => {
-      // updatedChat is now Chat directly, not wrapped in success object
       setChat(updatedChat);
       setMessageInput("");
       showToast("Message sent successfully", "success");
 
-      // Invalidate and refetch the chat query to ensure consistency
       queryClient.invalidateQueries({
         queryKey: trpc.chat.openChatFile.queryKey({
           filePath: selectedChatFile!,
@@ -208,7 +394,6 @@ export const ChatPanel: React.FC = () => {
         "error"
       );
 
-      // Remove temp message on error
       setChat((prev) =>
         prev
           ? {
@@ -220,13 +405,11 @@ export const ChatPanel: React.FC = () => {
     },
   });
 
-  // Submit message mutation
   const submitMessageMutation = useMutation(submitMessageMutationOptions);
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !chat) return;
 
-    // Immediately add message to UI with temp ID
     const tempMessage: ChatMessage = {
       id: `temp-${Date.now()}`,
       role: "USER",
@@ -260,7 +443,17 @@ export const ChatPanel: React.FC = () => {
     }
   };
 
-  // Helper function to invalidate specific chat queries
+  const handleWhatsNext = () => {
+    showToast(
+      "What's Next: Refactor your utils.ts for better modularity.",
+      "info"
+    );
+  };
+
+  const handleSummarize = () => {
+    showToast("Chat summary functionality coming soon", "info");
+  };
+
   const invalidateChatQueries = () => {
     if (selectedChatFile) {
       const queryKey = trpc.chat.openChatFile.queryKey({
@@ -272,8 +465,8 @@ export const ChatPanel: React.FC = () => {
 
   if (!selectedChatFile) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center text-gray-500">
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <div className="text-center text-muted">
           <MessageSquare size={48} className="mx-auto mb-4" />
           <p>Select a chat file to start</p>
         </div>
@@ -284,15 +477,15 @@ export const ChatPanel: React.FC = () => {
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-gray-500">Loading chat...</div>
+        <div className="text-muted">Loading chat...</div>
       </div>
     );
   }
 
   if (chatLoadError) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center text-red-500">
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <div className="text-center text-red-400">
           <MessageSquare size={48} className="mx-auto mb-4" />
           <p className="mb-2">Failed to load chat</p>
           <button
@@ -301,7 +494,7 @@ export const ChatPanel: React.FC = () => {
                 queryKey: openChatFileQueryOptions.queryKey,
               })
             }
-            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+            className="px-3 py-1 text-sm bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 border border-red-600/40"
           >
             Try Again
           </button>
@@ -311,136 +504,101 @@ export const ChatPanel: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white">
-      {/* Header */}
-      <div className="border-b border-gray-200 p-4">
-        <div className="text-sm text-gray-600 mb-1">
-          🏠 Home {">"} 📁{" "}
-          {selectedChatFile.split("/").slice(-3, -1).join(" > ")}
-        </div>
-        <div className="text-sm text-gray-600 flex items-center justify-between">
-          <span>
-            {">"} 💬 {selectedChatFile.split("/").pop()}
-          </span>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={invalidateChatQueries}
-              className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-            >
-              🔄 Refresh
-            </button>
-            <div className="text-xs text-gray-500">
-              {chatEventsSubscription.status === "pending" && (
-                <span className="text-green-600">🟢 Live</span>
-              )}
-              {chatEventsSubscription.status === "connecting" && (
-                <span className="text-yellow-600">🟡 Connecting</span>
-              )}
-              {chatEventsSubscription.status === "error" && (
-                <span className="text-red-600">🔴 Disconnected</span>
-              )}
-              {chatEventsSubscription.status === "idle" && (
-                <span className="text-gray-400">⚪ Idle</span>
-              )}
-            </div>
+    <div className="flex-1 flex flex-col bg-background min-w-0">
+      {/* Breadcrumb Header */}
+      <header className="h-12 bg-surface border-b border-border flex items-center px-4 gap-2">
+        <Home size={14} className="text-muted" />
+        <span className="text-muted text-xs">
+          {selectedChatFile.split("/").slice(-3, -1).join("")}
+        </span>
+        <ChevronRight size={12} className="text-muted" />
+        <span className="text-muted text-xs">
+          {selectedChatFile.split("/").pop()}
+        </span>
+        <div className="ml-auto flex items-center space-x-2">
+          <button
+            onClick={invalidateChatQueries}
+            className="text-xs px-2 py-1 bg-panel rounded hover:bg-hover text-muted"
+          >
+            🔄 Refresh
+          </button>
+          <div className="text-xs text-muted">
+            {chatEventsSubscription.status === "pending" && (
+              <span className="text-green-400">🟢 Live</span>
+            )}
+            {chatEventsSubscription.status === "connecting" && (
+              <span className="text-yellow-400">🟡 Connecting</span>
+            )}
+            {chatEventsSubscription.status === "error" && (
+              <span className="text-red-400">🔴 Disconnected</span>
+            )}
+            {chatEventsSubscription.status === "idle" && (
+              <span className="text-muted">⚪ Idle</span>
+            )}
           </div>
         </div>
-      </div>
-
-      {/* Task Knowledge Section */}
-      {chat?.metadata?.mode && (
-        <div className="border-b border-gray-200 p-4 bg-gray-50">
-          <details className="group">
-            <summary className="cursor-pointer font-medium text-gray-700 mb-2">
-              ▼ Task Knowledge & Instruction
-            </summary>
-            <div className="bg-white border rounded p-3 text-sm">
-              <div className="text-gray-600">
-                &lt;task_knowledge&gt;
-                <br />
-                {/* Placeholder for task knowledge */}
-                &lt;/task_knowledge&gt;
-              </div>
-            </div>
-          </details>
-        </div>
-      )}
+      </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5 bg-background">
         {chat?.messages.map((message) => (
-          <div key={message.id} className="group">
-            <div className="flex items-start space-x-3">
-              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm">
-                {message.role === "USER" ? "👤" : "🤖"}
-              </div>
-              <div className="flex-1">
-                <div className="text-sm text-gray-600 mb-1">
-                  [{message.role}] {message.timestamp.toLocaleTimeString()}
-                  {message.id.startsWith("temp-") && (
-                    <span className="ml-2 text-orange-500">⏳ Sending...</span>
-                  )}
-                </div>
-                <div className="prose prose-sm max-w-none">
-                  {message.content}
-                </div>
-                {message.role === "ASSISTANT" && (
-                  <div className="mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="text-xs text-gray-500 hover:text-gray-700 mr-3">
-                      copy
-                    </button>
-                    <button className="text-xs text-gray-500 hover:text-gray-700">
-                      retry
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <MessageBubble
+            key={message.id}
+            message={message}
+            isUserMessage={message.role === "USER"}
+          />
         ))}
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-4">
-        <div className="space-y-3">
+      <footer className="border-t border-border px-6 py-4 bg-panel">
+        <div className="relative">
           <textarea
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Write a message..."
-            className="w-full border border-gray-300 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Type your message..."
+            className="w-full bg-input-background border border-input-border rounded-md px-3 py-3 resize-none focus:outline-none focus:border-accent placeholder-muted text-foreground text-[15px]"
             rows={3}
           />
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <ChatModeSelect value={chatMode} onValueChange={setChatMode} />
-              <ModelSelect value={model} onValueChange={setModel} />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button className="p-2 text-gray-500 hover:text-gray-700">
-                <Paperclip size={16} />
-              </button>
-              <button className="p-2 text-gray-500 hover:text-gray-700">
-                <Zap size={16} />
-              </button>
-              <button
-                onClick={handleSendMessage}
-                disabled={
-                  !messageInput.trim() || submitMessageMutation.isPending
-                }
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
-              >
-                <Send size={16} />
-                <span>
-                  {submitMessageMutation.isPending ? "Sending..." : "Send"}
-                </span>
-              </button>
-            </div>
-          </div>
         </div>
-      </div>
+
+        {/* Controls below input */}
+        <div className="flex flex-wrap items-center gap-3 mt-2">
+          <button className="text-muted hover:text-accent" title="Attach">
+            <Paperclip size={16} />
+          </button>
+
+          <ChatModeSelect value={chatMode} onValueChange={setChatMode} />
+          <ModelSelect value={model} onValueChange={setModel} />
+
+          <button
+            onClick={handleWhatsNext}
+            className="text-muted hover:text-accent text-xs flex items-center"
+          >
+            <Lightbulb size={14} className="mr-1" />
+            What&apos;s next
+          </button>
+
+          <button
+            onClick={handleSummarize}
+            className="text-muted hover:text-accent text-xs flex items-center"
+          >
+            <FileText size={14} className="mr-1" />
+            Summarize
+          </button>
+
+          {/* Send button */}
+          <button
+            onClick={handleSendMessage}
+            disabled={!messageInput.trim() || submitMessageMutation.isPending}
+            className="hover:bg-accent/80 text-muted px-3 py-1.5 rounded ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Send"
+          >
+            <Send size={16} />
+          </button>
+        </div>
+      </footer>
     </div>
   );
 };

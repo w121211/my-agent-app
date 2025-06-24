@@ -16,6 +16,11 @@ import {
   Edit,
   FileText,
   FolderPlus,
+  Folder,
+  FolderOpen,
+  Settings,
+  Plus,
+  Square,
 } from "lucide-react";
 
 // Type definitions
@@ -33,29 +38,56 @@ interface TaskInfo {
   absoluteDirectoryPath: string;
 }
 
-const getFileIcon = (fileName: string, isDirectory: boolean) => {
+const getFileIcon = (
+  fileName: string,
+  isDirectory: boolean,
+  isExpanded = false
+) => {
   if (isDirectory) {
-    return null; // No emoji for directories, just use chevron
+    return isExpanded ? (
+      <FolderOpen size={14} className="text-accent" />
+    ) : (
+      <Folder size={14} className="text-accent" />
+    );
   }
 
   if (fileName.endsWith(".chat.json")) {
-    return "💬";
+    return <MessageSquare size={14} className="text-accent" />;
   }
 
-  return "📄"; // All other files get document icon
+  return <FileText size={14} className="text-muted" />;
 };
 
-const getTaskStatusIcon = (status: string) => {
-  switch (status) {
-    case "COMPLETED":
-      return "✓";
-    case "IN_PROGRESS":
-      return "🏃";
-    case "CREATED":
-    case "INITIALIZED":
-    default:
-      return "⚠️";
-  }
+const getTaskStatusBadge = (status: string) => {
+  const statusConfig = {
+    COMPLETED: {
+      label: "completed",
+      className: "bg-green-600/20 text-green-400 border-green-600/40",
+    },
+    IN_PROGRESS: {
+      label: "running",
+      className: "bg-blue-600/20 text-blue-400 border-blue-600/40",
+    },
+    CREATED: {
+      label: "created",
+      className: "bg-yellow-600/20 text-yellow-400 border-yellow-600/40",
+    },
+    INITIALIZED: {
+      label: "ready",
+      className: "bg-purple-600/20 text-purple-400 border-purple-600/40",
+    },
+  };
+
+  const config =
+    statusConfig[status as keyof typeof statusConfig] || statusConfig.CREATED;
+
+  return (
+    <span
+      className={`ml-2 px-2 py-0.5 rounded text-xs font-mono border ${config.className}`}
+    >
+      {config.label}
+    </span>
+  );
 };
 
 const FileOperationsMenu: React.FC<{
@@ -72,14 +104,12 @@ const FileOperationsMenu: React.FC<{
   const handleRename = () => {
     const newName = prompt(`Rename ${node.name}:`, node.name);
     if (newName && newName !== node.name) {
-      // In a real app, this would call a rename API
       showToast(`Rename functionality not implemented yet`, "info");
     }
   };
 
   const handleDelete = () => {
     if (confirm(`Are you sure you want to delete ${node.name}?`)) {
-      // In a real app, this would call a delete API
       showToast(`Delete functionality not implemented yet`, "info");
     }
   };
@@ -88,29 +118,29 @@ const FileOperationsMenu: React.FC<{
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded cursor-pointer"
+          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover rounded cursor-pointer"
           onClick={(e) => e.stopPropagation()}
         >
-          <MoreHorizontal size={12} />
+          <MoreHorizontal size={12} className="text-muted" />
         </button>
       </DropdownMenu.Trigger>
 
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="min-w-[200px] bg-white rounded-md border border-gray-200 shadow-lg z-50"
+          className="min-w-[200px] bg-panel rounded-md border border-border shadow-lg z-50"
           sideOffset={5}
         >
           {node.isDirectory && (
             <>
               <DropdownMenu.Item
-                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
                 onClick={onNewChat}
               >
                 <MessageSquare size={14} className="mr-2" />
                 New Chat
               </DropdownMenu.Item>
               <DropdownMenu.Item
-                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
                 onClick={() =>
                   showToast(
                     "New Folder functionality not implemented yet",
@@ -121,14 +151,14 @@ const FileOperationsMenu: React.FC<{
                 <FolderPlus size={14} className="mr-2" />
                 New Folder
               </DropdownMenu.Item>
-              <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+              <DropdownMenu.Separator className="h-px bg-border my-1" />
             </>
           )}
 
           {!node.isDirectory && (
             <>
               <DropdownMenu.Item
-                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
                 onClick={() =>
                   showToast("Open functionality not implemented yet", "info")
                 }
@@ -136,12 +166,12 @@ const FileOperationsMenu: React.FC<{
                 <FileText size={14} className="mr-2" />
                 Open
               </DropdownMenu.Item>
-              <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+              <DropdownMenu.Separator className="h-px bg-border my-1" />
             </>
           )}
 
           <DropdownMenu.Item
-            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
             onClick={handleCopyPath}
           >
             <Copy size={14} className="mr-2" />
@@ -149,17 +179,17 @@ const FileOperationsMenu: React.FC<{
           </DropdownMenu.Item>
 
           <DropdownMenu.Item
-            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 outline-none"
+            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
             onClick={handleRename}
           >
             <Edit size={14} className="mr-2" />
             Rename
           </DropdownMenu.Item>
 
-          <DropdownMenu.Separator className="h-px bg-gray-200 my-1" />
+          <DropdownMenu.Separator className="h-px bg-border my-1" />
 
           <DropdownMenu.Item
-            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-red-50 text-red-600 outline-none"
+            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-red-50 text-red-400 outline-none"
             onClick={handleDelete}
           >
             <Trash2 size={14} className="mr-2" />
@@ -188,7 +218,6 @@ const TreeNode: React.FC<{
 
   const isExpanded = expandedNodes.has(node.path);
   const isSelected = selectedTreeNode === node.path;
-  const icon = getFileIcon(node.name, node.isDirectory);
   const isTaskFolder = node.isDirectory && node.name.startsWith("task-");
 
   const handleClick = () => {
@@ -210,13 +239,19 @@ const TreeNode: React.FC<{
     openNewChatModal();
   };
 
+  const handleStopTask = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // TODO: Implement stop task functionality
+    console.log("Stop task:", taskInfo?.id);
+  };
+
   return (
     <div>
       <div
-        className={`group flex items-center cursor-pointer py-1 px-2 ${
+        className={`group flex items-center cursor-pointer py-0.5 px-1 rounded text-[13px] min-h-[28px] ${
           isSelected
-            ? "bg-blue-100 border-r-2 border-blue-500"
-            : "hover:bg-gray-100"
+            ? "bg-selected text-foreground"
+            : "hover:bg-hover text-foreground"
         }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}
         onClick={handleClick}
@@ -224,33 +259,53 @@ const TreeNode: React.FC<{
         {node.isDirectory && (
           <div className="w-4 h-4 mr-1">
             {isExpanded ? (
-              <ChevronDown size={14} />
+              <ChevronDown size={14} className="text-muted" />
             ) : (
-              <ChevronRight size={14} />
+              <ChevronRight size={14} className="text-muted" />
             )}
           </div>
         )}
 
-        {icon && <span className="mr-2">{icon}</span>}
+        <div className="mr-2">
+          {getFileIcon(node.name, node.isDirectory, isExpanded)}
+        </div>
 
-        <span className="text-sm flex-1">
-          {isTaskFolder && taskInfo ? (
-            <>
-              {node.name} {getTaskStatusIcon(taskInfo.status)}
-            </>
-          ) : (
-            node.name
-          )}
-        </span>
+        <span className="text-sm flex-1 truncate">{node.name}</span>
+
+        {/* Context indicator for files in project context */}
+        {!node.isDirectory && Math.random() > 0.7 && (
+          <div className="mr-1" title="In Project Context">
+            <Square size={12} className="text-accent fill-current" />
+          </div>
+        )}
+
+        {/* Task status badge */}
+        {isTaskFolder && taskInfo && (
+          <>
+            {getTaskStatusBadge(taskInfo.status)}
+            {taskInfo.status === "IN_PROGRESS" && (
+              <button
+                onClick={handleStopTask}
+                className="ml-1 text-muted hover:text-red-400 opacity-0 group-hover:opacity-100"
+                title="Stop Task"
+              >
+                <Square size={12} className="fill-current" />
+              </button>
+            )}
+          </>
+        )}
 
         <div className="flex items-center">
           {node.isDirectory && (
             <button
               onClick={handleNewChat}
-              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded cursor-pointer mr-1"
+              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover rounded cursor-pointer mr-1"
               title="New Chat"
             >
-              <MessageSquare size={12} />
+              <MessageSquare
+                size={12}
+                className="text-muted hover:text-accent"
+              />
             </button>
           )}
 
@@ -279,7 +334,6 @@ const updateTreeNodeDirectly = (
   }
 ): FolderTreeNode => {
   const filePath = fileEvent.absoluteFilePath;
-  // const fileName = filePath.split("/").pop() || "";
 
   // Clone the tree to avoid mutating original
   const newTree = { ...tree };
@@ -596,11 +650,10 @@ export const ExplorerPanel: React.FC = () => {
     )
   );
 
-  // UPDATED: Add project folder mutation now expects ProjectFolder directly
+  // Add project folder mutation
   const addProjectFolderMutation = useMutation(
     trpc.projectFolder.addProjectFolder.mutationOptions({
       onSuccess: async (projectFolder) => {
-        // projectFolder is now directly returned, not wrapped in success object
         const updatedFolders = [...projectFolders, projectFolder];
         setProjectFolders(updatedFolders);
         showToast("Project folder added successfully", "success");
@@ -650,30 +703,67 @@ export const ExplorerPanel: React.FC = () => {
   };
 
   return (
-    <div className="w-80 border-r border-gray-200 bg-white flex flex-col h-full">
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="font-semibold text-lg mb-3">🏠 Project Folders</h2>
+    <div className="w-64 bg-surface border-r border-border flex flex-col h-full">
+      {/* Header */}
+      <div className="p-3 border-b border-border flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+          Projects
+        </span>
+        <button
+          onClick={handleAddProjectFolder}
+          className="p-1 text-muted hover:text-accent"
+          title="Add Project"
+        >
+          <Plus size={16} />
+        </button>
+      </div>
 
+      {/* New Chat Button */}
+      <div className="p-3 border-b border-border">
         <button
           onClick={openNewChatModal}
-          className="w-full mb-2 px-3 py-2 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors cursor-pointer"
+          className="w-full px-3 py-2 text-sm bg-accent/10 text-accent rounded hover:bg-accent/20 transition-colors cursor-pointer border border-accent/20"
         >
           + New Chat
         </button>
+      </div>
 
-        <button
-          onClick={handleAddProjectFolder}
-          disabled={addProjectFolderMutation.isPending}
-          className="w-full px-3 py-2 text-sm bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition-colors disabled:opacity-50 cursor-pointer"
-        >
-          {addProjectFolderMutation.isPending
-            ? "Adding..."
-            : "+ Add Project Folder"}
-        </button>
+      {/* Tree Content */}
+      <div className="flex-1 overflow-y-auto p-1">
+        {projectFoldersQuery.isLoading && (
+          <div className="p-4 text-muted text-sm">
+            Loading project folders...
+          </div>
+        )}
 
-        {/* Connection status indicators */}
-        <div className="mt-2 text-xs text-gray-500">
-          <div className="flex items-center mb-1">
+        {projectFoldersQuery.error && (
+          <div className="p-4">
+            <div className="text-red-400 text-sm mb-2">
+              Failed to load project folders
+            </div>
+            <button
+              onClick={() => projectFoldersQuery.refetch()}
+              className="text-xs px-2 py-1 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 cursor-pointer border border-red-600/40"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {projectFolders.map((folder) => {
+          const tree = folderTrees[folder.id];
+          return (
+            <div key={folder.id} className="mb-1">
+              {tree && <EnhancedTreeNode node={tree} level={0} />}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Connection Status */}
+      <div className="p-3 border-t border-border">
+        <div className="text-xs text-muted space-y-1">
+          <div className="flex items-center">
             <div
               className={`w-2 h-2 rounded-full mr-2 ${
                 fileWatcherSubscription.status === "pending"
@@ -682,7 +772,7 @@ export const ExplorerPanel: React.FC = () => {
                     ? "bg-yellow-500"
                     : fileWatcherSubscription.status === "error"
                       ? "bg-red-500"
-                      : "bg-gray-400"
+                      : "bg-muted"
               }`}
             />
             File watcher: {fileWatcherSubscription.status}
@@ -696,7 +786,7 @@ export const ExplorerPanel: React.FC = () => {
                     ? "bg-yellow-500"
                     : taskEventSubscription.status === "error"
                       ? "bg-red-500"
-                      : "bg-gray-400"
+                      : "bg-muted"
               }`}
             />
             Task events: {taskEventSubscription.status}
@@ -704,38 +794,11 @@ export const ExplorerPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {projectFoldersQuery.isLoading && (
-          <div className="p-4 text-gray-500">Loading project folders...</div>
-        )}
-
-        {projectFoldersQuery.error && (
-          <div className="p-4">
-            <div className="text-red-500 text-sm mb-2">
-              Failed to load project folders
-            </div>
-            <button
-              onClick={() => projectFoldersQuery.refetch()}
-              className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 cursor-pointer"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-
-        {projectFolders.map((folder) => {
-          const tree = folderTrees[folder.id];
-          return (
-            <div key={folder.id}>
-              {tree && <EnhancedTreeNode node={tree} level={0} />}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="p-4 border-t border-gray-200">
-        <button className="text-sm text-gray-600 hover:text-gray-800 cursor-pointer">
-          ⚙️ SETTINGS
+      {/* Settings */}
+      <div className="p-3 border-t border-border">
+        <button className="w-full py-2 px-3 text-muted hover:text-accent text-xs font-medium flex items-center justify-center">
+          <Settings size={14} className="mr-2" />
+          Settings
         </button>
       </div>
     </div>

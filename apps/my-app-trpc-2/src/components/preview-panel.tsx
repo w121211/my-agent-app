@@ -4,15 +4,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
 import { useToast } from "./toast-provider";
-import { Edit, Download, Share, File } from "lucide-react";
+import { Edit, Download, Share, File, X, RefreshCw } from "lucide-react";
 
 export const PreviewPanel: React.FC = () => {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const { selectedPreviewFile } = useAppStore();
+  const { selectedPreviewFile, setSelectedPreviewFile } = useAppStore();
 
-  // UPDATED: File API returns FileContent directly
+  // File API returns FileContent directly
   const {
     data: fileContent,
     isLoading,
@@ -43,76 +43,129 @@ export const PreviewPanel: React.FC = () => {
     }
   };
 
+  const handleClose = () => {
+    setSelectedPreviewFile(null);
+  };
+
+  const handleDownload = () => {
+    showToast("Download functionality coming soon", "info");
+  };
+
+  const handleShare = () => {
+    showToast("Share functionality coming soon", "info");
+  };
+
+  const handleEdit = () => {
+    showToast("Edit functionality coming soon", "info");
+  };
+
   if (!selectedPreviewFile) {
-    return (
-      <div className="w-96 border-l border-gray-200 bg-gray-50 flex items-center justify-center">
-        <div className="text-center text-gray-500">
-          <File size={48} className="mx-auto mb-4" />
-          <p>Select a file to preview</p>
-        </div>
-      </div>
-    );
+    return null; // This shouldn't happen since overlay only shows when file is selected
   }
 
   if (isLoading) {
     return (
-      <div className="w-96 border-l border-gray-200 bg-white flex items-center justify-center">
-        <div className="text-gray-500">Loading file...</div>
+      <div className="flex flex-col h-full">
+        <div className="h-12 border-b border-border flex items-center justify-between px-4">
+          <div className="flex items-center">
+            <span className="font-medium text-foreground">Loading...</span>
+            <span className="ml-2 text-xs text-muted">Preview</span>
+          </div>
+          <button
+            onClick={handleClose}
+            className="text-muted hover:text-accent"
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-muted">Loading file...</div>
+        </div>
       </div>
     );
   }
 
   if (fileLoadError) {
     return (
-      <div className="w-96 border-l border-gray-200 bg-white flex items-center justify-center">
-        <div className="text-center text-red-500">
-          <File size={48} className="mx-auto mb-4" />
-          <p className="mb-2">Failed to load file</p>
-          <p className="text-sm text-gray-500 mb-3">
-            {selectedPreviewFile.split("/").pop()}
-          </p>
+      <div className="flex flex-col h-full">
+        <div className="h-12 border-b border-border flex items-center justify-between px-4">
+          <div className="flex items-center">
+            <span className="font-medium text-red-400">Error</span>
+            <span className="ml-2 text-xs text-muted">Preview</span>
+          </div>
           <button
-            onClick={handleRefresh}
-            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+            onClick={handleClose}
+            className="text-muted hover:text-accent"
+            title="Close"
           >
-            Try Again
+            <X size={16} />
           </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center text-red-400">
+            <File size={48} className="mx-auto mb-4" />
+            <p className="mb-2">Failed to load file</p>
+            <p className="text-sm text-muted mb-3">
+              {selectedPreviewFile.split("/").pop()}
+            </p>
+            <button
+              onClick={handleRefresh}
+              className="px-3 py-1 text-sm bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 border border-red-600/40"
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-96 border-l border-gray-200 bg-white flex flex-col">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-b border-gray-200 p-4">
-        <div className="text-sm text-gray-600 mb-1">
-          🏠 Home {">"} 📁{" "}
-          {selectedPreviewFile.split("/").slice(-3, -1).join(" > ")}
+      <div className="h-12 border-b border-border flex items-center justify-between px-4">
+        <div className="flex items-center">
+          <span className="font-medium text-foreground">
+            {selectedPreviewFile.split("/").pop()}
+          </span>
+          <span className="ml-2 text-xs text-muted">Preview</span>
         </div>
-        <div className="text-sm text-gray-600 mb-3">
-          {">"} 📄 {selectedPreviewFile.split("/").pop()}
-        </div>
-
-        <div className="flex space-x-2">
-          <button className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center space-x-1">
-            <Edit size={12} />
-            <span>Edit</span>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={handleEdit}
+            className="text-muted hover:text-accent"
+            title="Edit"
+          >
+            <Edit size={14} />
           </button>
-          <button className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center space-x-1">
-            <Download size={12} />
-            <span>Download</span>
+          <button
+            onClick={handleDownload}
+            className="text-muted hover:text-accent"
+            title="Download"
+          >
+            <Download size={14} />
           </button>
-          <button className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded flex items-center space-x-1">
-            <Share size={12} />
-            <span>Share</span>
+          <button
+            onClick={handleShare}
+            className="text-muted hover:text-accent"
+            title="Share"
+          >
+            <Share size={14} />
           </button>
           <button
             onClick={handleRefresh}
-            className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded"
-            title="Refresh file"
+            className="text-muted hover:text-accent"
+            title="Refresh"
           >
-            🔄
+            <RefreshCw size={14} />
+          </button>
+          <button
+            onClick={handleClose}
+            className="text-muted hover:text-accent"
+            title="Close"
+          >
+            <X size={16} />
           </button>
         </div>
       </div>
@@ -120,7 +173,7 @@ export const PreviewPanel: React.FC = () => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
         {fileContent?.isBase64 ? (
-          <div className="text-center text-gray-500">
+          <div className="text-center text-muted">
             <div className="mb-2">Binary file preview not supported</div>
             <div className="text-sm">
               File type: {fileContent.fileType}
@@ -129,15 +182,24 @@ export const PreviewPanel: React.FC = () => {
             </div>
           </div>
         ) : (
-          <pre className="text-sm font-mono whitespace-pre-wrap break-words">
-            {fileContent?.content}
-          </pre>
+          <div className="prose prose-invert max-w-none">
+            {fileContent?.fileType === "markdown" ? (
+              // For markdown files, we could add proper markdown rendering here
+              <pre className="text-sm font-mono whitespace-pre-wrap break-words text-foreground">
+                {fileContent?.content}
+              </pre>
+            ) : (
+              <pre className="text-sm font-mono whitespace-pre-wrap break-words text-foreground">
+                {fileContent?.content}
+              </pre>
+            )}
+          </div>
         )}
       </div>
 
       {/* File info footer */}
       {fileContent && (
-        <div className="border-t border-gray-200 p-2 text-xs text-gray-500 bg-gray-50">
+        <div className="border-t border-border p-2 text-xs text-muted bg-panel">
           Type: {fileContent.fileType} | Size:{" "}
           {fileContent.isBase64
             ? `${fileContent.content.length} bytes (base64)`
