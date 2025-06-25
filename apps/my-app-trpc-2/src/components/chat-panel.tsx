@@ -5,16 +5,16 @@ import {
   Send,
   Paperclip,
   ChevronDown,
-  MessageSquare,
-  Edit,
+  ChatDots,
+  Pencil,
   Copy,
-  MoreHorizontal,
-  Home,
+  ThreeDots,
+  HouseDoor,
   ChevronRight,
   Download,
   Lightbulb,
-  FileText,
-} from "lucide-react";
+  FileEarmark,
+} from "react-bootstrap-icons";
 import React, { useState, useEffect } from "react";
 import * as Select from "@radix-ui/react-select";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -50,24 +50,24 @@ const ChatModeSelect: React.FC<{
   onValueChange: (value: string) => void;
 }> = ({ value, onValueChange }) => (
   <Select.Root value={value} onValueChange={onValueChange}>
-    <Select.Trigger className="inline-flex items-center justify-center gap-1 rounded px-3 py-1 text-xs bg-panel border border-border hover:bg-hover focus:outline-none focus:border-accent min-w-[80px] text-muted">
+    <Select.Trigger className="bg-panel border-border hover:bg-hover focus:border-accent text-muted inline-flex min-w-[80px] items-center justify-center gap-1 rounded border px-3 py-1 text-xs focus:outline-none">
       <Select.Value />
       <Select.Icon>
-        <ChevronDown size={12} />
+        <ChevronDown className="text-xs" />
       </Select.Icon>
     </Select.Trigger>
     <Select.Portal>
-      <Select.Content className="overflow-hidden bg-panel rounded border border-border shadow-lg">
+      <Select.Content className="bg-panel border-border overflow-hidden rounded border shadow-lg">
         <Select.Viewport className="p-1">
           <Select.Item
             value="chat"
-            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
+            className="hover:bg-hover focus:bg-hover text-foreground relative flex cursor-pointer items-center rounded px-6 py-2 text-sm outline-none"
           >
             <Select.ItemText>Chat</Select.ItemText>
           </Select.Item>
           <Select.Item
             value="agent"
-            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
+            className="hover:bg-hover focus:bg-hover text-foreground relative flex cursor-pointer items-center rounded px-6 py-2 text-sm outline-none"
           >
             <Select.ItemText>Agent</Select.ItemText>
           </Select.Item>
@@ -82,24 +82,24 @@ const ModelSelect: React.FC<{
   onValueChange: (value: string) => void;
 }> = ({ value, onValueChange }) => (
   <Select.Root value={value} onValueChange={onValueChange}>
-    <Select.Trigger className="inline-flex items-center justify-center gap-1 rounded px-3 py-1 text-xs bg-panel border border-border hover:bg-hover focus:outline-none focus:border-accent min-w-[120px] text-muted">
+    <Select.Trigger className="bg-panel border-border hover:bg-hover focus:border-accent text-muted inline-flex min-w-[120px] items-center justify-center gap-1 rounded border px-3 py-1 text-xs focus:outline-none">
       <Select.Value />
       <Select.Icon>
-        <ChevronDown size={12} />
+        <ChevronDown className="text-xs" />
       </Select.Icon>
     </Select.Trigger>
     <Select.Portal>
-      <Select.Content className="overflow-hidden bg-panel rounded border border-border shadow-lg">
+      <Select.Content className="bg-panel border-border overflow-hidden rounded border shadow-lg">
         <Select.Viewport className="p-1">
           <Select.Item
             value="claude"
-            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
+            className="hover:bg-hover focus:bg-hover text-foreground relative flex cursor-pointer items-center rounded px-6 py-2 text-sm outline-none"
           >
             <Select.ItemText>Claude 3.7</Select.ItemText>
           </Select.Item>
           <Select.Item
             value="gemini"
-            className="relative flex items-center px-6 py-2 text-sm rounded cursor-pointer hover:bg-hover focus:bg-hover outline-none text-foreground"
+            className="hover:bg-hover focus:bg-hover text-foreground relative flex cursor-pointer items-center rounded px-6 py-2 text-sm outline-none"
           >
             <Select.ItemText>Gemini 2.5 Pro</Select.ItemText>
           </Select.Item>
@@ -145,38 +145,38 @@ const MessageActions: React.FC<{
 
   return (
     <div
-      className={`flex items-center gap-3 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUserMessage ? "mr-2" : "ml-7"}`}
+      className={`mt-1 flex items-center gap-3 opacity-0 transition-opacity group-hover:opacity-100 ${isUserMessage ? "mr-2" : "ml-7"}`}
     >
       <button
         onClick={handleEdit}
         className="text-muted hover:text-accent"
         title="Edit"
       >
-        <Edit size={14} />
+        <Pencil className="text-sm" />
       </button>
       <button
         onClick={handleCopy}
         className="text-muted hover:text-accent"
         title="Copy"
       >
-        <Copy size={14} />
+        <Copy className="text-sm" />
       </button>
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
           <button className="text-muted hover:text-accent" title="More">
-            <MoreHorizontal size={14} />
+            <ThreeDots className="text-sm" />
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
-            className="min-w-[180px] bg-panel rounded-md border border-border shadow-lg z-50"
+            className="bg-panel border-border z-50 min-w-[180px] rounded-md border shadow-lg"
             sideOffset={5}
           >
             {moreMenuItems.map((item) => (
               <DropdownMenu.Item
                 key={item.label}
-                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
+                className="hover:bg-hover text-foreground flex cursor-pointer items-center px-3 py-2 text-sm outline-none"
                 onClick={item.action}
               >
                 {item.label}
@@ -207,20 +207,20 @@ const ArtifactButton: React.FC<{
     <div className="mt-2">
       <button
         onClick={handlePreview}
-        className="flex items-center gap-2 border border-border rounded px-3 py-1 bg-panel hover:bg-hover text-foreground text-sm font-medium"
+        className="border-border bg-panel hover:bg-hover text-foreground flex items-center gap-2 rounded border px-3 py-1 text-sm font-medium"
       >
-        <FileText size={14} />
+        <FileEarmark className="text-sm" />
         {fileName}
-        {version && <span className="ml-1 text-xs text-muted">{version}</span>}
+        {version && <span className="text-muted ml-1 text-xs">{version}</span>}
         <button
           onClick={(e) => {
             e.stopPropagation();
             handleDownload();
           }}
-          className="ml-2 text-muted hover:text-accent"
+          className="text-muted hover:text-accent ml-2"
           title="Download"
         >
-          <Download size={14} />
+          <Download className="text-sm" />
         </button>
       </button>
     </div>
@@ -242,15 +242,15 @@ const MessageBubble: React.FC<{
 
   if (isUserMessage) {
     return (
-      <div className="flex flex-col items-end group">
-        <div className="bg-accent/20 border border-accent/30 rounded-lg px-4 py-2 max-w-xl text-foreground ml-auto">
+      <div className="group flex flex-col items-end">
+        <div className="bg-accent/20 border-accent/30 text-foreground ml-auto max-w-xl rounded-lg border px-4 py-2">
           {/* Render file references as clickable links */}
           {fileReferences.length > 0 && (
             <div className="mb-2">
               {fileReferences.map((ref, index) => (
                 <button
                   key={index}
-                  className="text-accent ml-1 hover:text-accent/80 text-sm"
+                  className="text-accent hover:text-accent/80 ml-1 text-sm"
                   onClick={() => console.log("Open file:", ref)}
                 >
                   {ref}
@@ -266,14 +266,14 @@ const MessageBubble: React.FC<{
   }
 
   return (
-    <div className="flex flex-col items-start group">
-      <div className="flex items-center mb-0.5 gap-2">
-        <span className="w-5 h-5 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold">
+    <div className="group flex flex-col items-start">
+      <div className="mb-0.5 flex items-center gap-2">
+        <span className="bg-accent flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white">
           C
         </span>
-        <span className="text-xs text-muted font-medium">Claude Sonnet 4</span>
+        <span className="text-muted text-xs font-medium">Claude Sonnet 4</span>
       </div>
-      <div className="pl-7 text-foreground leading-normal">
+      <div className="text-foreground pl-7 leading-normal">
         {message.content}
 
         {/* Placeholder artifacts */}
@@ -302,7 +302,7 @@ export const ChatPanel: React.FC = () => {
     {
       enabled: !!selectedChatFile,
       staleTime: 1000 * 60, // 1 minute
-    }
+    },
   );
 
   // Load chat when selectedChatFile changes
@@ -323,7 +323,7 @@ export const ChatPanel: React.FC = () => {
             console.log(
               "Chat event received:",
               event.data.updateType,
-              event.data
+              event.data,
             );
             setChat(event.data.chat);
 
@@ -350,8 +350,8 @@ export const ChatPanel: React.FC = () => {
         onConnectionStateChange: (state) => {
           console.log("Chat subscription connection state:", state);
         },
-      }
-    )
+      },
+    ),
   );
 
   // Handle data changes
@@ -391,7 +391,7 @@ export const ChatPanel: React.FC = () => {
       console.error("Failed to send message:", error);
       showToast(
         `Failed to send message: ${error.message || "Unknown error"}`,
-        "error"
+        "error",
       );
 
       setChat((prev) =>
@@ -400,7 +400,7 @@ export const ChatPanel: React.FC = () => {
               ...prev,
               messages: prev.messages.filter((m) => !m.id.startsWith("temp-")),
             }
-          : null
+          : null,
       );
     },
   });
@@ -423,7 +423,7 @@ export const ChatPanel: React.FC = () => {
             ...prev,
             messages: [...prev.messages, tempMessage],
           }
-        : null
+        : null,
     );
 
     try {
@@ -446,7 +446,7 @@ export const ChatPanel: React.FC = () => {
   const handleWhatsNext = () => {
     showToast(
       "What's Next: Refactor your utils.ts for better modularity.",
-      "info"
+      "info",
     );
   };
 
@@ -465,9 +465,9 @@ export const ChatPanel: React.FC = () => {
 
   if (!selectedChatFile) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-background">
-        <div className="text-center text-muted">
-          <MessageSquare size={48} className="mx-auto mb-4" />
+      <div className="bg-background flex flex-1 items-center justify-center">
+        <div className="text-muted text-center">
+          <ChatDots className="mx-auto mb-4 text-5xl" />
           <p>Select a chat file to start</p>
         </div>
       </div>
@@ -476,7 +476,7 @@ export const ChatPanel: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex flex-1 items-center justify-center">
         <div className="text-muted">Loading chat...</div>
       </div>
     );
@@ -484,9 +484,9 @@ export const ChatPanel: React.FC = () => {
 
   if (chatLoadError) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-background">
+      <div className="bg-background flex flex-1 items-center justify-center">
         <div className="text-center text-red-400">
-          <MessageSquare size={48} className="mx-auto mb-4" />
+          <ChatDots className="mx-auto mb-4 text-5xl" />
           <p className="mb-2">Failed to load chat</p>
           <button
             onClick={() =>
@@ -494,7 +494,7 @@ export const ChatPanel: React.FC = () => {
                 queryKey: openChatFileQueryOptions.queryKey,
               })
             }
-            className="px-3 py-1 text-sm bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 border border-red-600/40"
+            className="rounded border border-red-600/40 bg-red-600/20 px-3 py-1 text-sm text-red-400 hover:bg-red-600/30"
           >
             Try Again
           </button>
@@ -504,25 +504,25 @@ export const ChatPanel: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-background min-w-0">
+    <div className="bg-background flex min-w-0 flex-1 flex-col">
       {/* Breadcrumb Header */}
-      <header className="h-12 bg-surface border-b border-border flex items-center px-4 gap-2">
-        <Home size={14} className="text-muted" />
+      <header className="bg-surface border-border flex h-12 items-center gap-2 border-b px-4">
+        <HouseDoor className="text-muted text-sm" />
         <span className="text-muted text-xs">
           {selectedChatFile.split("/").slice(-3, -1).join("")}
         </span>
-        <ChevronRight size={12} className="text-muted" />
+        <ChevronRight className="text-muted text-xs" />
         <span className="text-muted text-xs">
           {selectedChatFile.split("/").pop()}
         </span>
         <div className="ml-auto flex items-center space-x-2">
           <button
             onClick={invalidateChatQueries}
-            className="text-xs px-2 py-1 bg-panel rounded hover:bg-hover text-muted"
+            className="bg-panel hover:bg-hover text-muted rounded px-2 py-1 text-xs"
           >
             🔄 Refresh
           </button>
-          <div className="text-xs text-muted">
+          <div className="text-muted text-xs">
             {chatEventsSubscription.status === "pending" && (
               <span className="text-green-400">🟢 Live</span>
             )}
@@ -540,7 +540,7 @@ export const ChatPanel: React.FC = () => {
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5 bg-background">
+      <div className="bg-background flex-1 space-y-5 overflow-y-auto px-8 py-6">
         {chat?.messages.map((message) => (
           <MessageBubble
             key={message.id}
@@ -551,22 +551,22 @@ export const ChatPanel: React.FC = () => {
       </div>
 
       {/* Input Area */}
-      <footer className="border-t border-border px-6 py-4 bg-panel">
+      <footer className="border-border bg-panel border-t px-6 py-4">
         <div className="relative">
           <textarea
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Type your message..."
-            className="w-full bg-input-background border border-input-border rounded-md px-3 py-3 resize-none focus:outline-none focus:border-accent placeholder-muted text-foreground text-[15px]"
+            className="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full resize-none rounded-md border px-3 py-3 text-[15px] focus:outline-none"
             rows={3}
           />
         </div>
 
         {/* Controls below input */}
-        <div className="flex flex-wrap items-center gap-3 mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-3">
           <button className="text-muted hover:text-accent" title="Attach">
-            <Paperclip size={16} />
+            <Paperclip className="text-base" />
           </button>
 
           <ChatModeSelect value={chatMode} onValueChange={setChatMode} />
@@ -574,17 +574,17 @@ export const ChatPanel: React.FC = () => {
 
           <button
             onClick={handleWhatsNext}
-            className="text-muted hover:text-accent text-xs flex items-center"
+            className="text-muted hover:text-accent flex items-center text-xs"
           >
-            <Lightbulb size={14} className="mr-1" />
+            <Lightbulb className="mr-1 text-sm" />
             What&apos;s next
           </button>
 
           <button
             onClick={handleSummarize}
-            className="text-muted hover:text-accent text-xs flex items-center"
+            className="text-muted hover:text-accent flex items-center text-xs"
           >
-            <FileText size={14} className="mr-1" />
+            <FileEarmark className="mr-1 text-sm" />
             Summarize
           </button>
 
@@ -592,10 +592,10 @@ export const ChatPanel: React.FC = () => {
           <button
             onClick={handleSendMessage}
             disabled={!messageInput.trim() || submitMessageMutation.isPending}
-            className="hover:bg-accent/80 text-muted px-3 py-1.5 rounded ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            className="hover:bg-accent/80 text-muted ml-auto rounded px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
             title="Send"
           >
-            <Send size={16} />
+            <Send className="text-base" />
           </button>
         </div>
       </footer>

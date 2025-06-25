@@ -1,7 +1,7 @@
 // apps/my-app-trpc-2/src/components/chat-control-panel.tsx
 import React, { useState } from "react";
 import { useToast } from "./toast-provider";
-import { Edit, Check, Download, FileText } from "lucide-react";
+import { Pencil, CheckLg, Download, FileEarmark } from "react-bootstrap-icons";
 
 // Mock project context data
 const MOCK_PROJECT_CONTEXT = `#<demo-project>/demo.md #/path/to/outside/file.md
@@ -64,7 +64,7 @@ export const ChatControlPanel: React.FC = () => {
           <button
             key={index}
             onClick={() => handlePreviewFile(filePath)}
-            className="text-accent hover:text-accent/80 underline mr-2"
+            className="text-accent hover:text-accent/80 mr-2 underline"
           >
             {part}
           </button>
@@ -75,41 +75,41 @@ export const ChatControlPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col">
       {/* Panel Header */}
-      <div className="h-12 border-b border-border flex items-center px-4">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+      <div className="border-border flex h-12 items-center border-b px-4">
+        <span className="text-muted text-xs font-semibold uppercase tracking-wide">
           Chat Control
         </span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
         {/* Project Context Section */}
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold tracking-wide text-muted">
+        <div className="border-border border-b p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-muted text-xs font-semibold tracking-wide">
               Project Context
             </h3>
             {!isEditingContext ? (
               <button
                 onClick={handleEditContext}
-                className="text-xs text-muted hover:text-accent"
+                className="text-muted hover:text-accent text-xs"
                 title="Edit"
               >
-                <Edit size={14} />
+                <Pencil className="text-sm" />
               </button>
             ) : (
               <div className="flex items-center space-x-2">
                 <button
                   onClick={handleSaveContext}
-                  className="text-xs text-muted hover:text-accent"
+                  className="text-muted hover:text-accent text-xs"
                   title="Save"
                 >
-                  <Check size={14} />
+                  <CheckLg className="text-sm" />
                 </button>
                 <button
                   onClick={handleCancelEdit}
-                  className="text-xs text-muted hover:text-red-400"
+                  className="text-muted text-xs hover:text-red-400"
                   title="Cancel"
                 >
                   ✕
@@ -122,7 +122,7 @@ export const ChatControlPanel: React.FC = () => {
           {!isEditingContext && (
             <div
               onClick={handleEditContext}
-              className="bg-input-background border border-input-border rounded p-3 text-sm text-muted min-h-[100px] cursor-text hover:border-accent/50 transition-colors"
+              className="bg-input-background border-input-border text-muted hover:border-accent/50 min-h-[100px] cursor-text rounded border p-3 text-sm transition-colors"
             >
               {renderContextContent(projectContext)}
             </div>
@@ -134,7 +134,7 @@ export const ChatControlPanel: React.FC = () => {
               value={contextInput}
               onChange={(e) => setContextInput(e.target.value)}
               rows={4}
-              className="text-foreground text-sm w-full bg-input-background border border-input-border rounded-md px-3 py-2 resize-none focus:outline-none focus:border-accent placeholder-muted"
+              className="text-foreground bg-input-background border-input-border focus:border-accent placeholder-muted w-full resize-none rounded-md border px-3 py-2 text-sm focus:outline-none"
               placeholder="#<demo-project>/demo.md #/path/to/outside/file.md&#10;Text is also allowed"
               autoFocus
             />
@@ -142,22 +142,22 @@ export const ChatControlPanel: React.FC = () => {
         </div>
 
         {/* Artifacts Section */}
-        <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold tracking-wide text-muted">
+        <div className="border-border border-b p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-muted text-xs font-semibold tracking-wide">
               Artifacts
             </h3>
             <button
               onClick={() =>
                 showToast(
                   "Download all artifacts functionality coming soon",
-                  "info"
+                  "info",
                 )
               }
-              className="text-xs text-muted hover:text-accent"
+              className="text-muted hover:text-accent text-xs"
               title="Download All"
             >
-              <Download size={14} />
+              <Download className="text-sm" />
             </button>
           </div>
 
@@ -165,15 +165,15 @@ export const ChatControlPanel: React.FC = () => {
             {MOCK_ARTIFACTS.map((artifact) => (
               <div
                 key={artifact.id}
-                className="flex items-center justify-between p-2 bg-panel rounded cursor-pointer hover:bg-hover group"
+                className="bg-panel hover:bg-hover group flex cursor-pointer items-center justify-between rounded p-2"
                 onClick={() => handlePreviewFile(artifact.fileName)}
               >
                 <div className="flex items-center">
-                  <FileText size={14} className="mr-2 text-foreground" />
-                  <span className="text-sm text-foreground">
+                  <FileEarmark className="text-foreground mr-2 text-sm" />
+                  <span className="text-foreground text-sm">
                     {artifact.fileName}
                   </span>
-                  <span className="ml-1 text-xs text-muted">
+                  <span className="text-muted ml-1 text-xs">
                     {artifact.version}
                   </span>
                 </div>
@@ -182,17 +182,17 @@ export const ChatControlPanel: React.FC = () => {
                     e.stopPropagation();
                     handleDownloadArtifact(artifact.fileName);
                   }}
-                  className="text-xs text-muted hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="text-muted hover:text-accent text-xs opacity-0 transition-opacity group-hover:opacity-100"
                   title="Download"
                 >
-                  <Download size={14} />
+                  <Download className="text-sm" />
                 </button>
               </div>
             ))}
           </div>
 
           {MOCK_ARTIFACTS.length === 0 && (
-            <div className="text-xs text-muted text-center py-4">
+            <div className="text-muted py-4 text-center text-xs">
               No artifacts yet
             </div>
           )}
@@ -200,7 +200,7 @@ export const ChatControlPanel: React.FC = () => {
 
         {/* Additional sections can be added here */}
         <div className="p-4">
-          <div className="text-xs text-muted">
+          <div className="text-muted text-xs">
             Additional chat controls and settings can be added here as needed.
           </div>
         </div>

@@ -9,19 +9,20 @@ import { useToast } from "./toast-provider";
 import {
   ChevronDown,
   ChevronRight,
-  MessageSquare,
-  MoreHorizontal,
+  ChatDots,
+  ThreeDotsVertical,
   Copy,
-  Trash2,
-  Edit,
-  FileText,
+  Trash,
+  Pencil,
+  FileEarmark,
   FolderPlus,
   Folder,
-  FolderOpen,
-  Settings,
-  Plus,
-  Square,
-} from "lucide-react";
+  Folder2Open,
+  Gear,
+  PlusLg,
+  FileEarmarkCheck,
+  StopFill,
+} from "react-bootstrap-icons";
 
 // Type definitions
 interface FolderTreeNode {
@@ -41,21 +42,21 @@ interface TaskInfo {
 const getFileIcon = (
   fileName: string,
   isDirectory: boolean,
-  isExpanded = false
+  isExpanded = false,
 ) => {
   if (isDirectory) {
     return isExpanded ? (
-      <FolderOpen size={14} className="text-accent" />
+      <Folder2Open className="text-accent text-sm" />
     ) : (
-      <Folder size={14} className="text-accent" />
+      <Folder className="text-accent text-sm" />
     );
   }
 
   if (fileName.endsWith(".chat.json")) {
-    return <MessageSquare size={14} className="text-accent" />;
+    return <ChatDots className="text-accent text-sm" />;
   }
 
-  return <FileText size={14} className="text-muted" />;
+  return <FileEarmark className="text-muted text-sm" />;
 };
 
 const getTaskStatusBadge = (status: string) => {
@@ -83,7 +84,7 @@ const getTaskStatusBadge = (status: string) => {
 
   return (
     <span
-      className={`ml-2 px-2 py-0.5 rounded text-xs font-mono border ${config.className}`}
+      className={`ml-2 rounded border px-2 py-0.5 font-mono text-xs ${config.className}`}
     >
       {config.label}
     </span>
@@ -118,81 +119,81 @@ const FileOperationsMenu: React.FC<{
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover rounded cursor-pointer"
+          className="hover:bg-hover cursor-pointer rounded p-1 opacity-0 group-hover:opacity-100"
           onClick={(e) => e.stopPropagation()}
         >
-          <MoreHorizontal size={12} className="text-muted" />
+          <ThreeDotsVertical className="text-muted text-xs" />
         </button>
       </DropdownMenu.Trigger>
 
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="min-w-[200px] bg-panel rounded-md border border-border shadow-lg z-50"
+          className="bg-panel border-border z-50 min-w-[200px] rounded-md border shadow-lg"
           sideOffset={5}
         >
           {node.isDirectory && (
             <>
               <DropdownMenu.Item
-                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
+                className="hover:bg-hover text-foreground flex cursor-pointer items-center px-3 py-2 text-sm outline-none"
                 onClick={onNewChat}
               >
-                <MessageSquare size={14} className="mr-2" />
+                <ChatDots className="mr-2 text-sm" />
                 New Chat
               </DropdownMenu.Item>
               <DropdownMenu.Item
-                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
+                className="hover:bg-hover text-foreground flex cursor-pointer items-center px-3 py-2 text-sm outline-none"
                 onClick={() =>
                   showToast(
                     "New Folder functionality not implemented yet",
-                    "info"
+                    "info",
                   )
                 }
               >
-                <FolderPlus size={14} className="mr-2" />
+                <FolderPlus className="mr-2 text-sm" />
                 New Folder
               </DropdownMenu.Item>
-              <DropdownMenu.Separator className="h-px bg-border my-1" />
+              <DropdownMenu.Separator className="bg-border my-1 h-px" />
             </>
           )}
 
           {!node.isDirectory && (
             <>
               <DropdownMenu.Item
-                className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
+                className="hover:bg-hover text-foreground flex cursor-pointer items-center px-3 py-2 text-sm outline-none"
                 onClick={() =>
                   showToast("Open functionality not implemented yet", "info")
                 }
               >
-                <FileText size={14} className="mr-2" />
+                <FileEarmark className="mr-2 text-sm" />
                 Open
               </DropdownMenu.Item>
-              <DropdownMenu.Separator className="h-px bg-border my-1" />
+              <DropdownMenu.Separator className="bg-border my-1 h-px" />
             </>
           )}
 
           <DropdownMenu.Item
-            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
+            className="hover:bg-hover text-foreground flex cursor-pointer items-center px-3 py-2 text-sm outline-none"
             onClick={handleCopyPath}
           >
-            <Copy size={14} className="mr-2" />
+            <Copy className="mr-2 text-sm" />
             Copy Path
           </DropdownMenu.Item>
 
           <DropdownMenu.Item
-            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-hover outline-none text-foreground"
+            className="hover:bg-hover text-foreground flex cursor-pointer items-center px-3 py-2 text-sm outline-none"
             onClick={handleRename}
           >
-            <Edit size={14} className="mr-2" />
+            <Pencil className="mr-2 text-sm" />
             Rename
           </DropdownMenu.Item>
 
-          <DropdownMenu.Separator className="h-px bg-border my-1" />
+          <DropdownMenu.Separator className="bg-border my-1 h-px" />
 
           <DropdownMenu.Item
-            className="flex items-center px-3 py-2 text-sm cursor-pointer hover:bg-red-50 text-red-400 outline-none"
+            className="flex cursor-pointer items-center px-3 py-2 text-sm text-red-400 outline-none hover:bg-red-50"
             onClick={handleDelete}
           >
-            <Trash2 size={14} className="mr-2" />
+            <Trash className="mr-2 text-sm" />
             Delete
           </DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -248,7 +249,7 @@ const TreeNode: React.FC<{
   return (
     <div>
       <div
-        className={`group flex items-center cursor-pointer py-0.5 px-1 rounded text-[13px] min-h-[28px] ${
+        className={`group flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px] ${
           isSelected
             ? "bg-selected text-foreground"
             : "hover:bg-hover text-foreground"
@@ -257,11 +258,11 @@ const TreeNode: React.FC<{
         onClick={handleClick}
       >
         {node.isDirectory && (
-          <div className="w-4 h-4 mr-1">
+          <div className="mr-1 h-4 w-4">
             {isExpanded ? (
-              <ChevronDown size={14} className="text-muted" />
+              <ChevronDown className="text-muted text-sm" />
             ) : (
-              <ChevronRight size={14} className="text-muted" />
+              <ChevronRight className="text-muted text-sm" />
             )}
           </div>
         )}
@@ -270,12 +271,12 @@ const TreeNode: React.FC<{
           {getFileIcon(node.name, node.isDirectory, isExpanded)}
         </div>
 
-        <span className="text-sm flex-1 truncate">{node.name}</span>
+        <span className="flex-1 truncate text-sm">{node.name}</span>
 
         {/* Context indicator for files in project context */}
         {!node.isDirectory && Math.random() > 0.7 && (
           <div className="mr-1" title="In Project Context">
-            <Square size={12} className="text-accent fill-current" />
+            <FileEarmarkCheck className="text-accent text-xs" />
           </div>
         )}
 
@@ -286,10 +287,10 @@ const TreeNode: React.FC<{
             {taskInfo.status === "IN_PROGRESS" && (
               <button
                 onClick={handleStopTask}
-                className="ml-1 text-muted hover:text-red-400 opacity-0 group-hover:opacity-100"
+                className="text-muted ml-1 opacity-0 hover:text-red-400 group-hover:opacity-100"
                 title="Stop Task"
               >
-                <Square size={12} className="fill-current" />
+                <StopFill className="text-xs" />
               </button>
             )}
           </>
@@ -299,13 +300,10 @@ const TreeNode: React.FC<{
           {node.isDirectory && (
             <button
               onClick={handleNewChat}
-              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-hover rounded cursor-pointer mr-1"
+              className="hover:bg-hover mr-1 cursor-pointer rounded p-1 opacity-0 group-hover:opacity-100"
               title="New Chat"
             >
-              <MessageSquare
-                size={12}
-                className="text-muted hover:text-accent"
-              />
+              <ChatDots className="text-muted hover:text-accent text-xs" />
             </button>
           )}
 
@@ -331,7 +329,7 @@ const updateTreeNodeDirectly = (
     eventType: string;
     absoluteFilePath: string;
     isDirectory: boolean;
-  }
+  },
 ): FolderTreeNode => {
   const filePath = fileEvent.absoluteFilePath;
 
@@ -341,7 +339,7 @@ const updateTreeNodeDirectly = (
   // Helper function to find parent directory and update
   const updateNode = (
     node: FolderTreeNode,
-    pathSegments: string[]
+    pathSegments: string[],
   ): FolderTreeNode => {
     if (pathSegments.length === 0) return node;
 
@@ -352,7 +350,7 @@ const updateTreeNodeDirectly = (
       if (!node.children) node.children = [];
 
       const existingIndex = node.children.findIndex(
-        (child) => child.name === currentSegment
+        (child) => child.name === currentSegment,
       );
 
       if (fileEvent.eventType === "add" || fileEvent.eventType === "addDir") {
@@ -388,14 +386,14 @@ const updateTreeNodeDirectly = (
     // Navigate deeper into the tree
     if (node.children) {
       const targetChildIndex = node.children.findIndex(
-        (child) => child.name === currentSegment && child.isDirectory
+        (child) => child.name === currentSegment && child.isDirectory,
       );
 
       if (targetChildIndex !== -1) {
         const updatedChildren = [...node.children];
         updatedChildren[targetChildIndex] = updateNode(
           updatedChildren[targetChildIndex],
-          remainingSegments
+          remainingSegments,
         );
         return { ...node, children: updatedChildren };
       }
@@ -429,12 +427,12 @@ export const ExplorerPanel: React.FC = () => {
 
   // Track task information by directory path
   const [tasksByPath, setTasksByPath] = useState<Map<string, TaskInfo>>(
-    new Map()
+    new Map(),
   );
 
   // Query for project folders
   const projectFoldersQuery = useQuery(
-    trpc.projectFolder.getAllProjectFolders.queryOptions()
+    trpc.projectFolder.getAllProjectFolders.queryOptions(),
   );
 
   // Query for all tasks to get initial task status
@@ -470,7 +468,7 @@ export const ExplorerPanel: React.FC = () => {
     if (projectFoldersQuery.error) {
       showToast(
         `Failed to load project folders: ${projectFoldersQuery.error.message}`,
-        "error"
+        "error",
       );
     }
   }, [projectFoldersQuery.error, showToast]);
@@ -490,7 +488,7 @@ export const ExplorerPanel: React.FC = () => {
           } catch (error) {
             console.error(
               `Failed to load folder tree for ${folder.path}:`,
-              error
+              error,
             );
             showToast(`Failed to load folder tree for ${folder.name}`, "error");
           }
@@ -519,12 +517,12 @@ export const ExplorerPanel: React.FC = () => {
         onData: (event) => {
           const fileEvent = event.data;
           console.log(
-            `File event: ${fileEvent.eventType} - ${fileEvent.absoluteFilePath}`
+            `File event: ${fileEvent.eventType} - ${fileEvent.absoluteFilePath}`,
           );
 
           // Find which project folder this file belongs to
           const affectedProjectFolder = projectFolders.find((folder) =>
-            fileEvent.absoluteFilePath.startsWith(folder.path)
+            fileEvent.absoluteFilePath.startsWith(folder.path),
           );
 
           if (affectedProjectFolder) {
@@ -536,7 +534,7 @@ export const ExplorerPanel: React.FC = () => {
               fileEvent.eventType === "unlinkDir"
             ) {
               console.log(
-                `Directly updating folder tree for project: ${affectedProjectFolder.name}`
+                `Directly updating folder tree for project: ${affectedProjectFolder.name}`,
               );
 
               const currentTree = folderTrees[affectedProjectFolder.id];
@@ -544,13 +542,13 @@ export const ExplorerPanel: React.FC = () => {
                 try {
                   const updatedTree = updateTreeNodeDirectly(
                     currentTree,
-                    fileEvent
+                    fileEvent,
                   );
                   updateFolderTree(affectedProjectFolder.id, updatedTree);
                 } catch (error) {
                   console.error(
                     `Failed to directly update folder tree for ${affectedProjectFolder.path}:`,
-                    error
+                    error,
                   );
 
                   // Fallback to refetching if direct update fails
@@ -567,11 +565,11 @@ export const ExplorerPanel: React.FC = () => {
                     .catch((refetchError) => {
                       console.error(
                         `Fallback refetch also failed for ${affectedProjectFolder.path}:`,
-                        refetchError
+                        refetchError,
                       );
                       showToast(
                         `Failed to update folder tree for ${affectedProjectFolder.name}`,
-                        "error"
+                        "error",
                       );
                     });
                 }
@@ -583,14 +581,14 @@ export const ExplorerPanel: React.FC = () => {
           console.error("File watcher subscription error:", error);
           showToast(
             `File watcher error: ${error.message || "Unknown error"}`,
-            "error"
+            "error",
           );
         },
         onConnectionStateChange: (state) => {
           console.log(`File watcher connection state: ${state}`);
         },
-      }
-    )
+      },
+    ),
   );
 
   // Subscribe to task events to update task status in real-time
@@ -605,7 +603,7 @@ export const ExplorerPanel: React.FC = () => {
         onData: (event) => {
           const taskEvent = event.data;
           console.log(
-            `Task event: ${taskEvent.updateType} - ${taskEvent.taskId}`
+            `Task event: ${taskEvent.updateType} - ${taskEvent.taskId}`,
           );
 
           // Update the task in our local state
@@ -626,7 +624,7 @@ export const ExplorerPanel: React.FC = () => {
             if (taskEvent.updateType === "STATUS_CHANGED") {
               showToast(
                 `Task "${updatedTask.title}" status changed to ${updatedTask.status}`,
-                "info"
+                "info",
               );
             }
           }
@@ -640,14 +638,14 @@ export const ExplorerPanel: React.FC = () => {
           console.error("Task event subscription error:", error);
           showToast(
             `Task event error: ${error.message || "Unknown error"}`,
-            "error"
+            "error",
           );
         },
         onConnectionStateChange: (state) => {
           console.log(`Task event connection state: ${state}`);
         },
-      }
-    )
+      },
+    ),
   );
 
   // Add project folder mutation
@@ -669,18 +667,18 @@ export const ExplorerPanel: React.FC = () => {
         } catch (error) {
           console.error(
             `Failed to load folder tree for new folder ${projectFolder.path}:`,
-            error
+            error,
           );
           showToast(
             `Folder added but failed to load tree for ${projectFolder.name}`,
-            "error"
+            "error",
           );
         }
       },
       onError: (error) => {
         showToast(`Failed to add project folder: ${error.message}`, "error");
       },
-    })
+    }),
   );
 
   const handleAddProjectFolder = async () => {
@@ -703,47 +701,37 @@ export const ExplorerPanel: React.FC = () => {
   };
 
   return (
-    <div className="w-64 bg-surface border-r border-border flex flex-col h-full">
+    <div className="bg-surface border-border flex h-full w-64 flex-col border-r">
       {/* Header */}
-      <div className="p-3 border-b border-border flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+      <div className="border-border flex items-center justify-between border-b p-3">
+        <span className="text-muted text-xs font-semibold uppercase tracking-wide">
           Projects
         </span>
         <button
           onClick={handleAddProjectFolder}
-          className="p-1 text-muted hover:text-accent"
+          className="text-muted hover:text-accent p-1"
           title="Add Project"
         >
-          <Plus size={16} />
+          <PlusLg className="text-base" />
         </button>
       </div>
-
-      {/* New Chat Button */}
-      {/* <div className="p-3 border-b border-border">
-        <button
-          onClick={openNewChatModal}
-          className="w-full px-3 py-2 text-sm bg-accent/10 text-accent rounded hover:bg-accent/20 transition-colors cursor-pointer border border-accent/20"
-        >
-          + New Chat
-        </button>
-      </div> */}
 
       {/* Tree Content */}
       <div className="flex-1 overflow-y-auto p-1">
         {projectFoldersQuery.isLoading && (
-          <div className="p-4 text-muted text-sm">
+          <div className="text-muted p-4 text-sm">
             Loading project folders...
           </div>
         )}
 
         {projectFoldersQuery.error && (
           <div className="p-4">
-            <div className="text-red-400 text-sm mb-2">
+            <div className="mb-2 text-sm text-red-400">
               Failed to load project folders
             </div>
             <button
               onClick={() => projectFoldersQuery.refetch()}
-              className="text-xs px-2 py-1 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 cursor-pointer border border-red-600/40"
+              className="cursor-pointer rounded border border-red-600/40 bg-red-600/20 px-2 py-1 text-xs text-red-400 hover:bg-red-600/30"
             >
               Try Again
             </button>
@@ -761,11 +749,11 @@ export const ExplorerPanel: React.FC = () => {
       </div>
 
       {/* Connection Status */}
-      <div className="p-3 border-t border-border">
-        <div className="text-xs text-muted space-y-1">
+      <div className="border-border border-t p-3">
+        <div className="text-muted space-y-1 text-xs">
           <div className="flex items-center">
             <div
-              className={`w-2 h-2 rounded-full mr-2 ${
+              className={`mr-2 h-2 w-2 rounded-full ${
                 fileWatcherSubscription.status === "pending"
                   ? "bg-green-500"
                   : fileWatcherSubscription.status === "connecting"
@@ -779,7 +767,7 @@ export const ExplorerPanel: React.FC = () => {
           </div>
           <div className="flex items-center">
             <div
-              className={`w-2 h-2 rounded-full mr-2 ${
+              className={`mr-2 h-2 w-2 rounded-full ${
                 taskEventSubscription.status === "pending"
                   ? "bg-green-500"
                   : taskEventSubscription.status === "connecting"
@@ -795,9 +783,9 @@ export const ExplorerPanel: React.FC = () => {
       </div>
 
       {/* Settings */}
-      <div className="p-3 border-t border-border">
-        <button className="w-full py-2 px-3 text-muted hover:text-accent text-xs font-medium flex items-center justify-center">
-          <Settings size={14} className="mr-2" />
+      <div className="border-border border-t p-3">
+        <button className="text-muted hover:text-accent flex w-full items-center justify-center px-3 py-2 text-xs font-medium">
+          <Gear className="mr-2 text-sm" />
           Settings
         </button>
       </div>

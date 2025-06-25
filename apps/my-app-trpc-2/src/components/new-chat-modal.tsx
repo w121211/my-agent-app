@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation } from "@tanstack/react-query";
-import { X, MessageSquare } from "lucide-react";
+import { XLg, ChatDots } from "react-bootstrap-icons";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
 import { useToast } from "./toast-provider";
@@ -44,7 +44,7 @@ export const NewChatModal: React.FC = () => {
       console.error("Failed to create chat:", error);
       showToast(
         `Failed to create chat: ${error.message || "Unknown error"}`,
-        "error"
+        "error",
       );
     },
   });
@@ -82,24 +82,24 @@ export const NewChatModal: React.FC = () => {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50 animate-in fade-in-0 z-50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 animate-in fade-in-0 zoom-in-95 duration-200">
-          <div className="bg-panel rounded-lg shadow-xl mx-4 border border-border">
+        <Dialog.Overlay className="animate-in fade-in-0 fixed inset-0 z-50 bg-black/50" />
+        <Dialog.Content className="animate-in fade-in-0 zoom-in-95 fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 duration-200">
+          <div className="bg-panel border-border mx-4 rounded-lg border shadow-xl">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-border">
-              <Dialog.Title className="text-xl font-semibold text-foreground flex items-center">
-                <MessageSquare size={20} className="mr-2" />
+            <div className="border-border flex items-center justify-between border-b p-6">
+              <Dialog.Title className="text-foreground flex items-center text-xl font-semibold">
+                <ChatDots className="mr-2 text-lg" />
                 New Chat
               </Dialog.Title>
               <Dialog.Close className="text-muted hover:text-accent">
-                <X size={24} />
+                <XLg className="text-xl" />
               </Dialog.Close>
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-4">
+            <div className="space-y-4 p-6">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="text-foreground mb-2 block text-sm font-medium">
                   Target Directory:
                 </label>
                 <input
@@ -112,14 +112,14 @@ export const NewChatModal: React.FC = () => {
                     }))
                   }
                   onKeyPress={handleKeyPress}
-                  className="w-full bg-input-background border border-input-border rounded-lg px-3 py-2 focus:outline-none focus:border-accent placeholder-muted text-foreground"
+                  className="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full rounded-lg border px-3 py-2 focus:outline-none"
                   placeholder="Enter directory path..."
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
+                <label className="text-foreground mb-2 block text-sm font-medium">
                   Initial Prompt:
                 </label>
                 <textarea
@@ -128,16 +128,16 @@ export const NewChatModal: React.FC = () => {
                     setFormData((prev) => ({ ...prev, prompt: e.target.value }))
                   }
                   onKeyPress={handleKeyPress}
-                  className="w-full bg-input-background border border-input-border rounded-lg px-3 py-2 h-32 resize-none focus:outline-none focus:border-accent placeholder-muted text-foreground"
+                  className="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground h-32 w-full resize-none rounded-lg border px-3 py-2 focus:outline-none"
                   placeholder="Write a simple prompt..."
                 />
-                <div className="text-xs text-muted mt-1">
+                <div className="text-muted mt-1 text-xs">
                   Tip: Press Ctrl+Enter to create
                 </div>
               </div>
 
               {/* Settings Row */}
-              <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center space-x-6">
                   {/* Mode Selection */}
                   <div className="flex items-center space-x-4">
@@ -156,7 +156,7 @@ export const NewChatModal: React.FC = () => {
                         }
                         className="accent-accent"
                       />
-                      <label htmlFor="chat" className="text-sm text-foreground">
+                      <label htmlFor="chat" className="text-foreground text-sm">
                         Chat
                       </label>
                     </div>
@@ -177,7 +177,7 @@ export const NewChatModal: React.FC = () => {
                       />
                       <label
                         htmlFor="agent"
-                        className="text-sm text-foreground"
+                        className="text-foreground text-sm"
                       >
                         Agent
                       </label>
@@ -200,7 +200,7 @@ export const NewChatModal: React.FC = () => {
                     />
                     <label
                       htmlFor="createNewTask"
-                      className="text-sm text-foreground"
+                      className="text-foreground text-sm"
                     >
                       Create New Task
                     </label>
@@ -215,7 +215,7 @@ export const NewChatModal: React.FC = () => {
                         model: e.target.value,
                       }))
                     }
-                    className="bg-input-background border border-input-border rounded px-3 py-1 text-sm text-foreground focus:outline-none focus:border-accent"
+                    className="bg-input-background border-input-border text-foreground focus:border-accent rounded border px-3 py-1 text-sm focus:outline-none"
                   >
                     <option value="default">Claude 3.7</option>
                     <option value="gemini">Gemini 2.5 Pro</option>
@@ -227,14 +227,14 @@ export const NewChatModal: React.FC = () => {
                   <button
                     onClick={closeNewChatModal}
                     disabled={createChatMutation.isPending}
-                    className="px-4 py-2 bg-hover text-muted rounded hover:bg-selected disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="bg-hover text-muted hover:bg-selected rounded px-4 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleSubmit}
                     disabled={createChatMutation.isPending}
-                    className="px-6 py-2 bg-accent text-white rounded hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="bg-accent hover:bg-accent/80 rounded px-6 py-2 text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {createChatMutation.isPending ? "Creating..." : "Create"}
                   </button>
