@@ -9,11 +9,12 @@ import {
   loggerLink,
   splitLink,
 } from "@trpc/client";
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Import useEffect
 import SuperJSON from "superjson";
 import type { AppRouter } from "@repo/events-core/server/root-router";
-import { TRPCProvider } from "../lib/trpc";
+import { TRPCProvider, useTRPC } from "../lib/trpc"; // Import useTRPC
 import { MainLayout } from "../components/main-layout";
+import { useMutation } from "@tanstack/react-query"; // Import useMutation
 
 function makeQueryClient() {
   return new QueryClient({
@@ -47,8 +48,18 @@ const getUrl = () => "http://localhost:3333/api/trpc";
 
 export default function App() {
   const queryClient = getQueryClient();
+  // TRPC client setup needs to be inside a component that is a child of TRPCProvider to use useTRPC hook.
+  // So, we'll create a sub-component for the main app logic including the startup mutation.
+  // Or, we can pass the trpcClient instance created here to a sub-component.
+  // For simplicity, let's create the trpcClient here and then use it in a sub-component
+  // that actually calls the mutation.
 
-  const [trpcClient] = useState(() =>
+  // Simpler: The TRPCProvider itself doesn't make useTRPC available directly in App.
+  // We need a child component that uses useTRPC, or we pass the trpcClient to MainLayout
+  // and MainLayout does the useEffect.
+  // Let's make a small wrapper component that will use useTRPC.
+
+  const [trpcClient] = useState(() => // Back to trpcClient for prop name consistency
     createTRPCClient<AppRouter>({
       links: [
         loggerLink({

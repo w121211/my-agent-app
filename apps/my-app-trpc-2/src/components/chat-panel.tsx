@@ -28,21 +28,27 @@ interface ChatMessage {
   role: "USER" | "ASSISTANT" | "FUNCTION_EXECUTOR";
   content: string;
   timestamp: Date;
-  metadata?: any;
+  metadata?: Record<string, unknown>; // More specific if possible, but Record<string, unknown> is safe for now
 }
 
+// Define ChatStatus locally or import if available from a shared types definition (not current project setup)
+export type ChatStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+
+interface ChatMetadata {
+  title?: string;
+  mode?: "chat" | "agent";
+  model?: string;
+  promptDraft?: string; // Added for prompt auto-save
+  // other metadata fields if any
+}
 interface Chat {
   id: string;
   absoluteFilePath: string;
   messages: ChatMessage[];
-  status: string;
+  status: ChatStatus; // Use the specific ChatStatus type
   createdAt: Date;
   updatedAt: Date;
-  metadata?: {
-    title?: string;
-    mode?: "chat" | "agent";
-    model?: string;
-  };
+  metadata?: ChatMetadata;
 }
 
 const ChatModeSelect: React.FC<{
@@ -293,8 +299,9 @@ export const ChatPanel: React.FC = () => {
   const { selectedChatFile } = useAppStore();
   const [messageInput, setMessageInput] = useState("");
   const [chat, setChat] = useState<Chat | null>(null);
-  const [chatMode, setChatMode] = useState("chat");
-  const [model, setModel] = useState("claude");
+  const [chatMode, setChatMode] = useState("chat"); // Default, will be overwritten by chat metadata
+  const [model, setModel] = useState("default"); // Default, will be overwritten by chat metadata
+  const inputRef = React.useRef<HTMLTextAreaElement>(null); // Ref for auto-focus
 
   // Create query options for opening chat file
   const openChatFileQueryOptions = trpc.chat.openChatFile.queryOptions(
@@ -364,6 +371,18 @@ export const ChatPanel: React.FC = () => {
       if (loadedChat.metadata?.model) {
         setModel(loadedChat.metadata.model);
       }
+      // Restore promptDraft content
+      if (loadedChat.metadata?.promptDraft) {
+        setMessageInput(loadedChat.metadata.promptDraft);
+      } else {
+        // If no promptDraft is stored (e.g. for older chats or after sending one), ensure input is clear
+        setMessageInput("");
+      }
+
+      // Auto-focus for DRAFT chats
+      if (loadedChat.status === "DRAFT") {
+        inputRef.current?.focus();
+      }
     }
   }, [loadedChat]);
 
@@ -374,11 +393,93 @@ export const ChatPanel: React.FC = () => {
     }
   }, [chatLoadError, showToast]);
 
+  // Debounce function (simple implementation)
+  const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    return (...args: Parameters<F>): Promise<ReturnType<F>> =>
+      new Promise(resolve => {
+        if (timeout) {
+          clearTimeout(timeout);
+        }
+        timeout = setTimeout(() => resolve(func(...args)), waitFor);
+      });
+  };
+
+  // Auto-save promptDraft mutation
+  const updatePromptDraftMutation = useMutation(
+    trpc.chat.updatePromptDraft.mutationOptions({
+      onSuccess: (updatedChat) => {
+        if (updatedChat) {
+          // Update local chat state with the new updatedAt and potentially other metadata changes from backend
+          setChat(prevChat => prevChat && prevChat.id === updatedChat.id ? updatedChat : prevChat);
+          console.log("Prompt draft auto-saved for chat:", updatedChat.id);
+        }
+      },
+      onError: (error) => {
+        // Maybe a subtle indicator for save failure, but toast might be too noisy for auto-save
+        console.error("Failed to auto-save prompt draft:", error.message);
+        // showToast(`Failed to save draft: ${error.message}`, "error"); // Potentially too noisy
+      },
+    }),
+  );
+
+  // Debounced version of the mutate function
+  const debouncedUpdatePromptDraft = React.useCallback(
+    debounce(updatePromptDraftMutation.mutate, 500), // 500ms debounce
+    [updatePromptDraftMutation.mutate]
+  );
+
+  // Effect for auto-saving promptDraft
+  useEffect(() => {
+    if (chat?.id) { // Only save if a chat is loaded
+      // Do not save if messageInput is undefined (it shouldn't be, but as a safeguard)
+      // Or if the content is the same as what's already in chat.metadata.promptDraft to avoid redundant saves
+      // However, the check for same content adds complexity if initial load sets messageInput from promptDraft
+      // For simplicity, always save; backend can optimize if needed. Or rely on updatedAt.
+      if (messageInput !== (chat.metadata?.promptDraft ?? "")) { // Only save if different from persisted
+         debouncedUpdatePromptDraft({ chatId: chat.id, promptDraft: messageInput });
+      }
+    }
+  }, [messageInput, chat?.id, chat?.metadata?.promptDraft, debouncedUpdatePromptDraft]);
+
+  // Cleanup empty drafts mutation
+  const cleanupEmptyDraftsMutation = useMutation(
+    trpc.chat.cleanupEmptyDrafts.mutationOptions({
+      onSuccess: () => {
+        console.log("Empty draft cleanup requested.");
+        // No toast needed for background cleanup
+      },
+      onError: (error) => {
+        console.error("Failed to request empty draft cleanup:", error.message);
+        // showToast("Failed to clean up empty drafts.", "error"); // Potentially too noisy
+      },
+    }),
+  );
+
+  // Effect for cleaning up empty drafts when chat selection changes or component unmounts
+  useEffect(() => {
+    // This function will be called when selectedChatFile changes (i.e. navigating away from current chat)
+    // or when the component unmounts.
+    const cleanup = () => {
+      // We don't know for sure if the chat we are navigating away from was an empty draft.
+      // Calling the generic cleanup is a broad approach.
+      // The backend's isEmptyDraft logic will determine what actually gets deleted.
+      if (chat) { // Only attempt cleanup if there was a chat loaded
+           console.log("ChatPanel: selectedChatFile changed or unmounted, potentially cleaning drafts for chat:", chat.id);
+           cleanupEmptyDraftsMutation.mutate({}); // Call with empty input, backend handles correlationId
+      }
+    };
+
+    // Return the cleanup function to be executed on unmount or before re-running due to dependency change
+    return cleanup;
+  }, [selectedChatFile, chat, cleanupEmptyDraftsMutation]); // Depends on selectedChatFile to run on switch; 'chat' to access previous chat info
+
+
   // Submit message mutation
   const submitMessageMutationOptions = trpc.chat.submitMessage.mutationOptions({
     onSuccess: (updatedChat) => {
-      setChat(updatedChat);
-      setMessageInput("");
+      setChat(updatedChat); // Backend now handles DRAFT -> ACTIVE transition
+      setMessageInput(""); // Clear input after successful send, this will also clear promptDraft via auto-save
       showToast("Message sent successfully", "success");
 
       queryClient.invalidateQueries({
@@ -554,6 +655,7 @@ export const ChatPanel: React.FC = () => {
       <footer className="border-border bg-panel border-t px-6 py-4">
         <div className="relative">
           <textarea
+            ref={inputRef} // Assign ref
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}

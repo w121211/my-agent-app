@@ -25,12 +25,57 @@ import {
 } from "react-bootstrap-icons";
 
 // Type definitions
+
+// As per design doc for styling, assuming ChatStatus and relevant Chat metadata are available for tree nodes representing chats.
+// This might require backend changes to ProjectFolderService.getFolderTree if not already providing this.
+export type ChatStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+
+interface ChatLikeForDisplay { // Simplified structure for display functions
+  status: ChatStatus;
+  metadata: {
+    title: string;
+  };
+}
+
 interface FolderTreeNode {
-  name: string;
+  name: string; // Filename, e.g., "chat1.chat.json" or "My Document.txt"
   path: string;
   isDirectory: boolean;
   children?: FolderTreeNode[];
+  // For .chat.json files, these fields would be populated by the backend (assumption)
+  chatStatus?: ChatStatus;
+  chatTitle?: string; // The actual title from chat metadata, e.g., "Untitled Chat" or user-set title
 }
+
+// Helper functions for chat display from design document
+const getChatDisplayName = (node: FolderTreeNode): string => {
+  if (node.isDirectory || !node.name.endsWith(".chat.json") || !node.chatStatus || node.chatTitle === undefined) {
+    return node.name; // Return filename for non-chats or if chat info is missing
+  }
+
+  const title = node.chatTitle; // Use the actual chat title
+  switch (node.chatStatus) {
+    case "DRAFT":
+      return `💭 ${title}`;
+    case "ACTIVE":
+      return title;
+    case "ARCHIVED": // Future feature
+      return `📦 ${title}`;
+    default:
+      return title; // Fallback to title or node.name if status is unexpected
+  }
+};
+
+const getChatDisplayStyle = (node: FolderTreeNode): string => {
+  if (node.isDirectory || !node.name.endsWith(".chat.json") || !node.chatStatus) {
+    return "text-foreground"; // Default style for non-chats
+  }
+  if (node.chatStatus === "DRAFT") {
+    return "italic text-muted";
+  }
+  return "text-foreground";
+};
+
 
 interface TaskInfo {
   id: string;
@@ -214,12 +259,35 @@ const TreeNode: React.FC<{
     setSelectedPreviewFile,
     setSelectedTreeNode,
     selectedTreeNode,
-    openNewChatModal,
+    // openNewChatModal, // Removed from store, so remove from here
   } = useAppStore();
+  const trpc = useTRPC(); // Get TRPC client
+  const queryClient = useQueryClient(); // For potential cache updates
+  const { showToast } = useToast();
 
   const isExpanded = expandedNodes.has(node.path);
   const isSelected = selectedTreeNode === node.path;
   const isTaskFolder = node.isDirectory && node.name.startsWith("task-");
+
+  // Determine display name and style for the node
+  const displayName = getChatDisplayName(node);
+  const displayStyle = getChatDisplayStyle(node);
+
+  const createDraftChatMutation = useMutation(
+    trpc.chat.createDraftChat.mutationOptions({
+      onSuccess: (newChat) => {
+        showToast(`Draft chat "${newChat.metadata?.title || newChat.id}" created`, "success");
+        setSelectedChatFile(newChat.absoluteFilePath);
+        setSelectedTreeNode(newChat.absoluteFilePath);
+        // Optionally, trigger a refetch of the folder tree for the parent directory if file watcher is slow or unreliable
+        // queryClient.invalidateQueries(trpc.projectFolder.getFolderTree.queryKey({ absoluteProjectFolderPath: node.path }));
+        // However, the file watcher + direct update should handle this.
+      },
+      onError: (error) => {
+        showToast(`Failed to create draft chat: ${error.message}`, "error");
+      },
+    }),
+  );
 
   const handleClick = () => {
     if (node.isDirectory) {
@@ -227,7 +295,7 @@ const TreeNode: React.FC<{
     } else {
       setSelectedTreeNode(node.path);
       if (node.name.endsWith(".chat.json")) {
-        setSelectedChatFile(node.path);
+        setSelectedChatFile(node.path); // This will open the chat
       } else {
         setSelectedPreviewFile(node.path);
       }
@@ -236,8 +304,17 @@ const TreeNode: React.FC<{
 
   const handleNewChat = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setSelectedTreeNode(node.path);
-    openNewChatModal();
+    if (!node.isDirectory) return; // Should only create chat in a directory
+
+    setSelectedTreeNode(node.path); // Select the folder where chat will be created
+
+    createDraftChatMutation.mutate({
+      targetDirectoryAbsolutePath: node.path,
+      // newTask: false, // Default is false, can be omitted
+      // mode: "chat", // Default is "chat"
+      // initialPromptDraft: "", // Default is undefined
+      // model: "default" // Default is "default"
+    });
   };
 
   const handleStopTask = (e: React.MouseEvent) => {
@@ -271,10 +348,11 @@ const TreeNode: React.FC<{
           {getFileIcon(node.name, node.isDirectory, isExpanded)}
         </div>
 
-        <span className="flex-1 truncate text-sm">{node.name}</span>
+        <span className={`flex-1 truncate text-sm ${displayStyle}`}>{displayName}</span>
 
         {/* Context indicator for files in project context */}
-        {!node.isDirectory && Math.random() > 0.7 && (
+        {/* This random condition should be replaced by actual logic if needed */}
+        {!node.isDirectory && node.name.endsWith(".chat.json") && Math.random() > 0.7 && (
           <div className="mr-1" title="In Project Context">
             <FileEarmarkCheck className="text-accent text-xs" />
           </div>
@@ -422,7 +500,7 @@ export const ExplorerPanel: React.FC = () => {
     folderTrees,
     setProjectFolders,
     updateFolderTree,
-    openNewChatModal,
+    // openNewChatModal, // No longer needed here as TreeNode handles its own new chat logic
   } = useAppStore();
 
   // Track task information by directory path

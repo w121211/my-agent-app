@@ -28,12 +28,13 @@ export class ChatFileNotFoundError extends ChatFileError {
 
 // Define serializable versions of the types using Zod
 const RoleSchema = z.enum(["ASSISTANT", "USER", "FUNCTION_EXECUTOR"]);
+const ChatStatusSchema = z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]); // Schema for ChatStatus
 
 const ChatMessageSchema = z.object({
   id: z.string(),
   role: RoleSchema,
   content: z.string(),
-  timestamp: z.string().transform((val) => new Date(val)),
+  timestamp: z.string().transform((val) => new Date(val)), // Keep ISO string for JSON, parse to Date
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -44,21 +45,30 @@ const ChatMetadataSchema = z.object({
   mode: z.enum(["chat", "agent"]).optional(),
   model: z.string().optional(),
   knowledge: z.array(z.string()).optional(),
+  promptDraft: z.string().optional(), // Added promptDraft
 });
 
 // Schema for serialized chat file data
 const ChatFileDataSchema = z.object({
   _type: z.literal("chat"),
   id: z.string(),
-  createdAt: z.string().transform((val) => new Date(val)),
-  updatedAt: z.string().transform((val) => new Date(val)),
+  status: ChatStatusSchema, // Added status
+  createdAt: z.string().transform((val) => new Date(val)), // Keep ISO string for JSON, parse to Date
+  updatedAt: z.string().transform((val) => new Date(val)), // Keep ISO string for JSON, parse to Date
   messages: z.array(ChatMessageSchema),
   metadata: ChatMetadataSchema.optional(),
 });
 
 // Type derived from schema
-type ChatFileData = Omit<Chat, "absoluteFilePath" | "status"> & {
+// This represents the structure of the JSON file
+type ChatFileData = {
   _type: "chat";
+  id: string;
+  status: ChatStatus;
+  createdAt: Date; // Zod transform handles this
+  updatedAt: Date; // Zod transform handles this
+  messages: ChatMessage[]; // ChatMessage already has Date type for timestamp due to Zod transform
+  metadata?: ChatMetadata; // ChatMetadataSchema now includes promptDraft, and its fields are optional
 };
 
 export class ChatRepository {
@@ -217,36 +227,65 @@ export class ChatRepository {
     this.chatCache.delete(absoluteFilePath);
   }
 
+  async updateChat(chat: Chat, correlationId?: string): Promise<Chat> {
+    if (!this.chatCache.has(chat.absoluteFilePath) && !(await fileExists(chat.absoluteFilePath))) {
+      throw new ChatFileNotFoundError(chat.absoluteFilePath);
+    }
+
+    chat.updatedAt = new Date(); // Ensure updatedAt is always fresh on update
+
+    // Update cache first
+    this.chatCache.set(chat.absoluteFilePath, chat);
+
+    // Then save to file
+    await this.saveChatToFile(chat, chat.absoluteFilePath);
+    this.logger.debug(`Updated chat ${chat.id} at ${chat.absoluteFilePath}`, { correlationId });
+    return chat;
+  }
+
   private async saveChatToFile(
     chat: Chat,
     absoluteFilePath: string
   ): Promise<void> {
-    const chatFile: ChatFileData = {
-      _type: "chat",
+    // Create a serializable version of the chat data
+    const serializableMessages = chat.messages.map(msg => ({
+      ...msg,
+      timestamp: msg.timestamp.toISOString(),
+    }));
+
+    const chatFileForPersistence = { // This structure must match what ChatFileDataSchema expects as input for serialization
+      _type: "chat" as const,
       id: chat.id,
-      createdAt: chat.createdAt,
-      updatedAt: chat.updatedAt,
-      messages: chat.messages,
-      metadata: chat.metadata,
+      status: chat.status, // Save status
+      createdAt: chat.createdAt.toISOString(),
+      updatedAt: chat.updatedAt.toISOString(),
+      messages: serializableMessages,
+      metadata: chat.metadata, // promptDraft is part of metadata
     };
 
-    await writeJsonFile(absoluteFilePath, chatFile);
+    // Before writing, ensure the data conforms to the schema that includes string dates.
+    // This step is more for ensuring our manual object construction is correct.
+    // Zod doesn't directly serialize, but we are creating an object to be written as JSON.
+    // We could define a separate schema for serialization if we wanted strict validation before write.
+
+    await writeJsonFile(absoluteFilePath, chatFileForPersistence);
   }
 
   private async readChatFromFile(absoluteFilePath: string): Promise<Chat> {
     const fileContent = await readJsonFile<unknown>(absoluteFilePath);
 
     // Parse and validate the file content using Zod
+    // ChatFileDataSchema will parse string dates to Date objects and validate status
     const chatFileData = ChatFileDataSchema.parse(fileContent);
 
     const chat: Chat = {
       id: chatFileData.id,
       absoluteFilePath: absoluteFilePath,
-      messages: chatFileData.messages,
-      status: "ACTIVE" as ChatStatus, // Always set status to ACTIVE when loading
-      createdAt: chatFileData.createdAt,
-      updatedAt: chatFileData.updatedAt,
-      metadata: chatFileData.metadata,
+      messages: chatFileData.messages, // Timestamps are Date objects here due to Zod transform
+      status: chatFileData.status, // Use status from file
+      createdAt: chatFileData.createdAt, // Date object
+      updatedAt: chatFileData.updatedAt, // Date object
+      metadata: chatFileData.metadata, // Includes promptDraft, if present
     };
 
     return chat;
