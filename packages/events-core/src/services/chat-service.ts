@@ -7,7 +7,7 @@ import type { TaskService } from "./task-service.js";
 import type { ProjectFolderService } from "./project-folder-service.js";
 
 // Define types specific to chat service
-export type ChatStatus = "ACTIVE" | "CLOSED";
+export type ChatStatus = "ACTIVE" | "ARCHIVED";
 export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR";
 export type ChatMode = "chat" | "agent";
 
@@ -37,6 +37,7 @@ export interface ChatMetadata {
   mode?: ChatMode;
   model?: string;
   knowledge?: string[];
+  promptDraft?: string;
 }
 
 export interface Chat {
@@ -84,6 +85,51 @@ export class ChatService {
     this.chatRepository = chatRepository;
     this.taskService = taskService;
     this.projectFolderService = projectFolderService;
+  }
+
+  async createEmptyChat(
+    targetDirectoryAbsolutePath: string,
+    correlationId?: string
+  ): Promise<Chat> {
+    // Validate that the target directory is within a project folder
+    const isInProjectFolder =
+      await this.projectFolderService.isPathInProjectFolder(
+        targetDirectoryAbsolutePath
+      );
+
+    if (!isInProjectFolder) {
+      throw new Error(
+        `Cannot create chat outside of project folders. Path ${targetDirectoryAbsolutePath} is not within any registered project folder.`
+      );
+    }
+
+    this.logger.info(
+      `Creating empty chat in project folder at: ${targetDirectoryAbsolutePath}`
+    );
+
+    const now = new Date();
+
+    const chatData: Omit<Chat, "absoluteFilePath"> = {
+      id: uuidv4(),
+      status: "ACTIVE",
+      messages: [],
+      createdAt: now,
+      updatedAt: now,
+      metadata: {
+        mode: "chat",
+        model: "default",
+        title: "Untitled Chat",
+      },
+    };
+
+    // Create chat object using repository
+    const chat = await this.chatRepository.createChat(
+      chatData,
+      targetDirectoryAbsolutePath,
+      correlationId
+    );
+
+    return chat;
   }
 
   async createChat(
@@ -178,6 +224,37 @@ export class ChatService {
     return chat;
   }
 
+  async updatePromptDraft(
+    chatId: string,
+    promptDraft: string,
+    correlationId?: string
+  ): Promise<Chat> {
+    // Find the chat by ID - throws if not found
+    const chat = await this.getChatById(chatId);
+
+    // Update the prompt draft in metadata
+    const updatedChat = await this.chatRepository.updateMetadata(
+      chat.absoluteFilePath,
+      { promptDraft },
+      correlationId
+    );
+
+    // Emit metadata updated event
+    await this.eventBus.emit<ChatUpdatedEvent>({
+      kind: "ChatUpdatedEvent",
+      chatId: chat.id,
+      updateType: "METADATA_UPDATED",
+      update: {
+        metadata: { promptDraft },
+      },
+      chat: updatedChat,
+      timestamp: new Date(),
+      correlationId,
+    });
+
+    return updatedChat;
+  }
+
   async submitMessage(
     chatId: string,
     message: string,
@@ -193,6 +270,15 @@ export class ChatService {
       content: message,
       timestamp: new Date(),
     };
+
+    // Clear promptDraft when message is sent
+    if (chat.metadata?.promptDraft) {
+      await this.chatRepository.updateMetadata(
+        chat.absoluteFilePath,
+        { promptDraft: undefined },
+        correlationId
+      );
+    }
 
     // Add message to chat
     await this.chatRepository.addMessage(

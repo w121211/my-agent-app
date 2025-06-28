@@ -26,9 +26,6 @@ interface AppStore {
   folderTrees: Record<string, FolderTreeNode>;
   expandedNodes: Set<string>;
 
-  // UI state
-  isNewChatModalOpen: boolean;
-
   // Actions
   setSelectedChatFile: (path: string | null) => void;
   setSelectedPreviewFile: (path: string | null) => void;
@@ -36,8 +33,6 @@ interface AppStore {
   setProjectFolders: (folders: ProjectFolder[]) => void;
   updateFolderTree: (projectFolderId: string, tree: FolderTreeNode) => void;
   toggleNodeExpansion: (nodePath: string) => void;
-  openNewChatModal: () => void;
-  closeNewChatModal: () => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -47,7 +42,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   projectFolders: [],
   folderTrees: {},
   expandedNodes: new Set(),
-  isNewChatModalOpen: false,
 
   setSelectedChatFile: (path) => set({ selectedChatFile: path }),
   setSelectedPreviewFile: (path) => set({ selectedPreviewFile: path }),
@@ -67,6 +61,4 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
       return { expandedNodes: newExpanded };
     }),
-  openNewChatModal: () => set({ isNewChatModalOpen: true }),
-  closeNewChatModal: () => set({ isNewChatModalOpen: false }),
 }));

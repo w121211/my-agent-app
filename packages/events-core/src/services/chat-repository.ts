@@ -10,7 +10,7 @@ import {
   writeJsonFile,
   listDirectory,
 } from "../file-helpers.js";
-import type { Chat, ChatMessage, ChatStatus } from "./chat-service.js";
+import type { Chat, ChatMessage, ChatStatus, ChatMetadata } from "./chat-service.js";
 
 export class ChatFileError extends Error {
   constructor(message: string) {
@@ -44,6 +44,7 @@ const ChatMetadataSchema = z.object({
   mode: z.enum(["chat", "agent"]).optional(),
   model: z.string().optional(),
   knowledge: z.array(z.string()).optional(),
+  promptDraft: z.string().optional(),
 });
 
 // Schema for serialized chat file data
@@ -183,6 +184,24 @@ export class ChatRepository {
   ): Promise<Chat> {
     const chat = await this.findByPath(absoluteFilePath);
     chat.messages.push(message);
+    chat.updatedAt = new Date();
+
+    // Update the cache immediately
+    this.chatCache.set(absoluteFilePath, chat);
+
+    // Save to file
+    await this.saveChatToFile(chat, absoluteFilePath);
+
+    return chat;
+  }
+
+  async updateMetadata(
+    absoluteFilePath: string,
+    metadata: Partial<ChatMetadata>,
+    correlationId?: string
+  ): Promise<Chat> {
+    const chat = await this.findByPath(absoluteFilePath);
+    chat.metadata = { ...chat.metadata, ...metadata };
     chat.updatedAt = new Date();
 
     // Update the cache immediately

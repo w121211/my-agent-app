@@ -214,12 +214,32 @@ const TreeNode: React.FC<{
     setSelectedPreviewFile,
     setSelectedTreeNode,
     selectedTreeNode,
-    openNewChatModal,
   } = useAppStore();
+  
+  const trpc = useTRPC();
+  const { showToast } = useToast();
 
   const isExpanded = expandedNodes.has(node.path);
   const isSelected = selectedTreeNode === node.path;
   const isTaskFolder = node.isDirectory && node.name.startsWith("task-");
+
+  // Create empty chat mutation
+  const createEmptyChatMutation = useMutation(
+    trpc.chat.createEmptyChat.mutationOptions({
+      onSuccess: (newChat) => {
+        setSelectedTreeNode(node.path);
+        setSelectedChatFile(newChat.absoluteFilePath);
+        showToast("Chat created successfully", "success");
+      },
+      onError: (error) => {
+        console.error("Failed to create chat:", error);
+        showToast(
+          `Failed to create chat: ${error.message || "Unknown error"}`,
+          "error"
+        );
+      },
+    })
+  );
 
   const handleClick = () => {
     if (node.isDirectory) {
@@ -236,8 +256,10 @@ const TreeNode: React.FC<{
 
   const handleNewChat = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setSelectedTreeNode(node.path);
-    openNewChatModal();
+    
+    createEmptyChatMutation.mutate({
+      targetDirectoryAbsolutePath: node.path,
+    });
   };
 
   const handleStopTask = (e: React.MouseEvent) => {
@@ -422,7 +444,7 @@ export const ExplorerPanel: React.FC = () => {
     folderTrees,
     setProjectFolders,
     updateFolderTree,
-    openNewChatModal,
+    setSelectedChatFile,
   } = useAppStore();
 
   // Track task information by directory path

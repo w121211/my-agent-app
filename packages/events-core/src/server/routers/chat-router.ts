@@ -14,6 +14,17 @@ export const createNewChatSchema = z.object({
   correlationId: z.string().optional(),
 });
 
+export const createEmptyChatSchema = z.object({
+  targetDirectoryAbsolutePath: z.string(),
+  correlationId: z.string().optional(),
+});
+
+export const updatePromptDraftSchema = z.object({
+  chatId: z.string().uuid(),
+  promptDraft: z.string(),
+  correlationId: z.string().optional(),
+});
+
 export const submitMessageSchema = z.object({
   chatId: z.string().uuid(),
   message: z.string(),
@@ -50,6 +61,25 @@ export function createChatRouter(chatService: ChatService) {
           input.knowledge,
           input.prompt,
           input.model,
+          input.correlationId
+        );
+      }),
+
+    createEmptyChat: publicProcedure
+      .input(createEmptyChatSchema)
+      .mutation(async ({ input }) => {
+        return chatService.createEmptyChat(
+          input.targetDirectoryAbsolutePath,
+          input.correlationId
+        );
+      }),
+
+    updatePromptDraft: publicProcedure
+      .input(updatePromptDraftSchema)
+      .mutation(async ({ input }) => {
+        return chatService.updatePromptDraft(
+          input.chatId,
+          input.promptDraft,
           input.correlationId
         );
       }),

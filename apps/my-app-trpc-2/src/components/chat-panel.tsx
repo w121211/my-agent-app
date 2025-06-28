@@ -42,6 +42,7 @@ interface Chat {
     title?: string;
     mode?: "chat" | "agent";
     model?: string;
+    promptDraft?: string;
   };
 }
 
@@ -364,6 +365,12 @@ export const ChatPanel: React.FC = () => {
       if (loadedChat.metadata?.model) {
         setModel(loadedChat.metadata.model);
       }
+      // Restore promptDraft when opening chat
+      if (loadedChat.metadata?.promptDraft) {
+        setMessageInput(loadedChat.metadata.promptDraft);
+      } else {
+        setMessageInput("");
+      }
     }
   }, [loadedChat]);
 
@@ -406,6 +413,15 @@ export const ChatPanel: React.FC = () => {
   });
 
   const submitMessageMutation = useMutation(submitMessageMutationOptions);
+
+  // Update prompt draft mutation
+  const updatePromptDraftMutation = useMutation(
+    trpc.chat.updatePromptDraft.mutationOptions({
+      onError: (error) => {
+        console.error("Failed to save prompt draft:", error);
+      },
+    })
+  );
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !chat) return;
@@ -557,6 +573,15 @@ export const ChatPanel: React.FC = () => {
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}
+            onBlur={() => {
+              // Save promptDraft when textarea loses focus
+              if (messageInput.trim() && chat) {
+                updatePromptDraftMutation.mutate({
+                  chatId: chat.id,
+                  promptDraft: messageInput,
+                });
+              }
+            }}
             placeholder="Type your message..."
             className="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full resize-none rounded-md border px-3 py-3 text-[15px] focus:outline-none"
             rows={3}

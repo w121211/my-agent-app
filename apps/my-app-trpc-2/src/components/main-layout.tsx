@@ -2,7 +2,6 @@
 import { ExplorerPanel } from "./explorer-panel";
 import { ChatPanel } from "./chat-panel";
 import { RightPanel } from "./right-panel";
-import { NewChatModal } from "./new-chat-modal";
 import { ToastProvider } from "./toast-provider";
 
 export const MainLayout = () => {
@@ -12,7 +11,6 @@ export const MainLayout = () => {
         <ExplorerPanel />
         <ChatPanel />
         <RightPanel />
-        <NewChatModal />
       </div>
     </ToastProvider>
   );
