@@ -15,12 +15,25 @@ import {
   Lightbulb,
   FileEarmark,
 } from "react-bootstrap-icons";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as Select from "@radix-ui/react-select";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTRPC } from "../lib/trpc";
 import { useAppStore } from "../store/app-store";
 import { useToast } from "./toast-provider";
+
+// Simple debounce implementation (no external dependency needed)
+const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  delay: number,
+): ((...args: Parameters<T>) => void) => {
+  let timeoutId: NodeJS.Timeout;
+
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func(...args), delay);
+  };
+};
 
 // Local type definitions
 interface ChatMessage {
@@ -302,7 +315,9 @@ export const ChatPanel: React.FC = () => {
     { filePath: selectedChatFile! },
     {
       enabled: !!selectedChatFile,
-      staleTime: 1000 * 60, // 1 minute
+      // staleTime: 1000 * 60, // 1 minute
+      staleTime: 0, // Disable caching
+      gcTime: 0,
     },
   );
 
@@ -311,7 +326,43 @@ export const ChatPanel: React.FC = () => {
     data: loadedChat,
     isLoading,
     error: chatLoadError,
+    refetch: refetchChatFile,
   } = useQuery(openChatFileQueryOptions);
+
+  // Update prompt draft mutation
+  const updatePromptDraftMutation = useMutation(
+    trpc.chat.updatePromptDraft.mutationOptions({
+      onError: (error) => {
+        console.error("Failed to save prompt draft:", error);
+        showToast("Failed to save draft", "error");
+      },
+    }),
+  );
+
+  // Create debounced save function with proper cleanup
+  const debouncedSavePromptDraft = useMemo(
+    () =>
+      debounce((chatId: string, promptDraft: string) => {
+        updatePromptDraftMutation.mutate({
+          chatId,
+          promptDraft,
+        });
+      }, 1500), // 1.5 seconds delay
+    [updatePromptDraftMutation],
+  );
+
+  // Handle message input changes with automatic draft saving
+  const handleMessageInputChange = useCallback(
+    (value: string) => {
+      setMessageInput(value);
+
+      // Auto-save draft if chat exists and input is not empty
+      if (chat && value.trim()) {
+        debouncedSavePromptDraft(chat.id, value);
+      }
+    },
+    [chat, debouncedSavePromptDraft],
+  );
 
   // Subscribe to chat events
   const chatEventsSubscription = useSubscription(
@@ -326,22 +377,29 @@ export const ChatPanel: React.FC = () => {
               event.data.updateType,
               event.data,
             );
-            setChat(event.data.chat);
 
+            // Only handle events that aren't already handled by mutations
             switch (event.data.updateType) {
               case "AI_RESPONSE_ADDED":
+                // AI responses only come through events, not mutations
+                setChat(event.data.chat);
                 showToast("AI response received", "success");
                 break;
               case "METADATA_UPDATED":
+                // Only update if it's not from our own mutation
                 showToast("Chat metadata updated", "info");
+                break;
+              case "MESSAGE_ADDED":
+                // Skip - user messages are already handled by mutation response
+                console.log("User message event - already handled by mutation");
                 break;
             }
 
-            queryClient.invalidateQueries({
-              queryKey: trpc.chat.openChatFile.queryKey({
-                filePath: selectedChatFile!,
-              }),
-            });
+            // queryClient.invalidateQueries({
+            //   queryKey: trpc.chat.openChatFile.queryKey({
+            //     filePath: event.data.chat.absoluteFilePath,
+            //   }),
+            // });
           }
         },
         onError: (error) => {
@@ -381,6 +439,19 @@ export const ChatPanel: React.FC = () => {
     }
   }, [chatLoadError, showToast]);
 
+  // Cleanup: Save draft when component unmounts or chat changes
+  useEffect(() => {
+    return () => {
+      // Save any pending draft when chat changes or component unmounts
+      if (messageInput.trim() && chat) {
+        updatePromptDraftMutation.mutate({
+          chatId: chat.id,
+          promptDraft: messageInput,
+        });
+      }
+    };
+  }, [chat?.id]); // Only trigger when chat ID changes
+
   // Submit message mutation
   const submitMessageMutationOptions = trpc.chat.submitMessage.mutationOptions({
     onSuccess: (updatedChat) => {
@@ -388,11 +459,11 @@ export const ChatPanel: React.FC = () => {
       setMessageInput("");
       showToast("Message sent successfully", "success");
 
-      queryClient.invalidateQueries({
-        queryKey: trpc.chat.openChatFile.queryKey({
-          filePath: selectedChatFile!,
-        }),
-      });
+      // queryClient.invalidateQueries({
+      //   queryKey: trpc.chat.openChatFile.queryKey({
+      //     filePath: updatedChat.absoluteFilePath,
+      //   }),
+      // });
     },
     onError: (error) => {
       console.error("Failed to send message:", error);
@@ -413,15 +484,6 @@ export const ChatPanel: React.FC = () => {
   });
 
   const submitMessageMutation = useMutation(submitMessageMutationOptions);
-
-  // Update prompt draft mutation
-  const updatePromptDraftMutation = useMutation(
-    trpc.chat.updatePromptDraft.mutationOptions({
-      onError: (error) => {
-        console.error("Failed to save prompt draft:", error);
-      },
-    })
-  );
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !chat) return;
@@ -470,14 +532,14 @@ export const ChatPanel: React.FC = () => {
     showToast("Chat summary functionality coming soon", "info");
   };
 
-  const invalidateChatQueries = () => {
-    if (selectedChatFile) {
-      const queryKey = trpc.chat.openChatFile.queryKey({
-        filePath: selectedChatFile,
-      });
-      queryClient.invalidateQueries({ queryKey });
-    }
-  };
+  // const invalidateChatQueries = () => {
+  //   if (selectedChatFile) {
+  //     const queryKey = trpc.chat.openChatFile.queryKey({
+  //       filePath: selectedChatFile,
+  //     });
+  //     queryClient.invalidateQueries({ queryKey });
+  //   }
+  // };
 
   if (!selectedChatFile) {
     return (
@@ -533,7 +595,7 @@ export const ChatPanel: React.FC = () => {
         </span>
         <div className="ml-auto flex items-center space-x-2">
           <button
-            onClick={invalidateChatQueries}
+            onClick={() => refetchChatFile()}
             className="bg-panel hover:bg-hover text-muted rounded px-2 py-1 text-xs"
           >
             🔄 Refresh
@@ -571,17 +633,8 @@ export const ChatPanel: React.FC = () => {
         <div className="relative">
           <textarea
             value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
+            onChange={(e) => handleMessageInputChange(e.target.value)}
             onKeyPress={handleKeyPress}
-            onBlur={() => {
-              // Save promptDraft when textarea loses focus
-              if (messageInput.trim() && chat) {
-                updatePromptDraftMutation.mutate({
-                  chatId: chat.id,
-                  promptDraft: messageInput,
-                });
-              }
-            }}
             placeholder="Type your message..."
             className="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full resize-none rounded-md border px-3 py-3 text-[15px] focus:outline-none"
             rows={3}

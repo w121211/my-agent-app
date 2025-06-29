@@ -215,7 +215,7 @@ const TreeNode: React.FC<{
     setSelectedTreeNode,
     selectedTreeNode,
   } = useAppStore();
-  
+
   const trpc = useTRPC();
   const { showToast } = useToast();
 
@@ -235,18 +235,22 @@ const TreeNode: React.FC<{
         console.error("Failed to create chat:", error);
         showToast(
           `Failed to create chat: ${error.message || "Unknown error"}`,
-          "error"
+          "error",
         );
       },
-    })
+    }),
   );
 
   const handleClick = () => {
+    console.log("🔍 Tree node clicked:", node.path, node.name); // 加這行
+
     if (node.isDirectory) {
       toggleNodeExpansion(node.path);
     } else {
       setSelectedTreeNode(node.path);
       if (node.name.endsWith(".chat.json")) {
+        console.log("📁 Setting selected chat file:", node.path); // 加這行
+
         setSelectedChatFile(node.path);
       } else {
         setSelectedPreviewFile(node.path);
@@ -256,7 +260,7 @@ const TreeNode: React.FC<{
 
   const handleNewChat = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    
+
     createEmptyChatMutation.mutate({
       targetDirectoryAbsolutePath: node.path,
     });
