@@ -478,11 +478,11 @@ const TreeNode: React.FC<{
         <span className="flex-1 truncate text-sm">{node.name}</span>
 
         {/* Context indicator for files in project context */}
-        {!node.isDirectory && Math.random() > 0.7 && (
+        {/* {!node.isDirectory && Math.random() > 0.7 && (
           <div className="mr-1" title="In Project Context">
             <FileEarmarkCheck className="text-accent text-xs" />
           </div>
-        )}
+        )} */}
 
         {/* Task status badge */}
         {isTaskFolder && taskInfo && (
