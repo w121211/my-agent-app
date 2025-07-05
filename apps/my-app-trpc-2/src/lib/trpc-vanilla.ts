@@ -1,5 +1,4 @@
-// my-app-trpc-2/src/lib/trpc-singleton.ts
-import { QueryClient } from "@tanstack/react-query";
+// my-app-trpc-2/src/lib/trpc-vanilla.ts
 import {
   createTRPCClient,
   httpBatchStreamLink,
@@ -7,21 +6,12 @@ import {
   loggerLink,
   splitLink,
 } from "@trpc/client";
-import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import SuperJSON from "superjson";
-import { AppRouter } from "@repo/events-core/server/root-router";
-
-export const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000,
-    },
-  },
-});
+import type { AppRouter } from "@repo/events-core/server/root-router";
 
 const getUrl = () => "http://localhost:3333/api/trpc";
 
-const trpcClient = createTRPCClient<AppRouter>({
+export const trpc = createTRPCClient<AppRouter>({
   links: [
     loggerLink({
       enabled: (opts) =>
@@ -40,9 +30,4 @@ const trpcClient = createTRPCClient<AppRouter>({
       }),
     }),
   ],
-});
-
-export const trpc = createTRPCOptionsProxy<AppRouter>({
-  client: trpcClient,
-  queryClient,
 });
