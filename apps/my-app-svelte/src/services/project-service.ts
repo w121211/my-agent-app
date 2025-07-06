@@ -9,12 +9,12 @@ import {
   type FolderTreeNode,
 } from "../stores/project-store";
 import {
-  selectedTreeNode,
-  selectedChatFile,
-  selectedPreviewFile,
+  setTreeSelectionState,
+  toggleNodeExpansion as toggleNodeExpansionStore,
   expandedNodes,
 } from "../stores/tree-store";
 import { setLoading, showToast } from "../stores/ui-store";
+import { chatService } from "./chat-service";
 
 interface FileWatcherEvent {
   eventType:
@@ -146,29 +146,49 @@ class ProjectService {
     await this.loadFolderTree(projectFolderId, folder.path);
   }
 
-  selectTreeNode(path: string) {
-    selectedTreeNode.set(path);
+  /**
+   * Enhanced file selection with business logic
+   * Handles different file types appropriately
+   */
+  async selectFile(filePath: string) {
+    this.logger.info("Selecting file:", filePath);
 
-    // Determine if it's a chat file or regular file
-    if (path.endsWith(".chat.json")) {
-      selectedChatFile.set(path);
-      // selectedPreviewFile.set(null);
+    if (filePath.endsWith(".chat.json")) {
+      // Chat file: Open the chat and set chat-specific state
+      setTreeSelectionState(filePath, filePath, null);
+
+      try {
+        this.logger.info("Opening chat file:", filePath);
+        await chatService.openChatFile(filePath);
+        this.logger.info("Chat file opened successfully");
+      } catch (error) {
+        this.logger.error("Failed to open chat file:", error);
+        // Fallback: Keep the selection state but show error
+        showToast(
+          `Failed to open chat file: ${error instanceof Error ? error.message : String(error)}`,
+          "error",
+        );
+      }
     } else {
-      // selectedChatFile.set(null);
-      selectedPreviewFile.set(path);
+      // Regular file: Set up for preview
+      setTreeSelectionState(filePath, null, filePath);
+      this.logger.debug("File set for preview:", filePath);
+    }
+  }
+
+  /**
+   * Handle directory/file clicks from tree components
+   */
+  async handleTreeNodeClick(node: FolderTreeNode) {
+    if (node.isDirectory) {
+      this.toggleNodeExpansion(node.path);
+    } else {
+      await this.selectFile(node.path);
     }
   }
 
   toggleNodeExpansion(nodePath: string) {
-    expandedNodes.update((nodes) => {
-      const newNodes = new Set(nodes);
-      if (newNodes.has(nodePath)) {
-        newNodes.delete(nodePath);
-      } else {
-        newNodes.add(nodePath);
-      }
-      return newNodes;
-    });
+    toggleNodeExpansionStore(nodePath);
   }
 
   // Event handlers

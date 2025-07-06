@@ -24,19 +24,26 @@ export const selectedProjectFolder = derived(
   },
 );
 
-// Helper functions for working with tree UI state
-export function selectFile(filePath: string) {
-  selectedTreeNode.set(filePath);
+// Internal store functions - used by service layer
+// These handle only the state updates, not business logic
 
-  if (filePath.endsWith(".chat.json")) {
-    selectedChatFile.set(filePath);
-    selectedPreviewFile.set(null);
-  } else {
-    selectedChatFile.set(null);
-    selectedPreviewFile.set(filePath);
-  }
+/**
+ * Internal function to update tree selection state
+ * Should be called by service layer, not directly by components
+ */
+export function setTreeSelectionState(
+  treePath: string | null,
+  chatPath: string | null,
+  previewPath: string | null,
+) {
+  selectedTreeNode.set(treePath);
+  selectedChatFile.set(chatPath);
+  selectedPreviewFile.set(previewPath);
 }
 
+/**
+ * Toggle node expansion state
+ */
 export function toggleNodeExpansion(nodePath: string) {
   expandedNodes.update((nodes) => {
     const newNodes = new Set(nodes);
@@ -49,10 +56,16 @@ export function toggleNodeExpansion(nodePath: string) {
   });
 }
 
+/**
+ * Expand a specific node
+ */
 export function expandNode(nodePath: string) {
   expandedNodes.update((nodes) => new Set(nodes).add(nodePath));
 }
 
+/**
+ * Collapse a specific node
+ */
 export function collapseNode(nodePath: string) {
   expandedNodes.update((nodes) => {
     const newNodes = new Set(nodes);
@@ -61,8 +74,29 @@ export function collapseNode(nodePath: string) {
   });
 }
 
+/**
+ * Clear all selections
+ */
 export function clearSelection() {
   selectedTreeNode.set(null);
   selectedChatFile.set(null);
   selectedPreviewFile.set(null);
+}
+
+// Legacy function - kept for backward compatibility
+// New code should use projectService.selectFile() instead
+export function selectFile(filePath: string) {
+  console.warn(
+    "selectFile() is deprecated. Use projectService.selectFile() instead.",
+  );
+
+  selectedTreeNode.set(filePath);
+
+  if (filePath.endsWith(".chat.json")) {
+    selectedChatFile.set(filePath);
+    selectedPreviewFile.set(null);
+  } else {
+    selectedChatFile.set(null);
+    selectedPreviewFile.set(filePath);
+  }
 }

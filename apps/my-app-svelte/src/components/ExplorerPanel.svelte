@@ -1,8 +1,13 @@
 <!-- apps/my-app-svelte/src/components/ExplorerPanel.svelte -->
 <script lang="ts">
   import { projectFolders, folderTrees } from "../stores/project-store";
-  import { toggleNodeExpansion, selectFile } from "../stores/tree-store";
-  import { connectionStates, isLoadingAddProjectFolder, isLoadingProjectFolders, isLoadingCreateChat, showToast } from "../stores/ui-store";
+  import {
+    connectionStates,
+    isLoadingAddProjectFolder,
+    isLoadingProjectFolders,
+    isLoadingCreateChat,
+    showToast,
+  } from "../stores/ui-store";
   import { projectService } from "../services/project-service";
   import { chatService } from "../services/chat-service";
   import TreeNode from "./TreeNode.svelte";
@@ -31,11 +36,16 @@
     }
   }
 
-  function handleNodeClick(node: any) {
-    if (node.isDirectory) {
-      toggleNodeExpansion(node.path);
-    } else {
-      selectFile(node.path);
+  /**
+   * Handle tree node clicks - now delegates to service layer
+   * Service will handle the business logic of what to do with different file types
+   */
+  async function handleNodeClick(node: any) {
+    try {
+      await projectService.handleTreeNodeClick(node);
+    } catch (error) {
+      logger.error("Failed to handle node click:", error);
+      // Error handling is already done in service, but log here for debugging
     }
   }
 
