@@ -12,7 +12,12 @@
     selectedModel,
     extractFileReferences,
   } from "../stores/chat-store";
-  import { connectionStates, isLoadingOpenChat, isLoadingSubmitMessage, showToast } from "../stores/ui-store";
+  import {
+    connectionStates,
+    isLoadingOpenChat,
+    isLoadingSubmitMessage,
+    showToast,
+  } from "../stores/ui-store";
   import { chatService } from "../services/chat-service";
   import {
     Send,
@@ -182,13 +187,13 @@
     >
       {#each $currentChatMessages as message (message.id)}
         {#if message.role === "USER"}
+          {@const fileReferences = extractFileReferences(message.content)}
           <!-- User Message -->
           <div class="group flex flex-col items-end">
             <div
               class="bg-accent/20 border-accent/30 text-foreground ml-auto max-w-xl rounded-lg border px-4 py-2"
             >
               <!-- File References -->
-              {@const fileReferences = extractFileReferences(message.content)}
               {#if fileReferences.length > 0}
                 <div class="mb-2 flex flex-wrap gap-1">
                   {#each fileReferences as ref}
@@ -262,7 +267,7 @@
 
               <!-- Artifacts (placeholder) -->
               {#if message.content.includes("artifact") || message.content.includes("wireframe")}
-                <div class="mt-2">
+                <div class="mt-2 flex items-center gap-2">
                   <button
                     onclick={() => handleMoreAction("Preview artifact")}
                     class="border-border bg-panel hover:bg-hover text-foreground flex items-center gap-2 rounded border px-3 py-1 text-sm font-medium"
@@ -270,16 +275,13 @@
                     <FileEarmark class="text-sm" />
                     wireframe.html
                     <span class="text-muted ml-1 text-xs">v3</span>
-                    <button
-                      onclick={(e) => {
-                        e.stopPropagation();
-                        handleMoreAction("Download artifact");
-                      }}
-                      class="text-muted hover:text-accent ml-2"
-                      title="Download"
-                    >
-                      <Download class="text-sm" />
-                    </button>
+                  </button>
+                  <button
+                    onclick={() => handleMoreAction("Download artifact")}
+                    class="text-muted hover:text-accent"
+                    title="Download"
+                  >
+                    <Download class="text-sm" />
                   </button>
                 </div>
               {/if}
