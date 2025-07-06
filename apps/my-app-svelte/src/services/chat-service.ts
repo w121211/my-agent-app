@@ -1,8 +1,12 @@
 // apps/my-app-svelte/src/services/chat-service.ts
 import { Logger } from "tslog";
+import { get } from "svelte/store";
 import { trpcClient } from "../lib/trpc-client";
 import { currentChat, messageInput } from "../stores/chat-store";
+import { projectFolders } from "../stores/project-store";
+import { selectFile } from "../stores/tree-store";
 import { setLoading, showToast } from "../stores/ui-store";
+import { projectService } from "./project-service";
 
 export interface ChatMessage {
   id: string;
@@ -54,10 +58,19 @@ class ChatService {
       showToast("Chat created successfully", "success");
       this.logger.info("Empty chat created:", newChat.id);
 
+      // Select the newly created chat file in the project tree
+      selectFile(newChat.absoluteFilePath);
+
+      // Refresh file tree to show the newly created chat file
+      await this.refreshProjectTreeForFile(newChat.absoluteFilePath);
+
       return newChat;
     } catch (error) {
       this.logger.error("Failed to create empty chat:", error);
-      showToast(`Failed to create chat: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to create chat: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("createChat", false);
@@ -89,10 +102,16 @@ class ChatService {
       showToast("Chat created successfully", "success");
       this.logger.info("Chat created:", newChat.id);
 
+      // Refresh file tree to show the newly created chat file
+      await this.refreshProjectTreeForFile(newChat.absoluteFilePath);
+
       return newChat;
     } catch (error) {
       this.logger.error("Failed to create chat:", error);
-      showToast(`Failed to create chat: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to create chat: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("createChat", false);
@@ -121,7 +140,10 @@ class ChatService {
       return chat;
     } catch (error) {
       this.logger.error("Failed to open chat file:", error);
-      showToast(`Failed to open chat: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to open chat: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("openChat", false);
@@ -151,7 +173,10 @@ class ChatService {
       return updatedChat;
     } catch (error) {
       this.logger.error("Failed to submit message:", error);
-      showToast(`Failed to send message: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to send message: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("submitMessage", false);
@@ -168,7 +193,10 @@ class ChatService {
       return chats;
     } catch (error) {
       this.logger.error("Failed to load chats:", error);
-      showToast(`Failed to load chats: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to load chats: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("loadChats", false);
@@ -227,6 +255,34 @@ class ChatService {
       }
       return chat;
     });
+  }
+
+  /**
+   * Find the corresponding project folder based on file path and refresh its file tree
+   */
+  private async refreshProjectTreeForFile(filePath: string) {
+    try {
+      const folders = get(projectFolders);
+      const affectedFolder = folders.find((folder) =>
+        filePath.startsWith(folder.path),
+      );
+
+      if (affectedFolder) {
+        this.logger.debug(
+          "Refreshing project tree for folder:",
+          affectedFolder.name,
+        );
+
+        await projectService.refreshFolderTree(affectedFolder.id);
+
+        this.logger.debug("Project tree refreshed successfully");
+      } else {
+        this.logger.warn("No project folder found for file:", filePath);
+      }
+    } catch (error) {
+      this.logger.error("Failed to refresh project tree:", error);
+      // Don't show error notification as this is a background operation
+    }
   }
 
   // Cleanup draft timeouts when service is destroyed

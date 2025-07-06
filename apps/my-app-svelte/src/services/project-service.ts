@@ -53,7 +53,10 @@ class ProjectService {
       await this.loadAllFolderTrees(folders);
     } catch (error) {
       this.logger.error("Failed to load project folders:", error);
-      showToast(`Failed to load project folders: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to load project folders: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("projectFolders", false);
@@ -82,7 +85,10 @@ class ProjectService {
       return newFolder;
     } catch (error) {
       this.logger.error("Failed to add project folder:", error);
-      showToast(`Failed to add project folder: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to add project folder: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("addProjectFolder", false);
@@ -115,7 +121,10 @@ class ProjectService {
       this.logger.info("Project folder removed");
     } catch (error) {
       this.logger.error("Failed to remove project folder:", error);
-      showToast(`Failed to remove project folder: ${error instanceof Error ? error.message : String(error)}`, "error");
+      showToast(
+        `Failed to remove project folder: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
       throw error;
     } finally {
       setLoading("removeProjectFolder", false);
@@ -143,9 +152,9 @@ class ProjectService {
     // Determine if it's a chat file or regular file
     if (path.endsWith(".chat.json")) {
       selectedChatFile.set(path);
-      selectedPreviewFile.set(null);
+      // selectedPreviewFile.set(null);
     } else {
-      selectedChatFile.set(null);
+      // selectedChatFile.set(null);
       selectedPreviewFile.set(path);
     }
   }
