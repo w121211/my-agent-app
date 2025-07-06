@@ -1,7 +1,7 @@
 <!-- apps/my-app-svelte/src/components/RightPanel.svelte -->
 <script lang="ts">
   import { Logger } from "tslog";
-  import { showToast, isLoading } from "../stores/ui-store";
+  import { showToast, isLoadingOpenFile } from "../stores/ui-store";
   import { selectedPreviewFile } from "../stores/tree-store";
   import { fileService } from "../services/file-service";
   import {
@@ -321,7 +321,7 @@ Text is also allowed here for additional context.`);
             </button>
             <button
               onclick={handleRefresh}
-              disabled={$isLoading("openFile")}
+              disabled={$isLoadingOpenFile}
               class="text-muted hover:text-accent disabled:opacity-50"
               title="Refresh"
             >
@@ -338,7 +338,7 @@ Text is also allowed here for additional context.`);
         </div>
 
         <!-- Content -->
-        {#if $isLoading("openFile")}
+        {#if $isLoadingOpenFile}
           <div class="flex flex-1 items-center justify-center">
             <div class="text-muted">Loading file...</div>
           </div>

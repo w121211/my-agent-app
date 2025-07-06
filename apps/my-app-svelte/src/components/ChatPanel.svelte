@@ -12,7 +12,7 @@
     selectedModel,
     extractFileReferences,
   } from "../stores/chat-store";
-  import { connectionStates, isLoading, showToast } from "../stores/ui-store";
+  import { connectionStates, isLoadingOpenChat, isLoadingSubmitMessage, showToast } from "../stores/ui-store";
   import { chatService } from "../services/chat-service";
   import {
     Send,
@@ -155,11 +155,11 @@
       <div class="ml-auto flex items-center space-x-2">
         <button
           onclick={handleRefreshChat}
-          disabled={$isLoading("openChat")}
+          disabled={$isLoadingOpenChat}
           class="bg-panel hover:bg-hover text-muted rounded px-2 py-1 text-xs disabled:opacity-50"
         >
           <ArrowClockwise class="text-xs" />
-          {$isLoading("openChat") ? "Refreshing..." : "Refresh"}
+          {$isLoadingOpenChat ? "Refreshing..." : "Refresh"}
         </button>
         <div class="text-muted text-xs">
           {#if $connectionStates.chatEvents === "connected"}
@@ -316,7 +316,7 @@
       {/each}
 
       <!-- Loading indicator for AI response -->
-      {#if $isLoading("submitMessage")}
+      {#if $isLoadingSubmitMessage}
         <div class="flex items-start">
           <span
             class="bg-accent flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
@@ -352,7 +352,7 @@
           placeholder="Type your message..."
           class="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full resize-none rounded-md border px-3 py-3 text-[15px] focus:outline-none"
           rows="3"
-          disabled={$isLoading("submitMessage")}
+          disabled={$isLoadingSubmitMessage}
         ></textarea>
       </div>
 
@@ -405,7 +405,7 @@
         <!-- Send button -->
         <button
           onclick={handleSendMessage}
-          disabled={!$messageInput.trim() || $isLoading("submitMessage")}
+          disabled={!$messageInput.trim() || $isLoadingSubmitMessage}
           class="hover:bg-accent/80 bg-accent text-white ml-auto rounded px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
           title="Send"
         >

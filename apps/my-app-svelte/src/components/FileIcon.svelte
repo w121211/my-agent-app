@@ -1,4 +1,4 @@
-<!-- apps/my-app-svelte/src/components/shared/FileIcon.svelte -->
+<!-- apps/my-app-svelte/src/components/FileIcon.svelte -->
 <script lang="ts">
   import {
     Folder,
@@ -10,12 +10,11 @@
     FileEarmarkPdf,
     FileEarmarkZip,
     ChatDots,
-    FileEarmarkCheck,
   } from "svelte-bootstrap-icons";
 
   interface FileIconProps {
     fileName: string;
-    isDirectory?: boolean;
+    isDirectory: boolean;
     isExpanded?: boolean;
     size?: string;
     className?: string;
@@ -23,7 +22,7 @@
 
   let {
     fileName,
-    isDirectory = false,
+    isDirectory,
     isExpanded = false,
     size = "text-sm",
     className = "",
@@ -48,7 +47,6 @@
       case "jsx":
       case "html":
       case "css":
-        return FileEarmarkCode;
       case "json":
         return FileEarmarkCode;
       case "md":
@@ -59,6 +57,8 @@
       case "jpeg":
       case "gif":
       case "svg":
+      case "webp":
+      case "bmp":
         return FileEarmarkImage;
       case "pdf":
         return FileEarmarkPdf;
@@ -73,14 +73,13 @@
 
   function getIconColor() {
     if (isDirectory) {
-      return "text-accent";
+      return "text-blue-400";
     }
 
     if (fileName.endsWith(".chat.json")) {
-      return "text-accent";
+      return "text-green-400";
     }
 
-    // Color based on file type
     const extension = fileName.split(".").pop()?.toLowerCase();
 
     switch (extension) {
@@ -93,24 +92,34 @@
       case "html":
         return "text-orange-400";
       case "css":
-        return "text-blue-300";
+        return "text-blue-400";
       case "json":
-        return "text-green-400";
+        return "text-yellow-400";
       case "md":
-        return "text-blue-200";
+        return "text-white";
+      case "txt":
+        return "text-muted";
       case "png":
       case "jpg":
       case "jpeg":
       case "gif":
       case "svg":
+      case "webp":
+      case "bmp":
         return "text-purple-400";
       case "pdf":
         return "text-red-400";
+      case "zip":
+      case "tar":
+      case "gz":
+        return "text-yellow-400";
       default:
         return "text-muted";
     }
   }
+
+  const IconComponent = getIconComponent();
+  const iconColor = getIconColor();
 </script>
 
-{@const IconComponent = getIconComponent()}
-<IconComponent class="{size} {getIconColor()} {className}" />
+<IconComponent class="{size} {iconColor} {className}" />

@@ -75,6 +75,37 @@ export function isLoading(operation: string) {
   );
 }
 
+// Create derived stores for commonly used loading operations
+export const isLoadingOpenChat = derived(
+  loadingStates,
+  ($loadingStates) => $loadingStates["openChat"] || false,
+);
+
+export const isLoadingSubmitMessage = derived(
+  loadingStates,
+  ($loadingStates) => $loadingStates["submitMessage"] || false,
+);
+
+export const isLoadingAddProjectFolder = derived(
+  loadingStates,
+  ($loadingStates) => $loadingStates["addProjectFolder"] || false,
+);
+
+export const isLoadingProjectFolders = derived(
+  loadingStates,
+  ($loadingStates) => $loadingStates["projectFolders"] || false,
+);
+
+export const isLoadingCreateChat = derived(
+  loadingStates,
+  ($loadingStates) => $loadingStates["createChat"] || false,
+);
+
+export const isLoadingOpenFile = derived(
+  loadingStates,
+  ($loadingStates) => $loadingStates["openFile"] || false,
+);
+
 export function clearAllLoading() {
   loadingStates.set({});
 }
