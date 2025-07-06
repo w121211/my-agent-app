@@ -61,10 +61,8 @@
       >
         <div class="flex items-start justify-between">
           <div class="flex flex-1 items-start space-x-3">
-            <svelte:component
-              this={getIconComponent(toast.type)}
-              class="text-base mt-0.5 flex-shrink-0"
-            />
+            {@const IconComponent = getIconComponent(toast.type)}
+            <IconComponent class="text-base mt-0.5 flex-shrink-0" />
             <div class="flex-1 min-w-0">
               <div class="text-foreground text-sm font-medium">
                 {getToastTitle(toast.type)}

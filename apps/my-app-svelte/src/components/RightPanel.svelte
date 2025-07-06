@@ -1,6 +1,5 @@
 <!-- apps/my-app-svelte/src/components/RightPanel.svelte -->
 <script lang="ts">
-  import { onMount } from "svelte";
   import { Logger } from "tslog";
   import { showToast, isLoading } from "../stores/ui-store";
   import { selectedPreviewFile } from "../stores/project-store";
@@ -19,14 +18,14 @@
   const logger = new Logger({ name: "RightPanel" });
 
   // Context management state
-  let projectContext = `#<demo-project>/demo.md #/path/to/outside/file.md
-Text is also allowed here for additional context.`;
-  let isEditingContext = false;
-  let contextInput = projectContext;
+  let projectContext = $state(`#<demo-project>/demo.md #/path/to/outside/file.md
+Text is also allowed here for additional context.`);
+  let isEditingContext = $state(false);
+  let contextInput = $state(projectContext);
 
   // Preview state
-  let fileContent: any = null;
-  let fileLoadError: string | null = null;
+  let fileContent = $state<any>(null);
+  let fileLoadError = $state<string | null>(null);
 
   // Mock artifacts
   const mockArtifacts = [
@@ -44,10 +43,12 @@ Text is also allowed here for additional context.`;
     },
   ];
 
-  // Load file content when preview file changes
-  $: if ($selectedPreviewFile) {
-    loadFileContent($selectedPreviewFile);
-  }
+  // Load file content when preview file changes using $effect
+  $effect(() => {
+    if ($selectedPreviewFile) {
+      loadFileContent($selectedPreviewFile);
+    }
+  });
 
   async function loadFileContent(filePath: string) {
     fileContent = null;

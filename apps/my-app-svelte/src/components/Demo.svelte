@@ -1,6 +1,5 @@
 <!-- apps/my-app-svelte/src/components/Demo.svelte -->
 <script lang="ts">
-  import { onMount } from "svelte";
   import { Logger } from "tslog";
   import {
     projectFolders,
@@ -21,6 +20,11 @@
   import { taskService } from "../services/task-service";
 
   const logger = new Logger({ name: "Demo" });
+
+  // Use $effect instead of onMount for Svelte 5
+  $effect(() => {
+    logger.info("Demo component mounted");
+  });
 
   // Example of using services and stores together
   async function handleCreateTestProject() {
@@ -56,10 +60,6 @@
       logger.error("Failed to load tasks:", error);
     }
   }
-
-  onMount(() => {
-    logger.info("Demo component mounted");
-  });
 </script>
 
 <div class="p-6 bg-background text-foreground">

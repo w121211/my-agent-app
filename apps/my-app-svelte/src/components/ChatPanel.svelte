@@ -1,6 +1,6 @@
 <!-- apps/my-app-svelte/src/components/ChatPanel.svelte -->
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { tick } from "svelte";
   import {
     hasCurrentChat,
     currentChat,
@@ -33,24 +33,28 @@
 
   const logger = new Logger({ name: "ChatPanel" });
 
-  let messageInputElement: HTMLTextAreaElement;
-  let messagesContainer: HTMLDivElement;
-
-  // Auto-scroll to bottom when new messages arrive
-  $: if ($currentChatMessages && messagesContainer) {
-    tick().then(() => {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    });
-  }
-
-  // Auto-save draft when input changes
+  let messageInputElement = $state<HTMLTextAreaElement>();
+  let messagesContainer = $state<HTMLDivElement>();
   let draftTimeout: NodeJS.Timeout;
-  $: if ($currentChat && $messageInput.trim()) {
-    clearTimeout(draftTimeout);
-    draftTimeout = setTimeout(() => {
-      chatService.savePromptDraft($currentChat!.id, $messageInput);
-    }, 1500);
-  }
+
+  // Auto-scroll to bottom when new messages arrive using $effect
+  $effect(() => {
+    if ($currentChatMessages && messagesContainer) {
+      tick().then(() => {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      });
+    }
+  });
+
+  // Auto-save draft when input changes using $effect
+  $effect(() => {
+    if ($currentChat && $messageInput.trim()) {
+      clearTimeout(draftTimeout);
+      draftTimeout = setTimeout(() => {
+        chatService.savePromptDraft($currentChat!.id, $messageInput);
+      }, 1500);
+    }
+  });
 
   async function handleSendMessage() {
     if (!$messageInput.trim() || !$currentChat) return;
@@ -125,7 +129,8 @@
     { value: "gemini", label: "Gemini 2.5 Pro" },
   ];
 
-  onMount(() => {
+  // Cleanup timeout on component destroy using $effect
+  $effect(() => {
     return () => {
       clearTimeout(draftTimeout);
     };

@@ -1,13 +1,13 @@
 <!-- apps/my-app-svelte/src/components/shared/KeyboardShortcuts.svelte -->
 <script lang="ts">
-  import { onMount } from "svelte";
   import { keyboardManager } from "../lib/keyboard";
   import { Keyboard } from "svelte-bootstrap-icons";
 
-  let showShortcuts = false;
-  let shortcuts: Array<{ key: string; description: string }> = [];
+  let showShortcuts = $state(false);
+  let shortcuts = $state<Array<{ key: string; description: string }>>([]);
 
-  onMount(() => {
+  // Use $effect instead of onMount for Svelte 5
+  $effect(() => {
     shortcuts = keyboardManager.getShortcuts().map((s) => {
       const keys = [];
       if (s.ctrlKey) keys.push("Ctrl");

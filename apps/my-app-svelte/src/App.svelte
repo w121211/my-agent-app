@@ -6,7 +6,6 @@
   // import ErrorBoundary from "./components/ErrorBoundary.svelte";
   // import DevPanel from "./components/shared/DevPanel.svelte";
   import Demo from "./components/Demo.svelte";
-  import { onMount } from "svelte";
   import { eventService } from "./services/event-service";
   // import { keyboardManager } from "./lib/keyboard";
   // import { DevelopmentTools } from "./lib/development";
@@ -18,7 +17,8 @@
   const showDemo =
     isDev && new URLSearchParams(window.location.search).has("demo");
 
-  onMount(() => {
+  // Use $effect instead of onMount for Svelte 5
+  $effect(() => {
     logger.info("App mounted, initializing systems...");
 
     // Start event subscriptions

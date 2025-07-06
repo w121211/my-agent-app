@@ -1,6 +1,5 @@
 <!-- apps/my-app-svelte/src/components/MainLayout.svelte -->
 <script lang="ts">
-  import { onMount } from "svelte";
   import { Logger } from "tslog";
   import ExplorerPanel from "./ExplorerPanel.svelte";
   import ChatPanel from "./ChatPanel.svelte";
@@ -10,20 +9,25 @@
 
   const logger = new Logger({ name: "MainLayout" });
 
-  onMount(async () => {
-    logger.info("MainLayout mounted, initializing app data...");
+  // Use $effect instead of onMount for Svelte 5
+  $effect(() => {
+    async function initializeData() {
+      logger.info("MainLayout mounted, initializing app data...");
 
-    try {
-      // Initialize core application data
-      await Promise.all([
-        projectService.loadProjectFolders(),
-        taskService.getAllTasks(),
-      ]);
+      try {
+        // Initialize core application data
+        await Promise.all([
+          projectService.loadProjectFolders(),
+          taskService.getAllTasks(),
+        ]);
 
-      logger.info("App data initialization complete");
-    } catch (error) {
-      logger.error("Failed to initialize app data:", error);
+        logger.info("App data initialization complete");
+      } catch (error) {
+        logger.error("Failed to initialize app data:", error);
+      }
     }
+
+    initializeData();
   });
 </script>
 

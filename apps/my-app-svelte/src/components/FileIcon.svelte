@@ -112,7 +112,5 @@
   }
 </script>
 
-<svelte:component
-  this={getIconComponent()}
-  class="{size} {getIconColor()} {className}"
-/>
+{@const IconComponent = getIconComponent()}
+<IconComponent class="{size} {getIconColor()} {className}" />

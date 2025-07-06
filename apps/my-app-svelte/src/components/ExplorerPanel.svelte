@@ -1,6 +1,5 @@
 <!-- apps/my-app-svelte/src/components/ExplorerPanel.svelte -->
 <script lang="ts">
-  import { onMount } from "svelte";
   import {
     projectFolders,
     folderTrees,
@@ -19,7 +18,7 @@
   // } from "$services";
   import { projectService } from "../services/project-service";
   import { chatService } from "../services/chat-service";
-  // import FileIcon from './shared/FileIcon.svelte'
+  import FileIcon from './FileIcon.svelte';
   import {
     PlusLg,
     ChevronDown,
