@@ -12,7 +12,6 @@
     toasts,
     connectionStates,
     showToast,
-    setLoading,
   } from "../stores/ui-store";
   import { chatService } from "../services/chat-service";
   import { projectService } from "../services/project-service";

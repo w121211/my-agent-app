@@ -53,6 +53,7 @@
 {#if $toasts.length > 0}
   <div class="fixed right-4 top-4 z-50 flex flex-col gap-2">
     {#each $toasts as toast (toast.id)}
+      {@const IconComponent = getIconComponent(toast.type)}
       <div
         class="w-full max-w-sm rounded-lg border p-4 shadow-lg animate-in fade-in slide-in-from-top-2 duration-300 {getToastClassName(
           toast.type,
@@ -61,7 +62,6 @@
       >
         <div class="flex items-start justify-between">
           <div class="flex flex-1 items-start space-x-3">
-            {@const IconComponent = getIconComponent(toast.type)}
             <IconComponent class="text-base mt-0.5 flex-shrink-0" />
             <div class="flex-1 min-w-0">
               <div class="text-foreground text-sm font-medium">
