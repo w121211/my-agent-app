@@ -14,7 +14,6 @@
     showToast,
     setLoading,
   } from "../stores/ui-store";
-  // import { ProjectService, ChatService, TaskService } from "$services";
   import { chatService } from "../services/chat-service";
   import { projectService } from "../services/project-service";
   import { taskService } from "../services/task-service";
@@ -168,7 +167,8 @@
       <li>✅ Part 1: Project Setup + Core Infrastructure</li>
       <li>✅ Part 2: Service Layer (Business Logic + tRPC)</li>
       <li>✅ Part 3: Store Layer (State Management)</li>
-      <li>🔄 Part 4: Component Layer (Full UI Implementation)</li>
+      <li>✅ Part 4: Store Refactoring (Split project/tree stores)</li>
+      <li>🔄 Part 5: Component Layer (Full UI Implementation)</li>
     </ul>
   </div>
 </div>

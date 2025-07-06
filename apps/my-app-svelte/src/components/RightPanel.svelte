@@ -2,7 +2,7 @@
 <script lang="ts">
   import { Logger } from "tslog";
   import { showToast, isLoading } from "../stores/ui-store";
-  import { selectedPreviewFile } from "../stores/project-store";
+  import { selectedPreviewFile } from "../stores/tree-store";
   import { fileService } from "../services/file-service";
   import {
     Pencil,

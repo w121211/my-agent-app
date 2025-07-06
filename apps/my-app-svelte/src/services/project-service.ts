@@ -5,25 +5,16 @@ import { trpcClient } from "../lib/trpc-client";
 import {
   projectFolders,
   folderTrees,
+  type ProjectFolder,
+  type FolderTreeNode,
+} from "../stores/project-store";
+import {
   selectedTreeNode,
   selectedChatFile,
   selectedPreviewFile,
   expandedNodes,
-} from "../stores/project-store";
+} from "../stores/tree-store";
 import { setLoading, showToast } from "../stores/ui-store";
-
-export interface ProjectFolder {
-  id: string;
-  name: string;
-  path: string;
-}
-
-export interface FolderTreeNode {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  children?: FolderTreeNode[];
-}
 
 interface FileWatcherEvent {
   eventType:

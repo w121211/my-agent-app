@@ -1,24 +1,17 @@
 <!-- apps/my-app-svelte/src/components/ExplorerPanel.svelte -->
 <script lang="ts">
+  import { projectFolders, folderTrees } from "../stores/project-store";
   import {
-    projectFolders,
-    folderTrees,
     expandedNodes,
     selectedTreeNode,
     toggleNodeExpansion,
     selectFile,
-  } from "../stores/project-store";
+  } from "../stores/tree-store";
   import { connectionStates, isLoading, showToast } from "../stores/ui-store";
   import { tasksByPath } from "../stores/task-store";
-  // import {
-  //   ProjectService,
-  //   ChatService,
-  //   TaskService,
-  //   FileService,
-  // } from "$services";
   import { projectService } from "../services/project-service";
   import { chatService } from "../services/chat-service";
-  import FileIcon from './FileIcon.svelte';
+  import FileIcon from "./FileIcon.svelte";
   import {
     PlusLg,
     ChevronDown,

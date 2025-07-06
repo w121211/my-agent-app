@@ -1,10 +1,5 @@
 // apps/my-app-svelte/src/lib/keyboard.ts
 import { get } from "svelte/store";
-// import {
-//   selectedTreeNode,
-//   selectedChatFile,
-//   selectedPreviewFile,
-// } from "$stores";
 import {
   selectedTreeNode,
   selectedChatFile,
