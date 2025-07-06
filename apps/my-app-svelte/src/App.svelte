@@ -1,11 +1,11 @@
 <!-- apps/my-app-svelte/src/App.svelte -->
 <script lang="ts">
   import { Logger } from "tslog";
-  // import MainLayout from "./components/MainLayout.svelte";
+  import Demo from "./components/Demo.svelte";
+  import MainLayout from "./components/MainLayout.svelte";
   import ToastProvider from "./components/ToastProvider.svelte";
   // import ErrorBoundary from "./components/ErrorBoundary.svelte";
   // import DevPanel from "./components/shared/DevPanel.svelte";
-  import Demo from "./components/Demo.svelte";
   import { eventService } from "./services/event-service";
   // import { keyboardManager } from "./lib/keyboard";
   // import { DevelopmentTools } from "./lib/development";
@@ -25,9 +25,9 @@
     eventService.start();
 
     // Initialize development tools in dev mode
-    if (isDev) {
-      // DevelopmentTools.getInstance();
-    }
+    // if (isDev) {
+    //   DevelopmentTools.getInstance();
+    // }
 
     // Setup keyboard shortcuts
     // keyboardManager.enable();
@@ -44,14 +44,15 @@
     logger.error("Application error:", error, errorInfo);
 
     // Send error to monitoring service in production
-    if (import.meta.env.PROD) {
-      // sendErrorToMonitoring(error, errorInfo)
-    }
+    // if (import.meta.env.PROD) {
+    //   sendErrorToMonitoring(error, errorInfo)
+    // }
   }
 </script>
 
 <ToastProvider>
-  <Demo />
+  <!-- <Demo /> -->
+  <MainLayout />
 </ToastProvider>
 
 <!-- <ErrorBoundary onError={handleError}>

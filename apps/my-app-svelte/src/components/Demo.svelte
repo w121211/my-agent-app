@@ -27,7 +27,9 @@
   // Example of using services and stores together
   async function handleCreateTestProject() {
     try {
-      const testPath = "/tmp/test-project";
+      // const testPath = "/tmp/test-project";
+      const testPath =
+        "/Users/cw/Documents/GitHub/my-agent-app/packages/events-core/my-demo-space/project-demo";
       await projectService.addProjectFolder(testPath);
       logger.info("Test project created");
     } catch (error) {
