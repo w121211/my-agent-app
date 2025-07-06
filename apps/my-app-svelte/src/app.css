@@ -1,0 +1,21 @@
+/* apps/my-app-svelte/src/app.css */
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, "Segoe UI", Arial, sans-serif;
+  
+  /* Dark theme colors - matching React version */
+  --color-background: #0d1117;
+  --color-surface: #161b22;
+  --color-panel: #161b22;
+  --color-border: #30363d;
+  --color-foreground: #e6edf3;
+  --color-muted: #8b949e;
+  --color-accent: #58a6ff;
+  --color-hover: #21262d;
+  --color-selected: #2f363e;
+  
+  /* Input colors */
+  --color-input-background: #0d1117;
+  --color-input-border: #30363d;
+}
