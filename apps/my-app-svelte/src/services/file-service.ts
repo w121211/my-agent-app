@@ -26,7 +26,7 @@ class FileService {
       return fileContent;
     } catch (error) {
       this.logger.error("Failed to open file:", error);
-      showToast(`Failed to open file: ${error.message}`, "error");
+      showToast(`Failed to open file: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("openFile", false);
@@ -44,7 +44,7 @@ class FileService {
       return fileType;
     } catch (error) {
       this.logger.error("Failed to get file type:", error);
-      showToast(`Failed to get file type: ${error.message}`, "error");
+      showToast(`Failed to get file type: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     }
   }

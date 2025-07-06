@@ -127,7 +127,7 @@ export function showToast(
   toasts.update((currentToasts) => [...currentToasts, toast]);
 
   // Auto-remove non-error toasts after duration
-  if (toast.duration > 0) {
+  if (toast.duration && toast.duration > 0) {
     setTimeout(() => {
       removeToast(toast.id);
     }, toast.duration);

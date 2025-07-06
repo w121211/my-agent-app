@@ -64,7 +64,7 @@ class TaskService {
       };
     } catch (error) {
       this.logger.error("Failed to create task:", error);
-      showToast(`Failed to create task: ${error.message}`, "error");
+      showToast(`Failed to create task: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("createTask", false);
@@ -89,7 +89,7 @@ class TaskService {
       return updatedTask;
     } catch (error) {
       this.logger.error("Failed to start task:", error);
-      showToast(`Failed to start task: ${error.message}`, "error");
+      showToast(`Failed to start task: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("startTask", false);
@@ -107,7 +107,7 @@ class TaskService {
       return task;
     } catch (error) {
       this.logger.error("Failed to get task by ID:", error);
-      showToast(`Failed to get task: ${error.message}`, "error");
+      showToast(`Failed to get task: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     }
   }
@@ -135,7 +135,7 @@ class TaskService {
       return allTasks;
     } catch (error) {
       this.logger.error("Failed to load tasks:", error);
-      showToast(`Failed to load tasks: ${error.message}`, "error");
+      showToast(`Failed to load tasks: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("loadTasks", false);

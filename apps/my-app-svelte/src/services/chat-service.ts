@@ -57,7 +57,7 @@ class ChatService {
       return newChat;
     } catch (error) {
       this.logger.error("Failed to create empty chat:", error);
-      showToast(`Failed to create chat: ${error.message}`, "error");
+      showToast(`Failed to create chat: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("createChat", false);
@@ -92,7 +92,7 @@ class ChatService {
       return newChat;
     } catch (error) {
       this.logger.error("Failed to create chat:", error);
-      showToast(`Failed to create chat: ${error.message}`, "error");
+      showToast(`Failed to create chat: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("createChat", false);
@@ -121,7 +121,7 @@ class ChatService {
       return chat;
     } catch (error) {
       this.logger.error("Failed to open chat file:", error);
-      showToast(`Failed to open chat: ${error.message}`, "error");
+      showToast(`Failed to open chat: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("openChat", false);
@@ -151,7 +151,7 @@ class ChatService {
       return updatedChat;
     } catch (error) {
       this.logger.error("Failed to submit message:", error);
-      showToast(`Failed to send message: ${error.message}`, "error");
+      showToast(`Failed to send message: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("submitMessage", false);
@@ -168,7 +168,7 @@ class ChatService {
       return chats;
     } catch (error) {
       this.logger.error("Failed to load chats:", error);
-      showToast(`Failed to load chats: ${error.message}`, "error");
+      showToast(`Failed to load chats: ${error instanceof Error ? error.message : String(error)}`, "error");
       throw error;
     } finally {
       setLoading("loadChats", false);
