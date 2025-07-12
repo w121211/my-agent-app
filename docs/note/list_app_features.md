@@ -1,4 +1,4 @@
-<!-- Prompt Logs. Backup and reference only.
+<!-- Prompt logs - for record-keeping only, do not reference.
 
 # 核心功能
 
