@@ -46,6 +46,163 @@ Chat
 AI response
 - cache 機制
 
+
+讓我們討論，不要修改
+
+FileSystemService
+- 併入 FileService or ProjectFolderService？
+
+Chat
+- chat id vs absolute path，因為目前沒有資料庫，且 chat file 可以 clone，absolute path 似乎才是獨立的？
+
+Chat mode
+- 需要專門給一個區塊，跟 agent mode 一樣
+- 包含 submit message 這些
+- 總之就是 chat 基本功能
+
+AgentService.startAgentLoop
+- 簡單說明如何做？
+
+AgentService.checkHumanInputNeeded(response)
+- 我覺得這個不需要
+
+FilePreviewService
+- -> FileService ?
+
+FilePreviewService.renderMarkdown(content)
+- 需要嗎？
+- 可以前端 render
+
+FilePreviewService.convertToPreviewFormat(filePath, fileType) - 檔案轉換預覽格式
+FilePreviewService.extractTextContent(filePath) - 提取文字內容
+FilePreviewService.generatePreviewMetadata(filePath) - 預覽元資料
+- 我覺得都不需要
+- 過度設計了 -> MVP
+
+File Reference (@)
+- 有許多地方都做了這個功能 -> 重複了
+- 要用 file reference service 還是 message processor 來處理？
+    - 這可能更多的是跟整個 code 架構、分工有關
+
+MessageProcessor
+- 在我來看他主要是負責 pre, post process message？
+
+Chat
+- 依賴的 reference files, triggers（進階，暫時不做）
+    - 如果有變動，即可重跑
+
+AI response
+- cache 機制
+
+
+請參考 think_chat_service.md
+檢查 list_app_features_to_methods.md
+- 提出是否有需要修改的地方？
+
+先不要管 task
+我只需要 service method lists，實現細節不需放在 list_app_features_to_methods.md
+
+
+我覺得你有些地方設計的過度複雜了，例如
+- ChatExecutionService.runChatWithInputs -> 所謂的 inputs 到底是什麼？就算有 inputs 應該都是定義在 chat file 裡，在 run chat file 時自然會去處理那些 inputs，根本不需要額外增加 method
+- ChatBackupService.createRunBackup 直接在 ChatService.runChat 中調用 ChatBackupService.createBackup 不就好了？
+
+我只是舉例，請以此方式檢查
+
+Ok
+請更新 list_app_features_to_methods.md
+- 給予適當註解，簡單說明這個 method 可以用於實現哪些 features（不一定只有一個），為什麼、如何做
+    - 例如，Summarize 等 extension 功能，但本質就是 run chat，可以通過 runWorkflow 實現
+    - 盡量用說明的，不要寫 code
+
+請再檢查一遍
+
+註
+- file reference 語法已經改成用 @{file_path}
+
+
+
+
+Prompt injection service
+- 可以直接放在 message process service 中？
+
+Workflow service 跟 extension service
+- 這兩個分別負責什麼？為什麼要有兩個 service？
+
+另外，像是
+`- **ToolService** _(新增 - 核心功能)_`
+- 不要特別標註這次修改了什麼，例如`新增`，就直接改
+
+{{inputData}} 的一點思考
+input data 可以被記錄在 chat file 中？還是完全是 chat file 未知？
+- 如果記錄在 chat file 中，例如 @{filepath} @{json_file_path:key}，這就完全可以透過message processor來處理 （read file, convert, parse, …)
+- 假設這個就是獨立於 chat file 之外，對 chat file 來講他完全不能知道這個 input data 是什麼
+    - 我想到的是，在 workflow 的情況下，input data -> chat-file-node
+    - 所以在此情況下，chat file 是對 input data完全無知，他只能用 {{inputData}} 來表示
+
+
+
+> - `ChatService.branchFromMessage(chatPath, messageId, newMessage, correlationId)`
+    - _用於：_ 編輯 message 時自動分支，保留原版本
+    - _如何實現：_ 原檔案重命名為 backup → 新檔案使用原名稱 → 從指定訊息開始新分支
+
+改叫 cloneChat or brachChat？
+- 可以指定分支的 message，如果沒給，就是clone a chat
+
+
+
+
+
+
+
+
+
+目標：參考 list_app_features_to_methods_v1_2.md，實現p0
+
+請先列出開發這個 app 時需要注意的點
+- 例如，以 absolute file path 為主要標識，非 id，例如 chat file
+- …
+
+
+
+
+
+
+
+
+
+
+
+請先讓我們討論如何實裝，純討論，不要實裝
+- 你會怎樣設計？簡單說明
+- MVP，不要過度設計
+
+
+1. 把 ChatBackupService 放到p0，備份直接用 backup service
+2. Tool service 先 mock，不用實際實裝
+3. 要叫 execution or run?
+
+
+
+FileReferenceService.injectFileContent(message, projectPath) - 實際檔案內容注入
+MessageProcessor.injectFileReferences(message, projectPath) - 注入檔案引用內容
+- 重複了
+- MessageProcessor.injectFileReferences
+
+
+
+
+
+
+ExtensionService.executeSummarize(chatId), ExtensionService.executeWhatsNext(chatId)
+- 假設目前只允許 chat file 這種形態的 extension，用一個統一的 method 來做？
+- eg runExtension(extensionChatAbsolutePath, currentChatAbsolutePath, …)
+    - currentChatAbsolutePath -> 有哪些適合的名稱？
+
+WorkflowService.runWorkflow(workflowPath, inputData)
+- 這是指 task？
+
+
  -->
 
 ## 📁 **Project Folder / Explorer**

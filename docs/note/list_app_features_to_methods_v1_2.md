@@ -264,9 +264,9 @@
 
 ### **P1 - 第二階段**
 
-2. **FileService 搜尋功能** - 支援 @ 引用的自動完成
-3. **AgentModeService** - 基於 runChat 的自動循環執行
-4. **AIResponseCache** - 效能優化，避免重複 AI 調用
+1. **FileService 搜尋功能** - 支援 @ 引用的自動完成
+2. **AgentModeService** - 基於 runChat 的自動循環執行
+3. **AIResponseCache** - 效能優化，避免重複 AI 調用
 
 ### **P2 - 優化階段**
 

@@ -12,9 +12,12 @@
     "test": "jest",
     "lint": "eslint . --max-warnings 0",
     "check-types": "tsc --noEmit",
-    "example": "tsx examples/example-script.ts"
+    "example": "tsx examples/example-script.ts",
+    "chat-engine-demo": "tsx src/chat-engine/demo.ts",
+    "test-with-api": "tsx src/chat-engine/test-with-api.ts"
   },
   "dependencies": {
+    "@google/genai": "^1.9.0",
     "@trpc/client": "^11.1.4",
     "@trpc/server": "^11.1.4",
     "chokidar": "^4.0.3",
