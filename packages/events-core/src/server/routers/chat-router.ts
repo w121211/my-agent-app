@@ -1,6 +1,7 @@
 // packages/events-core/src/server/routers/chat-router.ts
 import { z } from "zod";
 import { ChatService, ChatMode } from "../../services/chat-service.js";
+import { ChatClient } from "../../services/chat-engine/chat-client.js";
 import { router, publicProcedure } from "../trpc-server.js";
 
 // Chat schemas
@@ -25,7 +26,7 @@ export const updatePromptDraftSchema = z.object({
   correlationId: z.string().optional(),
 });
 
-export const submitMessageSchema = z.object({
+export const sendMessageSchema = z.object({
   chatId: z.string().uuid(),
   message: z.string(),
   attachments: z
@@ -39,6 +40,17 @@ export const submitMessageSchema = z.object({
   correlationId: z.string().optional(),
 });
 
+export const sendToolConfirmationSchema = z.object({
+  chatId: z.string().uuid(),
+  toolCalls: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    arguments: z.record(z.any()),
+    needsConfirmation: z.boolean(),
+  })),
+  correlationId: z.string().optional(),
+});
+
 export const chatIdSchema = z.object({
   chatId: z.string().uuid(),
   correlationId: z.string().optional(),
@@ -49,12 +61,12 @@ export const openFileSchema = z.object({
   correlationId: z.string().optional(),
 });
 
-export function createChatRouter(chatService: ChatService) {
+export function createChatRouter(chatClient: ChatClient) {
   return router({
     createChat: publicProcedure
       .input(createNewChatSchema)
       .mutation(async ({ input }) => {
-        return chatService.createChat(
+        return chatClient.createChat(
           input.targetDirectoryAbsolutePath,
           input.newTask,
           input.mode,
@@ -68,7 +80,7 @@ export function createChatRouter(chatService: ChatService) {
     createEmptyChat: publicProcedure
       .input(createEmptyChatSchema)
       .mutation(async ({ input }) => {
-        return chatService.createEmptyChat(
+        return chatClient.createEmptyChat(
           input.targetDirectoryAbsolutePath,
           input.correlationId
         );
@@ -77,36 +89,49 @@ export function createChatRouter(chatService: ChatService) {
     updatePromptDraft: publicProcedure
       .input(updatePromptDraftSchema)
       .mutation(async ({ input }) => {
-        return chatService.updatePromptDraft(
+        return chatClient.updatePromptDraft(
           input.chatId,
           input.promptDraft,
           input.correlationId
         );
       }),
 
-    submitMessage: publicProcedure
-      .input(submitMessageSchema)
-      .mutation(async ({ input }) => {
-        return chatService.submitMessage(
+    sendMessage: publicProcedure
+      .input(sendMessageSchema)
+      .mutation(async ({ input, signal }) => {
+        const chatSession = await chatClient.getSession(input.chatId);
+        const result = await chatSession.runTurn({
+          type: 'user_message',
+          content: input.message,
+          attachments: input.attachments,
+        }, { signal });
+        
+        await chatClient.saveSession();
+        return result;
+      }),
+
+    sendToolConfirmation: publicProcedure
+      .input(sendToolConfirmationSchema)
+      .mutation(async ({ input, signal }) => {
+        return chatClient.sendToolConfirmation(
           input.chatId,
-          input.message,
-          input.attachments,
+          input.toolCalls,
           input.correlationId
         );
       }),
 
     getById: publicProcedure.input(chatIdSchema).query(async ({ input }) => {
-      return chatService.getChatById(input.chatId);
+      return chatClient.getChatById(input.chatId);
     }),
 
     getAll: publicProcedure.query(async () => {
-      return chatService.getAllChats();
+      return chatClient.getAllChats();
     }),
 
     openChatFile: publicProcedure
       .input(openFileSchema)
       .query(async ({ input }) => {
-        return chatService.openChatFile(input.filePath, input.correlationId);
+        return chatClient.openChatFile(input.filePath, input.correlationId);
       }),
   });
 }

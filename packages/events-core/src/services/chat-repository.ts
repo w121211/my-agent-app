@@ -11,6 +11,7 @@ import {
   listDirectory,
 } from "../file-helpers.js";
 import type { Chat, ChatMessage, ChatStatus, ChatMetadata } from "./chat-service.js";
+import type { SerializableChat, ChatFileStatus } from "./chat-engine/chat-session.js";
 
 export class ChatFileError extends Error {
   constructor(message: string) {
@@ -55,6 +56,11 @@ const ChatFileDataSchema = z.object({
   updatedAt: z.string().transform((val) => new Date(val)),
   messages: z.array(ChatMessageSchema),
   metadata: ChatMetadataSchema.optional(),
+  // Optional fields for new Chat class compatibility
+  status: z.enum(['idle', 'processing', 'waiting_confirmation', 'max_turns_reached']).optional(),
+  fileStatus: z.enum(['ACTIVE', 'ARCHIVED']).optional(),
+  currentTurn: z.number().optional(),
+  maxTurns: z.number().optional(),
 });
 
 // Type derived from schema
@@ -252,6 +258,26 @@ export class ChatRepository {
     await writeJsonFile(absoluteFilePath, chatFile);
   }
 
+  async saveSerializableChat(
+    chat: SerializableChat,
+    absoluteFilePath: string
+  ): Promise<void> {
+    const chatFile = {
+      _type: "chat" as const,
+      id: chat.id,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+      messages: chat.messages,
+      metadata: chat.metadata,
+      status: chat.status,
+      fileStatus: chat.fileStatus,
+      currentTurn: chat.currentTurn,
+      maxTurns: chat.maxTurns,
+    };
+
+    await writeJsonFile(absoluteFilePath, chatFile);
+  }
+
   private async readChatFromFile(absoluteFilePath: string): Promise<Chat> {
     const fileContent = await readJsonFile<unknown>(absoluteFilePath);
 
@@ -263,6 +289,28 @@ export class ChatRepository {
       absoluteFilePath: absoluteFilePath,
       messages: chatFileData.messages,
       status: "ACTIVE" as ChatStatus, // Always set status to ACTIVE when loading
+      createdAt: chatFileData.createdAt,
+      updatedAt: chatFileData.updatedAt,
+      metadata: chatFileData.metadata,
+    };
+
+    return chat;
+  }
+
+  async readSerializableChatFromFile(absoluteFilePath: string): Promise<SerializableChat> {
+    const fileContent = await readJsonFile<unknown>(absoluteFilePath);
+
+    // Parse and validate the file content using Zod
+    const chatFileData = ChatFileDataSchema.parse(fileContent);
+
+    const chat: SerializableChat = {
+      id: chatFileData.id,
+      absoluteFilePath: absoluteFilePath,
+      messages: chatFileData.messages,
+      status: chatFileData.status || 'idle',
+      fileStatus: chatFileData.fileStatus || 'ACTIVE',
+      currentTurn: chatFileData.currentTurn || 0,
+      maxTurns: chatFileData.maxTurns || 20,
       createdAt: chatFileData.createdAt,
       updatedAt: chatFileData.updatedAt,
       metadata: chatFileData.metadata,

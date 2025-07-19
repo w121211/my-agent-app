@@ -2,6 +2,39 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Guidelines
+
+- **No backward compatibility required** - Always write the best, most modern code without considering legacy support
+- **MVP approach:**
+  - Keep development lean and simple, avoid over-engineering
+  - Don't reinvent the wheel
+- **Technology stack:**
+  - Backend: Node.js with TypeScript, tRPC
+  - Frontend: Svelte v5, TypeScript, vanilla tRPC
+  - Logger: tslog (for both backend & frontend)
+  - UI: Tailwind CSS v4, Shadcn-svelte (for svelte v5 & tailwind v4), bootstrap icons (svelte-bootstrap-icons)
+- **Core principles:**
+  - **Explicit is better than implicit** - Always favor explicit declarations, clear function signatures, and obvious code intent over clever shortcuts
+- **TypeScript best practices:**
+  - Ensure full type safety
+  - Avoid using `as` type assertions
+  - Follow strict TypeScript conventions
+  - Explicitly type function parameters and return values
+  - Use explicit imports/exports instead of wildcards
+- **Svelte v5 best practices:**
+- **Code organization:**
+  - No centralized type/schema/event definition files
+  - Define types, schemas, and events directly in their responsible files (services, repositories, routes)
+- **Error handling:**
+  - Minimal error handling approach
+  - Avoid try/catch blocks - let errors bubble up naturally
+  - Throw errors directly when needed
+- **Documentation:**
+  - Add comments only when necessary
+  - Keep comments clear, concise, and lean
+  - Include file relative path as comment on first line: `// path/to/file.ts`
+- **Output language:** English only
+
 ## Development Commands
 
 This is a Turborepo monorepo using pnpm as the package manager.
@@ -29,6 +62,7 @@ Navigate to individual directories to run package-specific commands:
 - `pnpm dlx syncpack list-mismatches` - Check package version mismatches
 - `pnpm dlx syncpack fix-mismatches --types '!local'` - Fix version mismatches
 - `pnpm tsx packages/events-core/examples/trpc-server-example.ts` - Start tRPC server example
+- `git ls-files | sort | tree --fromfile` - Display directory tree using .gitignore
 
 ## Architecture Overview
 
@@ -45,21 +79,22 @@ This is an event-driven AI chat application built as a monorepo with the followi
   - `@repo/typescript-config`: TypeScript configurations
 
 ### Key Technologies
-- **Event-driven architecture**: Uses custom event bus system (`event-bus.ts`, `event-types.ts`)
+- **Event-driven architecture**: CQRS-inspired event naming with custom event bus system (`event-bus.ts`, `event-types.ts`)
 - **tRPC**: Type-safe API layer with routers for chat, files, tasks, project folders, and user settings
 - **WebSocket**: Real-time communication for events
-- **Next.js 15**: React framework with App Router and Turbopack (my-app-trpc-2)
+- **Next.js 15**: React 19 framework with App Router and Turbopack (my-app-trpc-2)
 - **Svelte 5**: Modern reactive framework with Vite (my-app-svelte)
-- **TypeScript**: Full type safety across the codebase
+- **TypeScript**: Full type safety across the codebase with ES modules (`"type": "module"`)
 - **Zustand**: State management in Next.js frontend
 - **TanStack Query**: Data fetching and caching with tRPC integration (Next.js app)
 - **Radix UI**: Headless UI components (Dialog, Toast, Select, Dropdown) for React app
 - **React Bootstrap Icons**: Icon library (Next.js app)
 - **Svelte Bootstrap Icons**: Icon library (Svelte app)
-- **Jest**: Testing framework for events-core package
+- **Jest**: Testing framework for events-core package with snapshot testing
 - **Vitest**: Testing framework for Svelte app with Playwright browser testing
 - **Tailwind CSS v4**: Styling with PostCSS integration across both apps
 - **Chokidar**: File system watching
+- **tslog**: Logging for both backend & frontend
 
 ### Core Event System
 The application is built around an event-driven architecture:
@@ -79,11 +114,12 @@ Located in `packages/events-core/src/services/`:
 - Repository pattern for data persistence (chat, task, user-settings repositories)
 
 ### Frontend Architecture
-- **Next.js App (my-app-trpc-2)**: Three-panel layout (Explorer, Chat, Preview) with React components, Zustand state management, and TanStack Query for data fetching
+- **Next.js App (my-app-trpc-2)**: Three-panel layout (Explorer, Chat, Preview) with React 19 components, Zustand state management, and TanStack Query for data fetching
 - **Svelte App (my-app-svelte)**: Similar three-panel layout implemented with Svelte 5 components and custom stores
 - Both apps use tRPC client for type-safe API communication
 - Event-driven UI updates via WebSocket subscriptions to events-core
 - Shared component patterns and styling with Tailwind CSS v4
+- Both frontends implement identical functionality using different frameworks
 
 ## Package Management
 - Uses pnpm workspaces with Turborepo for build orchestration
@@ -92,13 +128,14 @@ Located in `packages/events-core/src/services/`:
 
 ## Development Notes
 - Event-driven design inspired by CQRS patterns with clear separation between client and server events
-- File operations are abstracted through services layer with comprehensive error handling
+- File operations are abstracted through services layer with minimal error handling approach (let errors bubble up)
 - WebSocket server can be started independently for testing via `pnpm tsx packages/events-core/examples/trpc-server-example.ts`
 - Jest test suite covers events-core services and integration scenarios with snapshot testing
 - Vitest with Playwright browser testing used for Svelte app components
 - Uses ES modules (`"type": "module"`) throughout the codebase
 - All packages use workspace protocol (`workspace:*`) for internal dependencies
-- Both frontend apps implement similar functionality using different frameworks (React vs Svelte)
+- Both frontend apps implement identical functionality using different frameworks (React vs Svelte)
+- Chat engine located in `packages/events-core/src/chat-engine/` with session management and turn tracking
 
 ## File Structure Patterns
 - Tests are co-located with source code in dedicated `tests/` directories

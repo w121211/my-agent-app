@@ -4,6 +4,8 @@ export type SubtaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED"
 
 export type ChatStatus = "ACTIVE" | "CLOSED"
 
+export type ChatSessionStatus = 'idle' | 'processing' | 'waiting_confirmation' | 'max_turns_reached'
+
 export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR"
 
 export type ChatMode = "chat" | "agent"

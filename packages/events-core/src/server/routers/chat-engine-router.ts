@@ -5,7 +5,7 @@ import { router, publicProcedure } from "../trpc-server.js";
 import { 
   ChatEngineConfig, 
   ChatClient,
-  type ChatConfig,
+  type ChatSessionConfig,
   type SystemConfig,
   type ChatStreamEvent 
 } from "../../chat-engine/index.js";
@@ -59,17 +59,15 @@ export function createChatEngineRouter() {
 
         const chatClient = new ChatClient(chatEngineConfig);
 
-        const sessionConfig = chatEngineConfig.createSessionConfig(
-          input.correlationId || `session_${Date.now()}`,
-          signal
-        );
+        const correlationId = input.correlationId || `session_${Date.now()}`;
 
         for await (const event of chatClient.sendMessageStream(
           input.message,
-          input.chatConfig,
-          sessionConfig,
+          correlationId,
+          signal,
           undefined,
-          input.initialHistory
+          input.initialHistory,
+          input.chatConfig
         )) {
           yield event;
         }
@@ -100,16 +98,15 @@ export function createChatEngineRouter() {
 
         const chatClient = new ChatClient(chatEngineConfig);
 
-        const sessionConfig = chatEngineConfig.createSessionConfig(
-          input.correlationId || `json_${Date.now()}`,
-          signal || new AbortController().signal
-        );
+        const correlationId = input.correlationId || `json_${Date.now()}`;
+        const abortSignal = signal || new AbortController().signal;
 
         return chatClient.generateJson(
           input.message,
           input.schema,
           input.chatConfig,
-          sessionConfig,
+          correlationId,
+          abortSignal,
           input.initialHistory
         );
       }),
