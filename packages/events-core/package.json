@@ -15,7 +15,8 @@
     "example": "tsx examples/example-script.ts",
     "chat-engine-demo": "tsx src/chat-engine/demo.ts",
     "content-generator-demo": "tsx src/services/content-generator/demo.ts",
-    "test-with-api": "tsx src/chat-engine/test-with-api.ts"
+    "test-with-api": "tsx src/chat-engine/test-with-api.ts",
+    "trpc-server": "tsx --watch src/server/trpc-server.ts"
   },
   "dependencies": {
     "@google/genai": "^1.9.0",

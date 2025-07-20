@@ -56,6 +56,10 @@ pnpm format
 
 # Svelte app (my-app-svelte)
 cd apps/my-app-svelte
+# First start the tRPC server
+cd ../packages/events-core && pnpm run trpc-server
+# Then in another terminal, start the frontend
+cd apps/my-app-svelte
 pnpm dev        # Start development server
 pnpm build      # Build for production
 pnpm test       # Run tests

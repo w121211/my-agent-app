@@ -197,18 +197,28 @@ class ProjectService {
       "Handling file event:",
       event.eventType,
       event.absoluteFilePath,
+      "isDirectory:",
+      event.isDirectory,
     );
 
     // Find which project folder this file belongs to
     const folders = get(projectFolders);
     const affectedFolder = folders.find((folder) =>
-      event.absoluteFilePath.startsWith(folder.path),
+      event.absoluteFilePath.startsWith(folder.path + "/") || 
+      event.absoluteFilePath === folder.path,
     );
 
     if (!affectedFolder) {
       this.logger.debug("File event not for any tracked project folder");
       return;
     }
+
+    this.logger.debug(
+      "Found affected folder:",
+      affectedFolder.name,
+      "path:",
+      affectedFolder.path,
+    );
 
     // Update folder tree directly
     if (["add", "addDir", "unlink", "unlinkDir"].includes(event.eventType)) {
@@ -217,10 +227,15 @@ class ProjectService {
 
       if (currentTree) {
         const updatedTree = this.updateTreeNodeDirectly(currentTree, event);
+        
         folderTrees.update((trees) => ({
           ...trees,
           [affectedFolder.id]: updatedTree,
         }));
+        
+        this.logger.debug("Tree updated in store for folder:", affectedFolder.name);
+      } else {
+        this.logger.warn("No current tree found for affected folder:", affectedFolder.id);
       }
     }
   }
@@ -265,6 +280,8 @@ class ProjectService {
   ): FolderTreeNode {
     const filePath = fileEvent.absoluteFilePath;
 
+    this.logger.debug("updateTreeNodeDirectly called with:", filePath, tree.path, fileEvent.eventType);
+
     // Clone the tree to avoid mutating original
     const newTree = { ...tree };
 
@@ -273,17 +290,24 @@ class ProjectService {
       node: FolderTreeNode,
       pathSegments: string[],
     ): FolderTreeNode => {
+      this.logger.debug("updateNode called with pathSegments:", pathSegments);
+      
       if (pathSegments.length === 0) return node;
 
       const [currentSegment, ...remainingSegments] = pathSegments;
+      this.logger.debug("currentSegment:", currentSegment, "remaining:", remainingSegments);
 
       // If this is the target file/folder
       if (remainingSegments.length === 0) {
+        this.logger.debug("Target reached, updating node:", node.name);
+        
         if (!node.children) node.children = [];
 
         const existingIndex = node.children.findIndex(
           (child) => child.name === currentSegment,
         );
+
+        this.logger.debug("existingIndex:", existingIndex);
 
         if (fileEvent.eventType === "add" || fileEvent.eventType === "addDir") {
           // Add new file/folder if it doesn't exist
@@ -296,6 +320,9 @@ class ProjectService {
             };
             node.children.push(newChild);
             node.children = this.sortTreeNodes(node.children);
+            this.logger.debug("Added new child:", newChild.name);
+          } else {
+            this.logger.debug("Child already exists, skipping add");
           }
         } else if (
           fileEvent.eventType === "unlink" ||
@@ -304,6 +331,9 @@ class ProjectService {
           // Remove file/folder
           if (existingIndex !== -1) {
             node.children.splice(existingIndex, 1);
+            this.logger.debug("Removed child:", currentSegment);
+          } else {
+            this.logger.debug("Child not found for removal:", currentSegment);
           }
         }
 
@@ -316,6 +346,8 @@ class ProjectService {
           (child) => child.name === currentSegment && child.isDirectory,
         );
 
+        this.logger.debug("targetChildIndex:", targetChildIndex);
+
         if (targetChildIndex !== -1) {
           const updatedChildren = [...node.children];
           updatedChildren[targetChildIndex] = updateNode(
@@ -323,6 +355,8 @@ class ProjectService {
             remainingSegments,
           );
           return { ...node, children: updatedChildren };
+        } else {
+          this.logger.warn("Could not find child directory:", currentSegment);
         }
       }
 
@@ -331,10 +365,15 @@ class ProjectService {
 
     // Get relative path from tree root
     const treePath = tree.path;
-    if (!filePath.startsWith(treePath)) return newTree;
+    if (!filePath.startsWith(treePath + "/") && filePath !== treePath) {
+      this.logger.warn("File path does not start with tree path");
+      return newTree;
+    }
 
-    const relativePath = filePath.substring(treePath.length + 1);
-    const pathSegments = relativePath.split("/");
+    const relativePath = filePath === treePath ? "" : filePath.substring(treePath.length + 1);
+    const pathSegments = relativePath.split("/").filter(Boolean);
+    
+    this.logger.debug("relativePath:", relativePath, "pathSegments:", pathSegments);
 
     return updateNode(newTree, pathSegments);
   }

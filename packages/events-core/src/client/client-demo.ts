@@ -1,5 +1,5 @@
 // packages/events-core/src/client/client-demo.ts
-// Run with: `pnpm run dev` (server), then `pnpm tsx src/client/client-demo.ts` (client)
+// Run with: `pnpm run trpc-server` (trpc server), then `pnpm tsx src/client/client-demo.ts` (this client)
 import path from "node:path";
 import process from "node:process";
 import fs from "node:fs/promises";
