@@ -4,7 +4,7 @@ import { get } from "svelte/store";
 import { trpcClient } from "../lib/trpc-client";
 import { currentChat, messageInput } from "../stores/chat-store";
 import { projectFolders } from "../stores/project-store";
-import { selectFile } from "../stores/tree-store";
+import { selectFile, expandParentDirectories } from "../stores/tree-store";
 import { setLoading, showToast } from "../stores/ui-store";
 import { projectService } from "./project-service";
 
@@ -58,7 +58,8 @@ class ChatService {
       showToast("Chat created successfully", "success");
       this.logger.info("Empty chat created:", newChat.id);
 
-      // Select the newly created chat file in the project tree
+      // Expand parent directories and select the newly created chat file
+      expandParentDirectories(newChat.absoluteFilePath);
       selectFile(newChat.absoluteFilePath);
 
       // Refresh file tree to show the newly created chat file

@@ -12,6 +12,7 @@ import {
   setTreeSelectionState,
   toggleNodeExpansion as toggleNodeExpansionStore,
   expandedNodes,
+  expandParentDirectories,
 } from "../stores/tree-store";
 import { setLoading, showToast } from "../stores/ui-store";
 import { chatService } from "./chat-service";
@@ -152,6 +153,9 @@ class ProjectService {
    */
   async selectFile(filePath: string) {
     this.logger.info("Selecting file:", filePath);
+
+    // Expand parent directories to ensure file is visible
+    expandParentDirectories(filePath);
 
     if (filePath.endsWith(".chat.json")) {
       // Chat file: Open the chat and set chat-specific state

@@ -64,6 +64,27 @@ export function expandNode(nodePath: string) {
 }
 
 /**
+ * Expand all parent directories of a given file path
+ */
+export function expandParentDirectories(filePath: string) {
+  const pathParts = filePath.split('/');
+  const parentPaths: string[] = [];
+  
+  // Build all parent directory paths
+  for (let i = 1; i < pathParts.length; i++) {
+    const parentPath = pathParts.slice(0, i + 1).join('/');
+    parentPaths.push(parentPath);
+  }
+  
+  // Expand all parent directories
+  expandedNodes.update((nodes) => {
+    const newNodes = new Set(nodes);
+    parentPaths.forEach(path => newNodes.add(path));
+    return newNodes;
+  });
+}
+
+/**
  * Collapse a specific node
  */
 export function collapseNode(nodePath: string) {

@@ -51,15 +51,21 @@
     }
   });
 
-  // Auto-save draft when input changes using $effect
+  // Auto-focus input when a new chat is opened using $effect
+  let previousChatId: string | null = null;
   $effect(() => {
-    if ($currentChat && $messageInput.trim()) {
-      clearTimeout(draftTimeout);
-      draftTimeout = setTimeout(() => {
-        chatService.savePromptDraft($currentChat!.id, $messageInput);
-      }, 1500);
+    const currentChatId = $currentChat?.id || null;
+    
+    // Only focus if we're switching to a different chat (including from no chat to a chat)
+    if (currentChatId && currentChatId !== previousChatId && messageInputElement) {
+      tick().then(() => {
+        messageInputElement.focus();
+      });
     }
+    
+    previousChatId = currentChatId;
   });
+
 
   async function handleSendMessage() {
     if (!$messageInput.trim() || !$currentChat) return;
@@ -71,6 +77,18 @@
       await chatService.submitMessage(chatId, message);
     } catch (error) {
       // Error handling done in service
+    }
+  }
+
+  function handleInputChange(value: string) {
+    updateMessageInput(value);
+    
+    // Save draft when user actively types (including clearing content)
+    if ($currentChat) {
+      clearTimeout(draftTimeout);
+      draftTimeout = setTimeout(() => {
+        chatService.savePromptDraft($currentChat!.id, value);
+      }, 1500);
     }
   }
 
@@ -349,7 +367,7 @@
         <textarea
           bind:this={messageInputElement}
           bind:value={$messageInput}
-          oninput={(e) => updateMessageInput(e.currentTarget.value)}
+          oninput={(e) => handleInputChange(e.currentTarget.value)}
           onkeypress={handleKeyPress}
           placeholder="Type your message..."
           class="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full resize-none rounded-md border px-3 py-3 text-[15px] focus:outline-none"
