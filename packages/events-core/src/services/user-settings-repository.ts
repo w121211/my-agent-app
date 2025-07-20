@@ -4,13 +4,23 @@ import { Logger, ILogObj } from "tslog";
 import { fileExists, readJsonFile, writeJsonFile } from "../file-helpers.js";
 import { ProjectFolder } from "./project-folder-service.js";
 
+export interface ProviderConfig {
+  enabled: boolean;
+  apiKey?: string;
+}
+
 export interface UserSettings {
   projectFolders: ProjectFolder[];
-  // Additional settings can be added in the future
+  providers: {
+    openai?: ProviderConfig;
+    anthropic?: ProviderConfig;
+    google?: ProviderConfig;
+  };
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   projectFolders: [],
+  providers: {},
 };
 
 export class UserSettingsRepository {

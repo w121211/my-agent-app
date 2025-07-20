@@ -14,6 +14,7 @@
     "check-types": "tsc --noEmit",
     "example": "tsx examples/example-script.ts",
     "chat-engine-demo": "tsx src/chat-engine/demo.ts",
+    "content-generator-demo": "tsx src/services/content-generator/demo.ts",
     "test-with-api": "tsx src/chat-engine/test-with-api.ts"
   },
   "dependencies": {

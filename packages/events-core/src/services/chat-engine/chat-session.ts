@@ -61,7 +61,7 @@ export interface ChatMetadata {
   summary?: string;
   tags?: string[];
   mode?: ChatMode;
-  model?: string;
+  model?: any; // Can be string (legacy) or ChatModelConfig (new)
   knowledge?: string[];
   promptDraft?: string;
 }
