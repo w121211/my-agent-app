@@ -689,13 +689,13 @@
                       class="text-accent hover:text-accent/80 mr-2 cursor-pointer underline"
                       onclick="previewFile('demo.md'); event.stopPropagation();"
                     >
-                      #&lt;demo-project&gt;/demo.md</button
+                      @&lt;demo-project&gt;/demo.md</button
                     ><br />
                     <button
                       class="text-accent hover:text-accent/80 mr-2 cursor-pointer underline"
                       onclick="previewFile('outside-file.md'); event.stopPropagation();"
                     >
-                      #/path/to/outside/file.md</button
+                      @/path/to/outside/file.md</button
                     ><br />
                     Text is also allowed
                   </div>
@@ -706,7 +706,7 @@
                     id="context-textarea"
                     rows="4"
                     class="text-foreground bg-input-background border-input-border focus:border-accent placeholder-muted w-full resize-none rounded-md border px-3 py-2 text-sm focus:outline-none"
-                    placeholder="#&lt;demo-project&gt;/demo.md #/path/to/outside/file.md&#10;Text is also allowed"
+                    placeholder="@&lt;demo-project&gt;/demo.md @/path/to/outside/file.md&#10;Text is also allowed"
                   ></textarea>
                 </div>
               </div>
