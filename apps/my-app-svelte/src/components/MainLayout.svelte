@@ -1,7 +1,7 @@
 <!-- apps/my-app-svelte/src/components/MainLayout.svelte -->
 <script lang="ts">
   import { Logger } from "tslog";
-  import ExplorerPanel from "./ExplorerPanel.svelte";
+  import ExplorerPanel from "./file-explorer/ExplorerPanel.svelte";
   import ChatPanel from "./ChatPanel.svelte";
   import RightPanel from "./RightPanel.svelte";
   import { projectService } from "../services/project-service";

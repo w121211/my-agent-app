@@ -1,7 +1,8 @@
 <!-- apps/my-app-svelte/src/components/ChatPanel.svelte -->
 <script lang="ts">
   import { tick } from "svelte";
-  import FileSearchDropdown from "./FileSearchDropdown.svelte";
+  import FileSearchDropdown from "./file-explorer/FileSearchDropdown.svelte";
+  import ToolCallMessage from "./tool-calls/ToolCallMessage.svelte";
   import {
     hasCurrentChat,
     currentChat,
@@ -23,6 +24,7 @@
     showToast,
   } from "../stores/ui-store";
   import { chatService } from "../services/chat-service";
+  import { toolCallService } from "../services/tool-call-service";
   import {
     Send,
     Paperclip,
@@ -88,6 +90,26 @@
     }
     
     previousChatId = currentChatId;
+  });
+
+  // Tool call polling setup for active chats
+  $effect(() => {
+    const currentChatId = $currentChat?.id;
+    let cleanupPolling: (() => void) | null = null;
+    
+    if (currentChatId) {
+      // Start polling for tool call updates for this chat
+      // This is a fallback in case real-time events aren't working
+      // toolCallService.pollToolCallUpdates(currentChatId, 2000).then(cleanup => {
+      //   cleanupPolling = cleanup;
+      // });
+    }
+    
+    return () => {
+      if (cleanupPolling) {
+        cleanupPolling();
+      }
+    };
   });
 
 
@@ -373,7 +395,10 @@
       class="bg-background flex-1 space-y-5 overflow-y-auto px-8 py-6"
     >
       {#each $currentChatMessages as message (message.id)}
-        {#if message.role === "USER"}
+        {#if message.role === "FUNCTION_CALL" || message.role === "TOOL_CALL"}
+          <!-- Tool Call Message -->
+          <ToolCallMessage messageId={message.id} />
+        {:else if message.role === "USER"}
           {@const fileReferences = extractFileReferences(message.content)}
           <!-- User Message -->
           <div class="group flex flex-col items-end">

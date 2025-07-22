@@ -1,0 +1,476 @@
+<!-- docs/design_app/tools-registry-settings.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Settings - Tools Registry</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Tailwind CSS v4 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Bootstrap Icons CDN -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
+    />
+    <style type="text/tailwindcss">
+      @theme {
+        --color-background: #0d1117;
+        --color-surface: #161b22;
+        --color-panel: #161b22;
+        --color-border: #30363d;
+        --color-foreground: #e6edf3;
+        --color-muted: #8b949e;
+        --color-accent: #58a6ff;
+        --color-hover: #21262d;
+        --color-selected: #2f363e;
+        --color-input-background: #0d1117;
+        --color-input-border: #30363d;
+
+        --font-family-sans: "Inter", "Segoe UI", "Arial", sans-serif;
+      }
+
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 8px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #21262d;
+        border-radius: 4px;
+      }
+      
+      .settings-nav-item {
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      
+      .settings-nav-item:hover {
+        background-color: #21262d;
+      }
+      
+      .settings-nav-item.active {
+        background-color: #58a6ff;
+        color: white;
+      }
+      
+      .tool-card {
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      
+      .tool-status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: uppercase;
+      }
+      
+      .status-healthy {
+        background: #0d4f3c;
+        color: #34d399;
+        border: 1px solid #047857;
+      }
+      
+      .status-offline {
+        background: #7f1d1d;
+        color: #fca5a5;
+        border: 1px solid #991b1b;
+      }
+      
+      .status-warning {
+        background: #78350f;
+        color: #fbbf24;
+        border: 1px solid #92400e;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-background text-foreground h-screen overflow-hidden font-sans text-[15px]"
+  >
+    <div class="flex h-screen">
+      <!-- Settings Sidebar -->
+      <aside class="bg-surface border-border flex w-64 flex-col border-r">
+        <div class="border-border flex items-center justify-between border-b p-4">
+          <h1 class="text-foreground text-lg font-semibold">Settings</h1>
+          <button
+            class="text-muted hover:text-accent cursor-pointer"
+            onclick="window.close()"
+            title="Close"
+          >
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        
+        <nav class="flex-1 p-3">
+          <div class="space-y-1">
+            <div class="settings-nav-item" onclick="switchTab('general')">
+              <i class="bi bi-gear mr-2"></i>
+              <span>General</span>
+            </div>
+            <div class="settings-nav-item" onclick="switchTab('models')">
+              <i class="bi bi-cpu mr-2"></i>
+              <span>AI Models</span>
+            </div>
+            <div class="settings-nav-item active" onclick="switchTab('tools')">
+              <i class="bi bi-tools mr-2"></i>
+              <span>Tools Registry</span>
+            </div>
+            <div class="settings-nav-item" onclick="switchTab('security')">
+              <i class="bi bi-shield mr-2"></i>
+              <span>Security</span>
+            </div>
+            <div class="settings-nav-item" onclick="switchTab('about')">
+              <i class="bi bi-info-circle mr-2"></i>
+              <span>About</span>
+            </div>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Main Settings Content -->
+      <main class="flex-1 flex flex-col">
+        <!-- Header -->
+        <header class="bg-surface border-border border-b px-6 py-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-foreground text-xl font-semibold">Tools Registry</h2>
+              <p class="text-muted text-sm mt-1">Manage MCP tools and built-in functions</p>
+            </div>
+            <button
+              class="bg-accent hover:bg-accent/90 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2"
+              onclick="refreshToolsRegistry()"
+            >
+              <i class="bi bi-arrow-clockwise"></i>
+              Refresh Registry
+            </button>
+          </div>
+        </header>
+
+        <!-- Content -->
+        <div class="flex-1 overflow-y-auto scrollbar-thin">
+          <div class="p-6">
+            
+            <!-- Registry Status -->
+            <div class="bg-surface border-border rounded-lg border p-4 mb-6">
+              <h3 class="text-foreground font-semibold mb-3">Registry Status</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-background border-border rounded-md border p-3">
+                  <div class="text-foreground text-2xl font-bold">12</div>
+                  <div class="text-muted text-sm">Total Tools</div>
+                </div>
+                <div class="bg-background border-border rounded-md border p-3">
+                  <div class="text-foreground text-2xl font-bold">3</div>
+                  <div class="text-muted text-sm">MCP Servers</div>
+                </div>
+                <div class="bg-background border-border rounded-md border p-3">
+                  <div class="text-foreground text-2xl font-bold">2</div>
+                  <div class="text-muted text-sm">Offline Tools</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Built-in Tools -->
+            <div class="mb-8">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-foreground font-semibold">Built-in Tools</h3>
+                <span class="text-muted text-sm">7 tools</span>
+              </div>
+              
+              <div class="space-y-4">
+                <div class="tool-card">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <i class="bi bi-folder text-accent text-lg"></i>
+                      <div>
+                        <h4 class="text-foreground font-medium">list_directory</h4>
+                        <p class="text-muted text-sm">List files and directories in a given path</p>
+                      </div>
+                    </div>
+                    <span class="tool-status-badge status-healthy">
+                      <i class="bi bi-check-circle mr-1"></i>
+                      Ready
+                    </span>
+                  </div>
+                  <div class="text-muted text-xs">
+                    Category: File Operations • Last used: 2 minutes ago
+                  </div>
+                </div>
+
+                <div class="tool-card">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <i class="bi bi-file-text text-accent text-lg"></i>
+                      <div>
+                        <h4 class="text-foreground font-medium">read_file</h4>
+                        <p class="text-muted text-sm">Read contents of a file</p>
+                      </div>
+                    </div>
+                    <span class="tool-status-badge status-healthy">
+                      <i class="bi bi-check-circle mr-1"></i>
+                      Ready
+                    </span>
+                  </div>
+                  <div class="text-muted text-xs">
+                    Category: File Operations • Last used: 5 minutes ago
+                  </div>
+                </div>
+
+                <div class="tool-card">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <i class="bi bi-terminal text-accent text-lg"></i>
+                      <div>
+                        <h4 class="text-foreground font-medium">execute_command</h4>
+                        <p class="text-muted text-sm">Execute shell commands (requires approval)</p>
+                      </div>
+                    </div>
+                    <span class="tool-status-badge status-warning">
+                      <i class="bi bi-exclamation-triangle mr-1"></i>
+                      Restricted
+                    </span>
+                  </div>
+                  <div class="text-muted text-xs">
+                    Category: System • Requires user approval
+                  </div>
+                </div>
+
+                <div class="tool-card">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <i class="bi bi-search text-accent text-lg"></i>
+                      <div>
+                        <h4 class="text-foreground font-medium">search_files</h4>
+                        <p class="text-muted text-sm">Search for files and content within project</p>
+                      </div>
+                    </div>
+                    <span class="tool-status-badge status-healthy">
+                      <i class="bi bi-check-circle mr-1"></i>
+                      Ready
+                    </span>
+                  </div>
+                  <div class="text-muted text-xs">
+                    Category: Search • Last used: 8 minutes ago
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- MCP Servers -->
+            <div class="mb-8">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="text-foreground font-semibold">MCP Servers</h3>
+                <button
+                  class="border-border hover:bg-hover text-foreground border px-3 py-1 rounded text-sm"
+                  onclick="addMCPServer()"
+                >
+                  <i class="bi bi-plus mr-1"></i>
+                  Add Server
+                </button>
+              </div>
+              
+              <div class="space-y-4">
+                <!-- Git MCP Server -->
+                <div class="tool-card">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <i class="bi bi-git text-accent text-lg"></i>
+                      <div>
+                        <h4 class="text-foreground font-medium">Git Operations</h4>
+                        <p class="text-muted text-sm">@git-mcp-server</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="tool-status-badge status-healthy">
+                        <i class="bi bi-check-circle mr-1"></i>
+                        Connected
+                      </span>
+                      <button class="text-muted hover:text-accent">
+                        <i class="bi bi-gear"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="text-muted text-xs mb-2">
+                    Tools: git_status, git_add, git_commit, git_push
+                  </div>
+                  <div class="text-muted text-xs">
+                    Server: localhost:3001 • Last health check: 30s ago
+                  </div>
+                </div>
+
+                <!-- Web Search MCP Server -->
+                <div class="tool-card">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <i class="bi bi-search text-accent text-lg"></i>
+                      <div>
+                        <h4 class="text-foreground font-medium">Web Search</h4>
+                        <p class="text-muted text-sm">@search-mcp-server</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="tool-status-badge status-healthy">
+                        <i class="bi bi-check-circle mr-1"></i>
+                        Connected
+                      </span>
+                      <button class="text-muted hover:text-accent">
+                        <i class="bi bi-gear"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="text-muted text-xs mb-2">
+                    Tools: web_search, fetch_url, summarize_page
+                  </div>
+                  <div class="text-muted text-xs">
+                    Server: search-api.example.com • OAuth enabled
+                  </div>
+                </div>
+
+                <!-- Database MCP Server (Offline) -->
+                <div class="tool-card">
+                  <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-3">
+                      <i class="bi bi-database text-muted text-lg"></i>
+                      <div>
+                        <h4 class="text-muted font-medium">Database Operations</h4>
+                        <p class="text-muted text-sm">@db-mcp-server</p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="tool-status-badge status-offline">
+                        <i class="bi bi-x-circle mr-1"></i>
+                        Offline
+                      </span>
+                      <button class="text-muted hover:text-accent">
+                        <i class="bi bi-gear"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="text-muted text-xs mb-2">
+                    Tools: query_database, execute_sql (unavailable)
+                  </div>
+                  <div class="text-muted text-xs">
+                    Server: db-server:5432 • Connection failed
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Security Settings -->
+            <div class="mb-8">
+              <h3 class="text-foreground font-semibold mb-4">Security & Permissions</h3>
+              
+              <div class="bg-surface border-border rounded-lg border p-4">
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <label class="text-foreground font-medium text-sm">Tool Approval Mode</label>
+                      <p class="text-muted text-xs">How tool executions should be handled</p>
+                    </div>
+                    <select class="bg-background border-border text-foreground border rounded px-3 py-1 text-sm">
+                      <option value="default">Ask for permission</option>
+                      <option value="auto">Auto-approve safe tools</option>
+                      <option value="strict">Always ask</option>
+                    </select>
+                  </div>
+
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <label class="text-foreground font-medium text-sm">High-risk tool warnings</label>
+                      <p class="text-muted text-xs">Show detailed warnings for dangerous operations</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" class="sr-only peer" checked>
+                      <div class="w-9 h-5 bg-background border-border peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+                    </label>
+                  </div>
+
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <label class="text-foreground font-medium text-sm">Tool execution timeout</label>
+                      <p class="text-muted text-xs">Maximum time to wait for tool completion</p>
+                    </div>
+                    <select class="bg-background border-border text-foreground border rounded px-3 py-1 text-sm">
+                      <option value="30">30 seconds</option>
+                      <option value="60" selected>60 seconds</option>
+                      <option value="300">5 minutes</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="bg-surface border-border border-t px-6 py-4">
+          <div class="flex items-center justify-between">
+            <div class="text-muted text-sm">
+              Registry last updated: 2 minutes ago
+            </div>
+            <div class="flex items-center gap-3">
+              <button
+                class="text-muted hover:text-accent cursor-pointer text-sm"
+                onclick="exportSettings()"
+              >
+                Export Settings
+              </button>
+              <button
+                class="bg-accent hover:bg-accent/90 text-white px-4 py-2 rounded text-sm"
+                onclick="saveSettings()"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      function switchTab(tabName) {
+        // Remove active class from all nav items
+        document.querySelectorAll('.settings-nav-item').forEach(item => {
+          item.classList.remove('active');
+        });
+        
+        // Add active class to clicked item
+        event.currentTarget.classList.add('active');
+        
+        // In a real app, this would switch the content
+        console.log('Switching to tab:', tabName);
+      }
+
+      function refreshToolsRegistry() {
+        // Simulate refresh
+        const button = event.currentTarget;
+        const icon = button.querySelector('i');
+        icon.classList.add('animate-spin');
+        
+        setTimeout(() => {
+          icon.classList.remove('animate-spin');
+        }, 2000);
+      }
+
+      function addMCPServer() {
+        alert('Add MCP Server dialog would open here');
+      }
+
+      function saveSettings() {
+        alert('Settings saved successfully!');
+      }
+
+      function exportSettings() {
+        alert('Settings exported to file');
+      }
+    </script>
+  </body>
+</html>

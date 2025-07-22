@@ -22,7 +22,8 @@
     "message-processing-demo": "tsx examples/message-processing-demo.ts",
     "chat-file-utils-demo": "tsx -e \"import('./src/services/chat-file-utils.js').then(m => console.log('✅ Chat file utils loaded successfully', Object.keys(m)))\"",
     "chat-file-utils-test": "tsx examples/chat-file-utils-test.ts",
-    "file-search-test": "tsx examples/file-search-simple-test.ts"
+    "file-search-test": "tsx examples/file-search-simple-test.ts",
+    "tool-call-demo": "tsx examples/tool-call-demo.ts"
   },
   "dependencies": {
     "@google/genai": "^1.9.0",

@@ -3,6 +3,8 @@
   import { Logger } from "tslog";
   import Demo from "./components/Demo.svelte";
   import MainLayout from "./components/MainLayout.svelte";
+  import MainLayoutDemo from "./components/MainLayoutDemo.svelte";
+  import ToolCallDemo from "./components/ToolCallDemo.svelte";
   import ToastProvider from "./components/ToastProvider.svelte";
   // import ErrorBoundary from "./components/ErrorBoundary.svelte";
   // import DevPanel from "./components/shared/DevPanel.svelte";
@@ -14,8 +16,10 @@
 
   // Show demo in development mode
   const isDev = import.meta.env.DEV;
-  const showDemo =
-    isDev && new URLSearchParams(window.location.search).has("demo");
+  const urlParams = new URLSearchParams(window.location.search);
+  const showDemo = isDev && urlParams.has("demo");
+  const showToolCallDemo = urlParams.has("toolcall-demo");
+  const showToolCallChatDemo = urlParams.has("toolcall-chat");
 
   // Use $effect instead of onMount for Svelte 5
   $effect(() => {
@@ -51,8 +55,15 @@
 </script>
 
 <ToastProvider>
-  <!-- <Demo /> -->
-  <MainLayout />
+  {#if showToolCallChatDemo}
+    <MainLayoutDemo />
+  {:else if showToolCallDemo}
+    <ToolCallDemo />
+  {:else if showDemo}
+    <Demo />
+  {:else}
+    <MainLayout />
+  {/if}
 </ToastProvider>
 
 <!-- <ErrorBoundary onError={handleError}>

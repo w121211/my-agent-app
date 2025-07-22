@@ -17,6 +17,10 @@ import { createChatRouter } from "./routers/chat-router.js";
 import { createProjectFolderRouter } from "./routers/project-folder-router.js";
 import { createFileRouter } from "./routers/file-router.js";
 import { createUserSettingsRouter } from "./routers/user-settings-router.js";
+import { createToolCallRouter } from "./routers/tool-call-router.js";
+import { ToolRegistry } from "../services/tool-call/tool-registry.js";
+import { ToolCallScheduler } from "../services/tool-call/tool-call-scheduler.js";
+import { ApprovalMode } from "../services/tool-call/types.js";
 
 export async function createAppRouter(userDataDir: string) {
   // Setup logger
@@ -78,6 +82,15 @@ export async function createAppRouter(userDataDir: string) {
   );
   const userSettingsService = createUserSettingsService(userSettingsRepo);
 
+  // Initialize tool registry and scheduler
+  const toolRegistry = new ToolRegistry(eventBus, logger);
+  const toolCallScheduler = new ToolCallScheduler({
+    toolRegistry: Promise.resolve(toolRegistry),
+    eventBus,
+    logger,
+    approvalMode: ApprovalMode.DEFAULT,
+  });
+
   // Start watching all project folders
   projectFolderService
     .startWatchingAllProjectFolders()
@@ -93,6 +106,7 @@ export async function createAppRouter(userDataDir: string) {
     file: createFileRouter(fileService),
     event: createEventRouter(eventBus),
     userSettings: createUserSettingsRouter(userSettingsService),
+    toolCall: createToolCallRouter(toolCallScheduler, toolRegistry),
   });
 }
 

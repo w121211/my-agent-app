@@ -1,5 +1,81 @@
 <!-- Prompt logs - for record-keeping only, do not reference.
 
+
+
+System Design Guidelines
+
+## Principles
+
+Core Design Principles:
+* Favor composition over inheritance - use utility functions instead of classes when possible
+* Leverage existing solutions and established patterns - avoid reinventing the wheel
+* Apply strategic decoupling without falling into over-engineering traps
+* Keep it clear and simple - avoid over-design
+* Follow MVP approach - maintain lean development, avoid over-engineering
+
+Output Requirements:
+* Use clear, natural language explanations for architectural decisions
+* Emphasize WHY over HOW - explain reasoning behind design choices
+* You may provide code skeletons, snippets, and comment-based explanations of logic/flow
+* For process flow:
+  * Use clear, logical sequencing to describe system flows
+  * Choose appropriate format: numbered lists, bullet points, or prose
+
+Scope Boundaries:
+* FOCUS ON: Design decisions, architecture patterns, and system structure
+* ALLOWED: Code skeletons, interface definitions, commented pseudocode for flow illustration
+* STRICTLY PROHIBITED: Functional code implementation, working code blocks
+* EXCLUDE: Implementation timelines, implementation phases, development complexity estimates, project planning
+* INCLUDE: Component responsibilities, interface contracts, architectural trade-offs
+
+Communication Style:
+* Explain the rationale behind architectural choices - the "why" not the "how"
+* Highlight potential risks and mitigation strategies
+* Keep technical depth appropriate for stakeholder understanding
+* Use structural descriptions and skeleton code to illustrate complex relationships
+* Maintain focus on design intent rather than implementation details
+
+## Checklist
+
+**Scope & Output:**
+- [ ] Focus on design decisions and system structure
+- [ ] Provide code skeletons/interfaces when helpful
+- [ ] Use comment-based flow explanations (// 1. Step... // 2. Step...)
+- [ ] NO functional code implementation
+
+**Design Approach:**
+- [ ] Is the solution simple and clear?
+- [ ] Are you using existing solutions instead of reinventing?
+- [ ] Is decoupling appropriate (not over-engineered)?
+- [ ] Does it follow MVP approach?
+- [ ] Did you explain WHY behind design decisions?
+
+---
+
+## 🔌 **Function Call / MCP 顯示**
+
+**預期功能**
+
+- Function call 執行過程的視覺化顯示
+- MCP 工具調用結果呈現
+- 權限確認對話框
+
+**完成情形**
+
+- ❌ **完全未實現** - 整個 MCP 整合的 UI 層完全缺失
+- ❌ 無任何 Function call 相關的訊息類型處理
+
+---
+
+目標：針對以上 feature ，設計前、後端的系統
+- UI 設計參考 `Screenshot 20250722 at 3.35.38 PM.png`
+- 設計文件格式參考 `feat-file_references_spec.md`
+
+讓我們先一起討論如何設計，有問題請提出
+
+
+
+
 @apps/my-app-svelte/src/components/
 @apps/my-app-svelte/src/stores @apps/my-app-svelte/src/services
 
@@ -94,26 +170,6 @@ _基於 list_app_features_to_methods_v1_2.md 功能規劃進行全面評估_
 
 ---
 
-## ✏️ **訊息操作 (Message Actions)**
-
-### **懸停操作選單**
-
-**完成情形**
-
-- ✅ 懸停顯示操作按鈕已實現（編輯、複製、更多選項）
-- ✅ 複製功能已完全實現（handleCopyMessage + toast 通知）
-
-### **進階訊息操作**
-
-**完成情形**
-
-- ❌ **訊息編輯功能完全未實現** - 僅有 UI 按鈕
-- ❌ **重新生成 AI 回應功能完全未實現** - 無相關 UI 或邏輯
-- ❌ **訊息刪除功能未實現**
-- ❌ 訊息發送狀態指示（發送中、失敗、重試）尚未實現
-
----
-
 ## 🔄 **Chat 模式與模型選擇**
 
 **預期功能**
@@ -185,65 +241,18 @@ _基於 list_app_features_to_methods_v1_2.md 功能規劃進行全面評估_
 
 ---
 
-## 📋 **核心缺失：Run/Rerun Chat 系統**
-
-**預期功能**
-
-- ChatService.runChat() - 重新執行整個 chat workflow
-- 支援 inputData 注入（`{{inputData}}` 變數）
-- 自動備份機制（run0, run1, run2...）
-- 停止執行功能
-
-**完成情形**
-
-- ❌ **完全未實現** - 這是整個架構最核心的缺失
-- ❌ 影響所有依賴功能：Summarize、What's next、Agent 模式自循環
-- ❌ 相關 UI：執行進度條、停止按鈕、執行狀態等都不存在
-
----
-
-## 📚 **核心缺失：Chat Versioning & Branching**
-
-**預期功能**
-
-- 編輯訊息時自動分支（chat.v1.json → chat.v2.json）
-- ChatBackupService 提供 run 和 branch 兩種備份
-- 版本歷史查看和回復功能
-
-**完成情形**
-
-- ❌ **完全未實現** - 整個版本控制系統不存在
-- ❌ 相關 UI：版本歷史面板、分支選擇、回復功能等都不存在
-- ❌ ChatBackupService 在程式碼中找不到
-
----
-
-## 🔌 **核心缺失：Function Call / MCP 顯示**
-
-**預期功能**
-
-- Function call 執行過程的視覺化顯示
-- MCP 工具調用結果呈現
-- 權限確認對話框
-
-**完成情形**
-
-- ❌ **完全未實現** - 整個 MCP 整合的 UI 層完全缺失
-- ❌ 無任何 Function call 相關的訊息類型處理
-
----
-
 ## ⚠️ **進階功能差距**
 
-### **搜尋與導航**
+<!-- ### **搜尋與導航** => 直接用瀏覽器內建的搜尋
 
 - ❌ Chat 內搜尋訊息功能
 - ❌ 快速跳轉到特定訊息
-- ❌ 搜尋結果高亮
+- ❌ 搜尋結果高亮 -->
 
 ### **數據操作**
 
-- ❌ 導出 Chat 為 PDF/Markdown
+<!-- - ❌ 導出 Chat 為 PDF/Markdown -->
+
 - ❌ 分享 Chat 連結
 - ✅ 單一訊息複製已實現
 
@@ -310,9 +319,9 @@ _基於 list_app_features_to_methods_v1_2.md 功能規劃進行全面評估_
 
 ---
 
-<!-- Working on -->
+<!-- Done -->
 
-## 📎 **引用檔案 (File References) - @ 語法**
+## 📎 **核心：引用檔案 (File References) - @ 語法**
 
 ### **輸入階段：@ 觸發檔案搜尋**
 
@@ -341,3 +350,65 @@ _基於 list_app_features_to_methods_v1_2.md 功能規劃進行全面評估_
 
 - ❌ **完全未實現** - 規劃中的統一訊息處理管道不存在
 - ❌ 檔案內容注入邏輯（`@{file_path}` → 檔案內容）尚未實現
+
+---
+
+<!-- Working on -->
+
+---
+
+## ✏️ **核心：訊息操作 (Message Actions)**
+
+### **懸停操作選單**
+
+**完成情形**
+
+- ✅ 懸停顯示操作按鈕已實現（編輯、複製、更多選項）
+- ✅ 複製功能已完全實現（handleCopyMessage + toast 通知）
+
+### **進階訊息操作**
+
+**完成情形**
+
+- ❌ **訊息編輯功能完全未實現** - 僅有 UI 按鈕
+- ❌ **重新生成 AI 回應功能完全未實現** - 無相關 UI 或邏輯
+- ❌ **訊息刪除功能未實現**
+- ❌ 訊息發送狀態指示（發送中、失敗、重試）尚未實現
+
+---
+
+## 📚 **核心：Chat Versioning & Branching**
+
+**預期功能**
+
+- 編輯訊息時自動分支（chat.v1.json → chat.v2.json）
+- ChatBackupService 提供 run 和 branch 兩種備份
+- 版本歷史查看和回復功能
+
+**完成情形**
+
+- ❌ **完全未實現** - 整個版本控制系統不存在
+- ❌ 相關 UI：版本歷史面板、分支選擇、回復功能等都不存在
+- ❌ ChatBackupService 在程式碼中找不到
+
+---
+
+## 📋 **核心：Run/Rerun Chat 系統**
+
+**預期功能**
+
+- ChatService.runChat() - 重新執行整個 chat workflow
+- 支援 inputData 注入（`{{inputData}}` 變數）
+- 停止執行功能
+<!-- - 自動備份機制（run0, run1, run2...） => 備份機制是另一個 feature -->
+
+UI
+
+- chat 的控制介面（run, stop）參考 task 的設計， 放在 explorer 的 chat file node
+- 現階段不考慮在其他地方放控制介面
+
+**完成情形**
+
+- ❌ **完全未實現** - 這是整個架構最核心的缺失
+- ❌ 影響所有依賴功能：Summarize、What's next、Agent 模式自循環
+- ❌ 相關 UI：執行進度條、停止按鈕、執行狀態等都不存在

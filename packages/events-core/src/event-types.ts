@@ -54,6 +54,11 @@ export const ClientEventKind = [
   "ClientBranchChat",
   "ClientApproveWork",
 
+  // Tool call related
+  "ClientScheduleToolCalls",
+  "ClientConfirmToolCall",
+  "ClientCancelToolCall",
+
   // TODO: These events require refactoring
   "ClientRequestWorkspaceFolderTree",
   "ClientFileTreeUpdated",
@@ -112,6 +117,14 @@ export const ServerEventKind = [
   "ServerFileWatcherEvent",
   "ServerWorkspaceFolderTreeResponsed",
   "ServerTestPing",
+
+  // Tool call related
+  "TOOL_REGISTERED",
+  "MCP_SERVER_REGISTERED",
+  "TOOL_PERMISSION_REQUEST",
+  "TOOL_OUTPUT_UPDATE", 
+  "TOOL_CALLS_UPDATE",
+  "TOOL_CALLS_COMPLETE",
 ] as const
 
 export type ServerEventKind = (typeof ServerEventKind)[number]
@@ -599,6 +612,99 @@ export interface ServerTestPingEvent extends BaseServerEvent {
   message: string
 }
 
+// Tool Call Events
+
+export interface ClientScheduleToolCallsEvent extends BaseClientEvent {
+  kind: "ClientScheduleToolCalls"
+  toolCallRequests: Array<{
+    callId: string
+    name: string
+    args: Record<string, unknown>
+  }>
+  chatId: string
+  messageId: string
+}
+
+export interface ClientConfirmToolCallEvent extends BaseClientEvent {
+  kind: "ClientConfirmToolCall"
+  toolCallId: string
+  outcome: "approved" | "denied"
+  payload?: {
+    newContent?: string
+    modifiedArgs?: Record<string, unknown>
+  }
+}
+
+export interface ClientCancelToolCallEvent extends BaseClientEvent {
+  kind: "ClientCancelToolCall"
+  messageId: string
+  reason?: string
+}
+
+export interface ToolRegisteredEvent extends BaseServerEvent {
+  kind: "TOOL_REGISTERED"
+  toolName: string
+  toolType: "built-in" | "mcp"
+}
+
+export interface MCPServerRegisteredEvent extends BaseServerEvent {
+  kind: "MCP_SERVER_REGISTERED"
+  serverName: string
+  toolCount: number
+}
+
+export interface ToolPermissionRequestEvent extends BaseServerEvent {
+  kind: "TOOL_PERMISSION_REQUEST"
+  messageId: string
+  toolCallId: string
+  confirmationDetails: {
+    message: string
+    dangerLevel: "low" | "medium" | "high"
+    affectedResources: string[]
+    previewChanges?: string
+  }
+}
+
+export interface ToolOutputUpdateEvent extends BaseServerEvent {
+  kind: "TOOL_OUTPUT_UPDATE"
+  messageId: string
+  toolCallId: string
+  outputChunk: string
+}
+
+export interface ToolCallsUpdateEvent extends BaseServerEvent {
+  kind: "TOOL_CALLS_UPDATE"
+  messageId: string
+  toolCalls: Array<{
+    status: "validating" | "scheduled" | "executing" | "success" | "error" | "cancelled" | "awaiting_approval"
+    request: {
+      callId: string
+      name: string
+      args: Record<string, unknown>
+    }
+  }>
+}
+
+export interface ToolCallsCompleteEvent extends BaseServerEvent {
+  kind: "TOOL_CALLS_COMPLETE"
+  messageId: string
+  completedToolCalls: Array<{
+    status: "success" | "error" | "cancelled"
+    request: {
+      callId: string
+      name: string
+      args: Record<string, unknown>
+    }
+    response?: {
+      callId: string
+      result: unknown
+      error: string | null
+      timestamp: Date
+    }
+    durationMs?: number
+  }>
+}
+
 // Union types for events
 export type ClientEventUnion =
   | ClientCreateTaskEvent
@@ -626,6 +732,9 @@ export type ClientEventUnion =
   | ClientChatUpdatedEvent
   | ClientTaskUpdatedEvent
   | ClientUIStateUpdatedEvent
+  | ClientScheduleToolCallsEvent
+  | ClientConfirmToolCallEvent
+  | ClientCancelToolCallEvent
 
 export type ServerEventUnion =
   | ServerTaskCreatedEvent
@@ -652,6 +761,12 @@ export type ServerEventUnion =
   | ServerFileWatcherEvent
   | ServerWorkspaceFolderTreeResponsedEvent
   | ServerTestPingEvent
+  | ToolRegisteredEvent
+  | MCPServerRegisteredEvent
+  | ToolPermissionRequestEvent
+  | ToolOutputUpdateEvent
+  | ToolCallsUpdateEvent
+  | ToolCallsCompleteEvent
 
 // Combined event union for backward compatibility
 export type EventUnion = ClientEventUnion | ServerEventUnion

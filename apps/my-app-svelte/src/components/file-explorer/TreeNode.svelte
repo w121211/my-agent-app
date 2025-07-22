@@ -1,9 +1,9 @@
 <!-- apps/my-app-svelte/src/components/TreeNode.svelte -->
 <script lang="ts">
-  import type { FolderTreeNode } from "../stores/project-store";
-  import type { Task } from "../services/task-service";
-  import { expandedNodes, selectedTreeNode } from "../stores/tree-store";
-  import { tasksByPath } from "../stores/task-store";
+  import type { FolderTreeNode } from "../../stores/project-store";
+  import type { Task } from "../../services/task-service";
+  import { expandedNodes, selectedTreeNode } from "../../stores/tree-store";
+  import { tasksByPath } from "../../stores/task-store";
   import TreeNode from "./TreeNode.svelte";
   import FileIcon from "./FileIcon.svelte";
   import {
