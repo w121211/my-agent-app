@@ -5,6 +5,11 @@ import type { IEventBus, BaseEvent } from "../event-bus.js";
 import type { ChatRepository } from "./chat-repository.js";
 import type { TaskService } from "./task-service.js";
 import type { ProjectFolderService } from "./project-folder-service.js";
+import type { FileService } from "./file-service.js";
+import {
+  processMessageFileReferences,
+  extractChatFileReferences,
+} from "./chat-file-utils.js";
 
 // Define types specific to chat service
 export type ChatStatus = "ACTIVE" | "ARCHIVED";
@@ -73,38 +78,41 @@ export class ChatService {
   private readonly chatRepository: ChatRepository;
   private readonly taskService: TaskService;
   private readonly projectFolderService: ProjectFolderService;
+  private readonly fileService: FileService;
 
   constructor(
     eventBus: IEventBus,
     chatRepository: ChatRepository,
     taskService: TaskService,
-    projectFolderService: ProjectFolderService
+    projectFolderService: ProjectFolderService,
+    fileService: FileService,
   ) {
     this.logger = new Logger({ name: "ChatService" });
     this.eventBus = eventBus;
     this.chatRepository = chatRepository;
     this.taskService = taskService;
     this.projectFolderService = projectFolderService;
+    this.fileService = fileService;
   }
 
   async createEmptyChat(
     targetDirectoryAbsolutePath: string,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<Chat> {
     // Validate that the target directory is within a project folder
     const isInProjectFolder =
       await this.projectFolderService.isPathInProjectFolder(
-        targetDirectoryAbsolutePath
+        targetDirectoryAbsolutePath,
       );
 
     if (!isInProjectFolder) {
       throw new Error(
-        `Cannot create chat outside of project folders. Path ${targetDirectoryAbsolutePath} is not within any registered project folder.`
+        `Cannot create chat outside of project folders. Path ${targetDirectoryAbsolutePath} is not within any registered project folder.`,
       );
     }
 
     this.logger.info(
-      `Creating empty chat in project folder at: ${targetDirectoryAbsolutePath}`
+      `Creating empty chat in project folder at: ${targetDirectoryAbsolutePath}`,
     );
 
     const now = new Date();
@@ -126,7 +134,7 @@ export class ChatService {
     const chat = await this.chatRepository.createChat(
       chatData,
       targetDirectoryAbsolutePath,
-      correlationId
+      correlationId,
     );
 
     return chat;
@@ -139,28 +147,28 @@ export class ChatService {
     knowledge: string[],
     prompt?: string,
     model: string = "default",
-    correlationId?: string
+    correlationId?: string,
   ): Promise<Chat> {
     // Validate that the target directory is within a project folder
     const isInProjectFolder =
       await this.projectFolderService.isPathInProjectFolder(
-        targetDirectoryAbsolutePath
+        targetDirectoryAbsolutePath,
       );
 
     if (!isInProjectFolder) {
       const projectFolder =
         await this.projectFolderService.getProjectFolderForPath(
-          targetDirectoryAbsolutePath
+          targetDirectoryAbsolutePath,
         );
 
       throw new Error(
         `Cannot create chat outside of project folders. Path ${targetDirectoryAbsolutePath} is not within any registered project folder. ` +
-          `Please add a project folder first or create the chat within an existing project folder.`
+          `Please add a project folder first or create the chat within an existing project folder.`,
       );
     }
 
     this.logger.info(
-      `Creating new chat in project folder at: ${targetDirectoryAbsolutePath}`
+      `Creating new chat in project folder at: ${targetDirectoryAbsolutePath}`,
     );
 
     const now = new Date();
@@ -171,7 +179,7 @@ export class ChatService {
         "New Chat Task",
         {}, // Default empty config
         targetDirectoryAbsolutePath,
-        correlationId
+        correlationId,
       );
       targetDirectoryAbsolutePath = result.absoluteDirectoryPath;
     }
@@ -194,7 +202,7 @@ export class ChatService {
     const chat = await this.chatRepository.createChat(
       chatData,
       targetDirectoryAbsolutePath,
-      correlationId
+      correlationId,
     );
 
     // If initial prompt is provided, add it as first message
@@ -210,12 +218,12 @@ export class ChatService {
       await this.chatRepository.addMessage(
         chat.absoluteFilePath,
         message,
-        correlationId
+        correlationId,
       );
 
       // Get updated chat after adding message
       const updatedChat = await this.chatRepository.findByPath(
-        chat.absoluteFilePath
+        chat.absoluteFilePath,
       );
       await this.processUserMessage(updatedChat, message, correlationId);
       return updatedChat;
@@ -227,7 +235,7 @@ export class ChatService {
   async updatePromptDraft(
     chatId: string,
     promptDraft: string,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<Chat> {
     // Find the chat by ID - throws if not found
     const chat = await this.getChatById(chatId);
@@ -236,7 +244,7 @@ export class ChatService {
     const updatedChat = await this.chatRepository.updateMetadata(
       chat.absoluteFilePath,
       { promptDraft },
-      correlationId
+      correlationId,
     );
 
     // Emit metadata updated event
@@ -259,15 +267,24 @@ export class ChatService {
     chatId: string,
     message: string,
     attachments?: Array<{ fileName: string; content: string }>,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<Chat> {
     // Find the chat by ID - throws if not found
     const chat = await this.getChatById(chatId);
 
+    // Process file references in the message
+    const processedMessage = await processMessageFileReferences(
+      message,
+      chat,
+      this.projectFolderService,
+      this.fileService,
+      this.logger,
+    );
+
     const chatMessage: ChatMessage = {
       id: uuidv4(),
       role: "USER",
-      content: message,
+      content: processedMessage,
       timestamp: new Date(),
     };
 
@@ -276,15 +293,20 @@ export class ChatService {
       await this.chatRepository.updateMetadata(
         chat.absoluteFilePath,
         { promptDraft: undefined },
-        correlationId
+        correlationId,
       );
     }
 
-    // Add message to chat
+    // Add message to chat (store the original message for user editing)
+    const originalMessage: ChatMessage = {
+      ...chatMessage,
+      content: message, // Store original message with @ syntax
+    };
+
     await this.chatRepository.addMessage(
       chat.absoluteFilePath,
-      chatMessage,
-      correlationId
+      originalMessage,
+      correlationId,
     );
 
     // Process any attachments
@@ -294,8 +316,10 @@ export class ChatService {
 
     // Get updated chat after adding message
     const updatedChat = await this.chatRepository.findByPath(
-      chat.absoluteFilePath
+      chat.absoluteFilePath,
     );
+
+    // Process the user message with the processed content for AI
     await this.processUserMessage(updatedChat, chatMessage, correlationId);
 
     return updatedChat;
@@ -319,7 +343,7 @@ export class ChatService {
 
   async openChatFile(
     absoluteFilePath: string,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<Chat> {
     return this.chatRepository.findByPath(absoluteFilePath);
   }
@@ -327,10 +351,10 @@ export class ChatService {
   private async processUserMessage(
     chat: Chat,
     message: ChatMessage,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<void> {
     // Process file references and update the message
-    const fileReferences = this.extractFileReferences(message.content);
+    const fileReferences = extractChatFileReferences(message.content);
     message.metadata = {
       ...message.metadata,
       fileReferences,
@@ -357,7 +381,7 @@ export class ChatService {
 
   private async generateAIResponse(
     chat: Chat,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<void> {
     const model = chat.metadata?.model || "default";
 
@@ -378,12 +402,12 @@ export class ChatService {
     await this.chatRepository.addMessage(
       chat.absoluteFilePath,
       aiMessage,
-      correlationId
+      correlationId,
     );
 
     // Get updated chat after adding message
     const updatedChat = await this.chatRepository.findByPath(
-      chat.absoluteFilePath
+      chat.absoluteFilePath,
     );
 
     // Process artifacts if any were detected
@@ -393,7 +417,7 @@ export class ChatService {
         aiMessage.id,
         artifacts,
         chat.absoluteFilePath,
-        correlationId
+        correlationId,
       );
     }
 
@@ -434,27 +458,8 @@ export class ChatService {
     messageId: string,
     artifacts: Array<{ id: string; type: string; content: string }>,
     chatFilePath: string,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<void> {
     // Implementation for processing artifacts would go here
-  }
-
-  private extractFileReferences(
-    content: string
-  ): Array<{ path: string; md5: string }> {
-    const references: Array<{ path: string; md5: string }> = [];
-    const regex = /#([^\s]+)/g;
-    let match;
-
-    while ((match = regex.exec(content)) !== null) {
-      if (match[1]) {
-        references.push({
-          path: match[1],
-          md5: "placeholder",
-        });
-      }
-    }
-
-    return references;
   }
 }

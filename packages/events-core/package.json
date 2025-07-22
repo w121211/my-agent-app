@@ -16,7 +16,13 @@
     "chat-engine-demo": "tsx src/chat-engine/demo.ts",
     "content-generator-demo": "tsx src/services/content-generator/demo.ts",
     "test-with-api": "tsx src/chat-engine/test-with-api.ts",
-    "trpc-server": "tsx --watch src/server/trpc-server.ts"
+    "trpc-server": "tsx --watch src/server/trpc-server.ts",
+    "file-references-demo": "tsx examples/file-references-demo.ts",
+    "file-references-unit-test": "tsx examples/file-references-unit-test.ts",
+    "message-processing-demo": "tsx examples/message-processing-demo.ts",
+    "chat-file-utils-demo": "tsx -e \"import('./src/services/chat-file-utils.js').then(m => console.log('✅ Chat file utils loaded successfully', Object.keys(m)))\"",
+    "chat-file-utils-test": "tsx examples/chat-file-utils-test.ts",
+    "file-search-test": "tsx examples/file-search-simple-test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.9.0",
@@ -25,6 +31,7 @@
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
     "event-source-polyfill": "^1.0.31",
+    "fuzzysort": "^3.1.0",
     "superjson": "^2.2.2",
     "tslog": "^4.9.3",
     "uuid": "^11.1.0",

@@ -1,6 +1,7 @@
 <!-- apps/my-app-svelte/src/components/ChatPanel.svelte -->
 <script lang="ts">
   import { tick } from "svelte";
+  import FileSearchDropdown from "./FileSearchDropdown.svelte";
   import {
     hasCurrentChat,
     currentChat,
@@ -12,6 +13,9 @@
     selectedModel,
     extractFileReferences,
   } from "../stores/chat-store";
+  import { projectFolders } from "../stores/project-store";
+  import { selectedProjectFolder } from "../stores/tree-store";
+  import { trpcClient } from "../lib/trpc-client";
   import {
     connectionStates,
     isLoadingOpenChat,
@@ -22,7 +26,6 @@
   import {
     Send,
     Paperclip,
-    ChevronDown,
     ChatDots,
     Pencil,
     Copy,
@@ -42,11 +45,30 @@
   let messagesContainer = $state<HTMLDivElement>();
   let draftTimeout: NodeJS.Timeout;
 
+  // File search state
+  let searchQuery = $state<string>("");
+  let searchResults = $state<any[]>([]);
+  let showSearchMenu = $state<boolean>(false);
+  let selectedIndex = $state<number>(0);
+  let isSearching = $state<boolean>(false);
+  let searchTimeout: NodeJS.Timeout;
+
+  // File search interfaces
+  interface FileSearchResult {
+    name: string;
+    relativePath: string;
+    absolutePath: string;
+    score?: number;
+    highlight?: string;
+  }
+
   // Auto-scroll to bottom when new messages arrive using $effect
   $effect(() => {
     if ($currentChatMessages && messagesContainer) {
       tick().then(() => {
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
       });
     }
   });
@@ -59,7 +81,9 @@
     // Only focus if we're switching to a different chat (including from no chat to a chat)
     if (currentChatId && currentChatId !== previousChatId && messageInputElement) {
       tick().then(() => {
-        messageInputElement.focus();
+        if (messageInputElement) {
+          messageInputElement.focus();
+        }
       });
     }
     
@@ -83,6 +107,9 @@
   function handleInputChange(value: string) {
     updateMessageInput(value);
     
+    // Handle @ file reference detection
+    detectFileReference(value);
+    
     // Save draft when user actively types (including clearing content)
     if ($currentChat) {
       clearTimeout(draftTimeout);
@@ -92,7 +119,148 @@
     }
   }
 
+  // Detect @ file reference trigger
+  function detectFileReference(value: string) {
+    if (!messageInputElement) return;
+    
+    const cursorPos = messageInputElement.selectionStart;
+    
+    // Only process if cursor is at end (Ultra-MVP approach)
+    if (cursorPos !== value.length) {
+      hideSearchMenu();
+      return;
+    }
+    
+    // Find last @ symbol
+    const lastAtIndex = value.lastIndexOf('@');
+    if (lastAtIndex === -1) {
+      hideSearchMenu();
+      return;
+    }
+    
+    // Extract text after @
+    const afterAt = value.slice(lastAtIndex + 1);
+    if (afterAt.includes(' ')) {
+      hideSearchMenu();
+      return;
+    }
+    
+    // Trigger search
+    const query = afterAt;
+    searchQuery = query;
+    showSearchMenu = true;
+    selectedIndex = 0;
+    
+    // Debounced search
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      performFileSearch(query);
+    }, 300);
+  }
+
+  // Perform file search
+  async function performFileSearch(query: string) {
+    // Get current project ID
+    const currentProject = $selectedProjectFolder || $projectFolders[0];
+    if (!currentProject) {
+      searchResults = [];
+      return;
+    }
+    
+    isSearching = true;
+    
+    try {
+      const results = await trpcClient.projectFolder.searchFiles.query({
+        query: query || "", // Show all files if query is empty
+        projectId: currentProject.id,
+        limit: 10
+      });
+      
+      searchResults = results;
+    } catch (error) {
+      logger.error("File search failed:", error);
+      searchResults = [];
+    } finally {
+      isSearching = false;
+    }
+  }
+
+  // Hide search menu
+  function hideSearchMenu() {
+    showSearchMenu = false;
+    searchResults = [];
+    searchQuery = "";
+    selectedIndex = 0;
+    clearTimeout(searchTimeout);
+  }
+
+  // Handle file selection from dropdown
+  function handleFileSelect(file: FileSearchResult) {
+    if (!messageInputElement) return;
+    
+    const value = $messageInput;
+    const lastAtIndex = value.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      // Replace @query with @filename and add space
+      const beforeAt = value.slice(0, lastAtIndex);
+      const newValue = `${beforeAt}@${file.relativePath} `;
+      
+      updateMessageInput(newValue);
+      
+      // Set cursor after the space
+      tick().then(() => {
+        if (messageInputElement) {
+          messageInputElement.focus();
+          messageInputElement.setSelectionRange(newValue.length, newValue.length);
+        }
+      });
+    }
+    
+    hideSearchMenu();
+  }
+
+  // Handle search menu cancel
+  function handleSearchCancel() {
+    hideSearchMenu();
+    if (messageInputElement) {
+      messageInputElement.focus();
+    }
+  }
+
+  // Handle search menu hover (for keyboard navigation)
+  function handleSearchHover(index: number) {
+    selectedIndex = index;
+  }
+
   function handleKeyPress(event: KeyboardEvent) {
+    // Handle search menu navigation
+    if (showSearchMenu) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, searchResults.length - 1);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        if (searchResults[selectedIndex]) {
+          handleFileSelect(searchResults[selectedIndex]);
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        handleSearchCancel();
+        return;
+      }
+    }
+    
+    // Normal message sending
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
@@ -152,10 +320,11 @@
     { value: "gemini", label: "Gemini 2.5 Pro" },
   ];
 
-  // Cleanup timeout on component destroy using $effect
+  // Cleanup timeouts on component destroy using $effect
   $effect(() => {
     return () => {
       clearTimeout(draftTimeout);
+      clearTimeout(searchTimeout);
     };
   });
 </script>
@@ -217,9 +386,9 @@
                   {#each fileReferences as ref}
                     <button
                       onclick={() => handleFileReference(ref.path)}
-                      class="text-accent hover:text-accent/80 text-sm underline"
+                      class="text-sm underline {ref.syntax === '@' ? 'text-blue-500 hover:text-blue-400' : 'text-accent hover:text-accent/80'}"
                     >
-                      #{ref.path}
+                      {ref.syntax}{ref.path}
                     </button>
                   {/each}
                 </div>
@@ -369,11 +538,23 @@
           bind:value={$messageInput}
           oninput={(e) => handleInputChange(e.currentTarget.value)}
           onkeypress={handleKeyPress}
-          placeholder="Type your message..."
+          onkeydown={handleKeyPress}
+          placeholder="Type your message... Use @ to reference files"
           class="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full resize-none rounded-md border px-3 py-3 text-[15px] focus:outline-none"
           rows="3"
           disabled={$isLoadingSubmitMessage}
         ></textarea>
+        
+        <!-- File Search Dropdown -->
+        <FileSearchDropdown
+          results={searchResults}
+          selectedIndex={selectedIndex}
+          visible={showSearchMenu}
+          loading={isSearching}
+          onselect={handleFileSelect}
+          oncancel={handleSearchCancel}
+          onhover={handleSearchHover}
+        />
       </div>
 
       <!-- Controls below input -->

@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { v4 as uuidv4 } from "uuid";
 import { Logger, ILogObj } from "tslog";
+import fuzzysort from "fuzzysort";
 import type { IEventBus, BaseEvent } from "../event-bus.js";
 import type { UserSettingsRepository } from "./user-settings-repository.js";
 import { FileWatcherService } from "./file-watcher-service.js";
@@ -19,6 +20,14 @@ export interface FolderTreeNode {
   path: string; // Absolute path
   isDirectory: boolean;
   children?: FolderTreeNode[];
+}
+
+export interface FileSearchResult {
+  name: string; // "world.txt"
+  relativePath: string; // "docs/world.txt"
+  absolutePath: string; // "/project/docs/world.txt"
+  score?: number; // fuzzy search relevance
+  highlight?: string; // highlighted text for UI
 }
 
 export type ProjectFolderUpdateType =
@@ -315,6 +324,72 @@ export class ProjectFolderService {
     return null;
   }
 
+  /**
+   * Search for files in a specific project using fuzzy search
+   */
+  public async searchFilesInProject(
+    query: string,
+    projectId: string,
+    limit: number = 20
+  ): Promise<FileSearchResult[]> {
+    this.logger.info(`Searching files in project ${projectId} with query: ${query}`);
+
+    // Find the project folder by ID
+    const settings = await this.userSettingsRepository.getSettings();
+    const projectFolder = settings.projectFolders.find(
+      (folder) => folder.id === projectId
+    );
+
+    if (!projectFolder) {
+      throw new Error(`Project folder with ID ${projectId} not found`);
+    }
+
+    // Get the folder tree for the project
+    const folderTree = await this.getFolderTree(projectFolder.path);
+
+    // Flatten the tree to get all files
+    const allFiles = this.flattenTreeToFiles(folderTree, projectFolder.path);
+
+    // Filter files to exclude unnecessary directories and files
+    const filteredFiles = allFiles.filter((file) => {
+      const relativePath = file.relativePath.toLowerCase();
+      return (
+        !relativePath.includes("node_modules") &&
+        !relativePath.includes(".git") &&
+        !relativePath.includes("dist") &&
+        !relativePath.includes("build") &&
+        !relativePath.startsWith(".")
+      );
+    });
+
+    // If no query, return all filtered files (limited)
+    if (!query.trim()) {
+      return filteredFiles.slice(0, limit);
+    }
+
+    // Prepare files for fuzzy search
+    const targets = filteredFiles.map((file) => ({
+      file,
+      prepared: fuzzysort.prepare(file.name)
+    }));
+
+    // Perform fuzzy search
+    const results = fuzzysort.go(query, targets, {
+      key: 'prepared',
+      limit,
+      threshold: -10000 // Allow lower quality matches
+    });
+
+    // Convert results to FileSearchResult format
+    return results.map((result) => ({
+      name: result.obj.file.name,
+      relativePath: result.obj.file.relativePath,
+      absolutePath: result.obj.file.absolutePath,
+      score: result.score,
+      highlight: result.highlight('<mark>', '</mark>') || result.obj.file.name
+    }));
+  }
+
   private async validateProjectFolderPath(
     absoluteProjectFolderPath: string
   ): Promise<boolean> {
@@ -372,6 +447,27 @@ export class ProjectFolderService {
       isDirectory: true,
       children,
     };
+  }
+
+  private flattenTreeToFiles(node: FolderTreeNode, projectPath: string): FileSearchResult[] {
+    const files: FileSearchResult[] = [];
+
+    if (!node.isDirectory) {
+      // It's a file, add it to the results
+      const relativePath = path.relative(projectPath, node.path);
+      files.push({
+        name: node.name,
+        relativePath,
+        absolutePath: node.path
+      });
+    } else if (node.children) {
+      // It's a directory, recursively process children
+      for (const child of node.children) {
+        files.push(...this.flattenTreeToFiles(child, projectPath));
+      }
+    }
+
+    return files;
   }
 }
 

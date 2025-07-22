@@ -154,17 +154,32 @@ export function updateChatMetadata(metadata: Partial<Chat["metadata"]>) {
 // Extract file references from message content
 export function extractFileReferences(
   content: string,
-): Array<{ path: string; type: "file" | "image" }> {
-  const references: Array<{ path: string; type: "file" | "image" }> = [];
-  const regex =
+): Array<{ path: string; type: "file" | "image"; syntax: "#" | "@" }> {
+  const references: Array<{ path: string; type: "file" | "image"; syntax: "#" | "@" }> = [];
+  
+  // Pattern for both # and @ syntax
+  const hashRegex =
     /#([^\s]+\.(png|jpg|jpeg|md|html|ts|js|tsx|jsx|json|css|svg|gif|pdf))/gi;
+  const atRegex =
+    /@([^\s]+\.(png|jpg|jpeg|md|html|ts|js|tsx|jsx|json|css|svg|gif|pdf))/gi;
+  
   let match;
 
-  while ((match = regex.exec(content)) !== null) {
+  // Extract # references
+  while ((match = hashRegex.exec(content)) !== null) {
     if (match[1]) {
       const filePath = match[1];
       const isImage = /\.(png|jpg|jpeg|gif|svg|webp|bmp)$/i.test(filePath);
-      references.push({ path: filePath, type: isImage ? "image" : "file" });
+      references.push({ path: filePath, type: isImage ? "image" : "file", syntax: "#" });
+    }
+  }
+  
+  // Extract @ references
+  while ((match = atRegex.exec(content)) !== null) {
+    if (match[1]) {
+      const filePath = match[1];
+      const isImage = /\.(png|jpg|jpeg|gif|svg|webp|bmp)$/i.test(filePath);
+      references.push({ path: filePath, type: isImage ? "image" : "file", syntax: "@" });
     }
   }
 

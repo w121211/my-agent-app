@@ -35,6 +35,12 @@ export const startWatchingAllProjectFoldersSchema = z.object({
   correlationId: z.string().optional(),
 });
 
+export const searchFilesSchema = z.object({
+  query: z.string(),
+  projectId: z.string(),
+  limit: z.number().optional().default(20),
+});
+
 export function createProjectFolderRouter(
   projectFolderService: ProjectFolderService
 ) {
@@ -76,6 +82,16 @@ export function createProjectFolderRouter(
           input.correlationId
         );
         return { count };
+      }),
+
+    searchFiles: publicProcedure
+      .input(searchFilesSchema)
+      .query(async ({ input }) => {
+        return projectFolderService.searchFilesInProject(
+          input.query,
+          input.projectId,
+          input.limit
+        );
       }),
   });
 }
