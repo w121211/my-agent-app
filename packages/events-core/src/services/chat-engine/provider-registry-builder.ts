@@ -1,4 +1,4 @@
-// packages/events-core/src/services/content-generator/provider-registry-builder.ts
+// packages/events-core/src/services/chat-engine/provider-registry-builder.ts
 import type { UserSettings } from "../user-settings-repository.js";
 
 export interface ProviderRegistry {

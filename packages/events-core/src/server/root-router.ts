@@ -4,7 +4,7 @@ import { router } from "./trpc-server.js";
 import { createServerEventBus } from "../event-bus.js";
 import { TaskRepository } from "../services/task-repository.js";
 import { TaskService } from "../services/task-service.js";
-import { ChatService } from "../services/chat-service.js";
+// import { ChatService } from "../services/chat-service.js";
 import { FileService } from "../services/file-service.js";
 import { createUserSettingsRepository } from "../services/user-settings-repository.js";
 import { ChatRepository } from "../services/chat-repository.js";
@@ -13,11 +13,12 @@ import { createUserSettingsService } from "../services/user-settings-service.js"
 import { createProjectFolderService } from "../services/project-folder-service.js";
 import { createEventRouter } from "./routers/event-router.js";
 import { createTaskRouter } from "./routers/task-router.js";
-import { createChatRouter } from "./routers/chat-router.js";
+// import { createChatRouter } from "./routers/chat-router.js";
 import { createProjectFolderRouter } from "./routers/project-folder-router.js";
 import { createFileRouter } from "./routers/file-router.js";
 import { createUserSettingsRouter } from "./routers/user-settings-router.js";
 import { createToolCallRouter } from "./routers/tool-call-router.js";
+import { createChatEngineRouter } from "./routers/chat-engine-router.js";
 import { ToolRegistry } from "../services/tool-call/tool-registry.js";
 import { ToolCallScheduler } from "../services/tool-call/tool-call-scheduler.js";
 import { ApprovalMode } from "../services/tool-call/types.js";
@@ -38,7 +39,7 @@ export async function createAppRouter(userDataDir: string) {
   const projectFolderService = createProjectFolderService(
     eventBus,
     userSettingsRepo,
-    fileWatcherService
+    fileWatcherService,
   );
 
   // Create task repository
@@ -73,13 +74,13 @@ export async function createAppRouter(userDataDir: string) {
   logger.info(`Chat repository initialized with folders`);
 
   const fileService = new FileService(eventBus);
-  const chatService = new ChatService(
-    eventBus,
-    chatRepository,
-    taskService,
-    projectFolderService,
-    fileService
-  );
+  // const chatService = new ChatService(
+  //   eventBus,
+  //   chatRepository,
+  //   taskService,
+  //   projectFolderService,
+  //   fileService,
+  // );
   const userSettingsService = createUserSettingsService(userSettingsRepo);
 
   // Initialize tool registry and scheduler
@@ -95,13 +96,19 @@ export async function createAppRouter(userDataDir: string) {
   projectFolderService
     .startWatchingAllProjectFolders()
     .catch((err) =>
-      logger.error("Failed to start watching project folders:", err)
+      logger.error("Failed to start watching project folders:", err),
     );
 
   // Create the application router
   return router({
     task: createTaskRouter(taskService),
-    chat: createChatRouter(chatService),
+    // chat: createChatRouter(chatService),
+    chatEngine: createChatEngineRouter(
+      eventBus,
+      taskService,
+      projectFolderService,
+      userSettingsService,
+    ),
     projectFolder: createProjectFolderRouter(projectFolderService),
     file: createFileRouter(fileService),
     event: createEventRouter(eventBus),

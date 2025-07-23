@@ -14,12 +14,15 @@ import {
   type ToolResults,
   type ConversationResult,
 } from "./chat-session.js";
+import type { ChatModelConfig, AvailableModel } from "./types.js";
+import { ProviderRegistryBuilder } from "./provider-registry-builder.js";
+import type { UserSettingsService } from "../user-settings-service.js";
 import type { ChatUpdatedEvent } from "./events.js";
 import { ChatSessionRepositoryImpl, type ChatSessionRepository } from "./chat-session-repository.js";
 
 interface CreateChatConfig {
   mode?: ChatMode;
-  model?: string;
+  model?: string | ChatModelConfig;
   knowledge?: string[];
   prompt?: string;
   newTask?: boolean;
@@ -37,6 +40,7 @@ export class ChatClient {
   private readonly chatSessionRepository: ChatSessionRepository;
   private readonly taskService: TaskService;
   private readonly projectFolderService: ProjectFolderService;
+  private readonly userSettingsService: UserSettingsService;
   private readonly sessions: Map<string, ChatSession> = new Map();
   private readonly sessionAccessTime: Map<string, number> = new Map();
   private readonly maxSessions: number = 10;
@@ -46,12 +50,14 @@ export class ChatClient {
     chatSessionRepository: ChatSessionRepository,
     taskService: TaskService,
     projectFolderService: ProjectFolderService,
+    userSettingsService: UserSettingsService,
   ) {
     this.logger = new Logger({ name: "ChatClient" });
     this.eventBus = eventBus;
     this.chatSessionRepository = chatSessionRepository;
     this.taskService = taskService;
     this.projectFolderService = projectFolderService;
+    this.userSettingsService = userSettingsService;
   }
 
   // Core API methods according to design specification
@@ -407,5 +413,79 @@ export class ChatClient {
     const sessionId = await this.loadChatFromFile(absoluteFilePath);
     const session = await this.getOrLoadChatSession(sessionId);
     return session.toJSON();
+  }
+
+  // Enhanced AI SDK v5 methods
+  async getAvailableModels(): Promise<AvailableModel[]> {
+    const userSettings = await this.userSettingsService.getUserSettings();
+    return this.buildAvailableModelsList(userSettings);
+  }
+
+  async validateModelConfig(modelConfig: ChatModelConfig): Promise<boolean> {
+    try {
+      const userSettings = await this.userSettingsService.getUserSettings();
+      const registry = await ProviderRegistryBuilder.build(userSettings);
+      
+      registry.languageModel(`${modelConfig.provider}:${modelConfig.modelId}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private buildAvailableModelsList(userSettings: any): AvailableModel[] {
+    const models: AvailableModel[] = [];
+
+    if (userSettings.providers.openai?.enabled) {
+      models.push(
+        {
+          id: 'openai:gpt-4',
+          provider: 'openai',
+          modelId: 'gpt-4',
+          displayName: 'GPT-4',
+          capabilities: ['text', 'tools'],
+        },
+        {
+          id: 'openai:gpt-4-turbo',
+          provider: 'openai',
+          modelId: 'gpt-4-turbo',
+          displayName: 'GPT-4 Turbo',
+          capabilities: ['text', 'tools', 'vision'],
+        },
+      );
+    }
+
+    if (userSettings.providers.anthropic?.enabled) {
+      models.push(
+        {
+          id: 'anthropic:claude-3-sonnet',
+          provider: 'anthropic',
+          modelId: 'claude-3-sonnet',
+          displayName: 'Claude 3 Sonnet',
+          capabilities: ['text', 'tools', 'vision'],
+        },
+        {
+          id: 'anthropic:claude-3-opus',
+          provider: 'anthropic',
+          modelId: 'claude-3-opus',
+          displayName: 'Claude 3 Opus',
+          capabilities: ['text', 'tools', 'vision'],
+        },
+      );
+    }
+
+    if (userSettings.providers.google?.enabled) {
+      models.push(
+        {
+          id: 'google:gemini-pro',
+          provider: 'google',
+          modelId: 'gemini-pro',
+          displayName: 'Gemini Pro',
+          capabilities: ['text', 'tools'],
+        },
+      );
+    }
+
+    return models;
   }
 }

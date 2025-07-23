@@ -1,4 +1,4 @@
-// packages/events-core/src/services/content-generator/types.ts
+// packages/events-core/src/services/chat-engine/types.ts
 
 export interface ChatModelConfig {
   provider: string;

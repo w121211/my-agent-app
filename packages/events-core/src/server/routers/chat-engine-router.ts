@@ -2,137 +2,155 @@
 
 import { z } from "zod";
 import { router, publicProcedure } from "../trpc-server.js";
-import { 
-  ChatEngineConfig, 
-  ChatClient,
-  type ChatSessionConfig,
-  type SystemConfig,
-  type ChatStreamEvent 
-} from "../../chat-engine/index.js";
+import { ChatClient } from "../../services/chat-engine/chat-client.js";
+import { ChatSessionRepositoryImpl } from "../../services/chat-engine/chat-session-repository.js";
+import type { ChatModelConfig, AvailableModel } from "../../services/chat-engine/types.js";
+import type { TaskService } from "../../services/task-service.js";
+import type { ProjectFolderService } from "../../services/project-folder-service.js";
+import type { UserSettingsService } from "../../services/user-settings-service.js";
+import type { IEventBus } from "../../event-bus.js";
 
-const systemConfigSchema = z.object({
-  apiKey: z.string(),
-  authType: z.enum(['oauth', 'api-key', 'vertex-ai']).default('api-key'),
-  debugMode: z.boolean().default(false),
-  enableTools: z.boolean().default(false),
-  maxRetries: z.number().default(3),
-  timeout: z.number().default(30000),
+const chatModelConfigSchema = z.object({
+  provider: z.string(),
+  modelId: z.string(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().positive().optional(),
+  topP: z.number().min(0).max(1).optional(),
+  systemPrompt: z.string().optional(),
 });
 
-const chatConfigSchema = z.object({
-  model: z.string().default('gemini-2.0-flash'),
-  temperature: z.number().min(0).max(1).optional(),
-  topP: z.number().min(0).max(1).optional(),
-  maxTokens: z.number().positive().optional(),
+const createChatConfigSchema = z.object({
   mode: z.enum(['chat', 'agent']).default('chat'),
-  systemPrompt: z.string().optional(),
-  maxTurns: z.number().positive().optional(),
-  maxSessionTurns: z.number().positive().optional(),
+  model: z.union([z.string(), chatModelConfigSchema]).optional(),
+  knowledge: z.array(z.string()).optional(),
+  prompt: z.string().optional(),
+  newTask: z.boolean().optional(),
 });
 
 const sendMessageSchema = z.object({
+  chatSessionId: z.string(),
   message: z.string(),
-  systemConfig: systemConfigSchema,
-  chatConfig: chatConfigSchema,
-  correlationId: z.string().optional(),
-  initialHistory: z.array(z.any()).optional(),
+  attachments: z.array(z.object({
+    fileName: z.string(),
+    content: z.string(),
+  })).optional(),
 });
 
-export function createChatEngineRouter() {
+export function createChatEngineRouter(
+  eventBus: IEventBus,
+  taskService: TaskService,
+  projectFolderService: ProjectFolderService,
+  userSettingsService: UserSettingsService,
+) {
+  const chatSessionRepository = new ChatSessionRepositoryImpl();
+  const chatClient = new ChatClient(
+    eventBus,
+    chatSessionRepository,
+    taskService,
+    projectFolderService,
+    userSettingsService,
+  );
+
   return router({
-    
-    sendMessageStream: publicProcedure
-      .input(sendMessageSchema)
-      .subscription(async function* ({ input, signal }) {
-        
-        const systemConfig: SystemConfig = {
-          ...input.systemConfig,
-          workingDir: process.cwd(),
-        };
-
-        const chatEngineConfig = new ChatEngineConfig(
-          systemConfig,
-          input.chatConfig
-        );
-
-        await chatEngineConfig.initialize();
-
-        const chatClient = new ChatClient(chatEngineConfig);
-
-        const correlationId = input.correlationId || `session_${Date.now()}`;
-
-        for await (const event of chatClient.sendMessageStream(
-          input.message,
-          correlationId,
-          signal,
-          undefined,
-          input.initialHistory,
-          input.chatConfig
-        )) {
-          yield event;
-        }
-      }),
-    
-    generateJson: publicProcedure
+    createChat: publicProcedure
       .input(z.object({
-        message: z.string(),
-        schema: z.any(),
-        systemConfig: systemConfigSchema,
-        chatConfig: chatConfigSchema,
-        correlationId: z.string().optional(),
-        initialHistory: z.array(z.any()).optional(),
-      }))
-      .mutation(async ({ input, signal }) => {
-        
-        const systemConfig: SystemConfig = {
-          ...input.systemConfig,
-          workingDir: process.cwd(),
-        };
-
-        const chatEngineConfig = new ChatEngineConfig(
-          systemConfig,
-          input.chatConfig
-        );
-
-        await chatEngineConfig.initialize();
-
-        const chatClient = new ChatClient(chatEngineConfig);
-
-        const correlationId = input.correlationId || `json_${Date.now()}`;
-        const abortSignal = signal || new AbortController().signal;
-
-        return chatClient.generateJson(
-          input.message,
-          input.schema,
-          input.chatConfig,
-          correlationId,
-          abortSignal,
-          input.initialHistory
-        );
-      }),
-    
-    resetChat: publicProcedure
-      .input(z.object({
-        systemConfig: systemConfigSchema,
+        targetDirectory: z.string(),
+        config: createChatConfigSchema.optional(),
       }))
       .mutation(async ({ input }) => {
-        
-        const systemConfig: SystemConfig = {
-          ...input.systemConfig,
-          workingDir: process.cwd(),
-        };
-
-        const chatEngineConfig = new ChatEngineConfig(
-          systemConfig,
-          { model: 'gemini-2.0-flash', mode: 'chat' }
+        const chatSessionId = await chatClient.createChat(
+          input.targetDirectory,
+          input.config,
         );
+        return { chatSessionId };
+      }),
 
-        await chatEngineConfig.initialize();
+    sendMessage: publicProcedure
+      .input(sendMessageSchema)
+      .mutation(async ({ input }) => {
+        const result = await chatClient.sendMessage(
+          input.chatSessionId,
+          input.message,
+          input.attachments,
+        );
+        return result;
+      }),
 
-        const chatClient = new ChatClient(chatEngineConfig);
-        chatClient.resetChat();
+    confirmToolCall: publicProcedure
+      .input(z.object({
+        chatSessionId: z.string(),
+        toolCallId: z.string(),
+        outcome: z.enum(['approved', 'denied']),
+      }))
+      .mutation(async ({ input }) => {
+        const result = await chatClient.confirmToolCall(
+          input.chatSessionId,
+          input.toolCallId,
+          input.outcome,
+        );
+        return result;
+      }),
 
+    abortChat: publicProcedure
+      .input(z.object({
+        chatSessionId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        await chatClient.abortChat(input.chatSessionId);
         return { success: true };
+      }),
+
+    getAvailableModels: publicProcedure
+      .query(async () => {
+        const models = await chatClient.getAvailableModels();
+        return models;
+      }),
+
+    validateModelConfig: publicProcedure
+      .input(chatModelConfigSchema)
+      .mutation(async ({ input }) => {
+        const isValid = await chatClient.validateModelConfig(input);
+        return { isValid };
+      }),
+
+    updateChat: publicProcedure
+      .input(z.object({
+        chatSessionId: z.string(),
+        updates: z.object({
+          metadata: z.any().optional(),
+          maxTurns: z.number().optional(),
+        }).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await chatClient.updateChat(input.chatSessionId, input.updates || {});
+        return { success: true };
+      }),
+
+    deleteChat: publicProcedure
+      .input(z.object({
+        chatSessionId: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        await chatClient.deleteChat(input.chatSessionId);
+        return { success: true };
+      }),
+
+    getChatById: publicProcedure
+      .input(z.object({
+        chatSessionId: z.string(),
+      }))
+      .query(async ({ input }) => {
+        const chat = await chatClient.getChatById(input.chatSessionId);
+        return chat;
+      }),
+
+    loadChatFromFile: publicProcedure
+      .input(z.object({
+        filePath: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        const chatSessionId = await chatClient.loadChatFromFile(input.filePath);
+        return { chatSessionId };
       }),
   });
 }
