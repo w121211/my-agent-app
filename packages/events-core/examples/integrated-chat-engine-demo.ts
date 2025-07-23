@@ -334,7 +334,7 @@ async function main() {
     // Summary
     console.log("\n📊 === Integration Demo Summary ===");
     console.log("✨ Successfully demonstrated:");
-    console.log("  - AI SDK v5 integration with ProviderRegistryBuilder");
+    console.log("  - AI SDK v5 integration with buildProviderRegistry");
     console.log("  - Enhanced model configuration (ChatModelConfig)");
     console.log("  - Streaming capabilities with mock AI SDK v5");
     console.log("  - Tool system integration");

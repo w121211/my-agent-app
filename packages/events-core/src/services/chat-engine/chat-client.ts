@@ -15,7 +15,7 @@ import {
   type ConversationResult,
 } from "./chat-session.js";
 import type { ChatModelConfig, AvailableModel } from "./types.js";
-import { ProviderRegistryBuilder } from "./provider-registry-builder.js";
+import { buildProviderRegistry } from "./provider-registry-builder.js";
 import type { UserSettingsService } from "../user-settings-service.js";
 import type { ChatUpdatedEvent } from "./events.js";
 import { ChatSessionRepositoryImpl, type ChatSessionRepository } from "./chat-session-repository.js";
@@ -180,7 +180,7 @@ export class ChatClient {
     chatSession.absoluteFilePath = filePath;
 
     // Create in-memory session
-    const session = ChatSession.fromJSON(chatSession, this.eventBus);
+    const session = ChatSession.fromJSON(chatSession, this.eventBus, undefined, this.userSettingsService);
     this.sessions.set(chatSession.id, session);
     this.sessionAccessTime.set(chatSession.id, Date.now());
 
@@ -206,7 +206,7 @@ export class ChatClient {
 
     // Load from repository
     const chatData = await this.chatSessionRepository.load(chatSessionId);
-    const session = ChatSession.fromJSON(chatData, this.eventBus);
+    const session = ChatSession.fromJSON(chatData, this.eventBus, undefined, this.userSettingsService);
 
     // Add to session pool
     this.sessions.set(chatSessionId, session);
@@ -240,7 +240,7 @@ export class ChatClient {
 
   async loadChatFromFile(filePath: string): Promise<string> {
     const chatData = await this.chatSessionRepository.loadFromFile(filePath);
-    const session = ChatSession.fromJSON(chatData, this.eventBus);
+    const session = ChatSession.fromJSON(chatData, this.eventBus, undefined, this.userSettingsService);
     
     this.sessions.set(chatData.id, session);
     this.sessionAccessTime.set(chatData.id, Date.now());
@@ -424,8 +424,9 @@ export class ChatClient {
   async validateModelConfig(modelConfig: ChatModelConfig): Promise<boolean> {
     try {
       const userSettings = await this.userSettingsService.getUserSettings();
-      const registry = await ProviderRegistryBuilder.build(userSettings);
+      const registry = buildProviderRegistry(userSettings);
       
+      // Use the official AI SDK registry method
       registry.languageModel(`${modelConfig.provider}:${modelConfig.modelId}`);
       return true;
     } catch {

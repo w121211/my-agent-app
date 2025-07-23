@@ -15,6 +15,7 @@ export interface UserSettings {
     openai?: ProviderConfig;
     anthropic?: ProviderConfig;
     google?: ProviderConfig;
+    openrouter?: ProviderConfig;
   };
 }
 

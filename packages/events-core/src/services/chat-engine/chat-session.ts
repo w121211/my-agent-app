@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import { Logger, type ILogObj } from "tslog";
 import type { IEventBus } from "../../event-bus.js";
 import type { ChatModelConfig } from "./types.js";
-import { ProviderRegistryBuilder, type ProviderRegistry } from "./provider-registry-builder.js";
+import { buildProviderRegistry } from "./provider-registry-builder.js";
+import type { UserSettingsService } from "../user-settings-service.js";
 import { ToolRegistry } from "../tool-call/tool-registry.js";
 import { ToolCallScheduler } from "../tool-call/tool-call-scheduler.js";
 import type { 
@@ -106,15 +107,17 @@ export class ChatSession {
   
   private eventBus: IEventBus;
   private currentAbortController: AbortController | null = null;
-  private registry: ProviderRegistry | null = null;
+  private registry: any | null = null;
   private toolCallScheduler: ToolCallScheduler | null = null;
   private toolRegistry: ToolRegistry | null = null;
   private logger: Logger<ILogObj>;
+  private userSettingsService: UserSettingsService | null = null;
 
   constructor(
     data: Omit<SerializableChat, 'status' | 'fileStatus' | 'currentTurn' | 'maxTurns'>,
     eventBus: IEventBus,
-    registry?: ProviderRegistry
+    registry?: any,
+    userSettingsService?: UserSettingsService
   ) {
     this.id = data.id;
     this.absoluteFilePath = data.absoluteFilePath;
@@ -124,6 +127,7 @@ export class ChatSession {
     this.metadata = data.metadata;
     this.eventBus = eventBus;
     this.registry = registry || null;
+    this.userSettingsService = userSettingsService || null;
     this.logger = new Logger({ name: "ChatSession" });
     
     if (this.registry) {
@@ -340,8 +344,19 @@ export class ChatSession {
     toolCalls: ToolCall[];
   }> {
     const modelConfig = this.getModelConfig();
-    if (!modelConfig || !this.registry) {
-      throw new Error('Enhanced model response requires model config and registry');
+    if (!modelConfig) {
+      throw new Error('Enhanced model response requires model config');
+    }
+    
+    // Initialize registry if not available
+    if (!this.registry && this.userSettingsService) {
+      const userSettings = await this.userSettingsService.getUserSettings();
+      this.registry = buildProviderRegistry(userSettings);
+      this.initializeToolSystem();
+    }
+    
+    if (!this.registry) {
+      throw new Error('Provider registry not available');
     }
     
     try {
@@ -400,14 +415,26 @@ export class ChatSession {
     }
   }
   
-  private async streamText(config: any) {
-    // Mock implementation of AI SDK v5 streamText
-    const mockStream = {
-      fullStream: this.createMockStream(),
-      text: Promise.resolve(`Mock AI response for model ${config.model.modelId}`),
-    };
+  private async streamText(config: {
+    model: any;
+    messages: any[];
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+    system?: string;
+    abortSignal: AbortSignal;
+  }) {
+    const { streamText } = await import('ai');
     
-    return mockStream;
+    return streamText({
+      model: config.model,
+      messages: config.messages,
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+      topP: config.topP,
+      system: config.system,
+      abortSignal: config.abortSignal,
+    });
   }
   
   private async* createMockStream() {
@@ -478,8 +505,13 @@ export class ChatSession {
     return this.messages[this.messages.length - 1]?.id || "";
   }
 
-  static fromJSON(data: SerializableChat, eventBus: IEventBus, registry?: ProviderRegistry): ChatSession {
-    const chatSession = new ChatSession(data, eventBus, registry);
+  static fromJSON(
+    data: SerializableChat, 
+    eventBus: IEventBus, 
+    registry?: any,
+    userSettingsService?: UserSettingsService
+  ): ChatSession {
+    const chatSession = new ChatSession(data, eventBus, registry, userSettingsService);
     chatSession.status = data.status;
     chatSession.fileStatus = data.fileStatus;
     chatSession.currentTurn = data.currentTurn;
