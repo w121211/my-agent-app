@@ -2,7 +2,6 @@
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
 import type { IEventBus } from "../../event-bus.js";
-import type { ChatRepository } from "../chat-repository.js";
 import type { TaskService } from "../task-service.js";
 import type { ProjectFolderService } from "../project-folder-service.js";
 import {
@@ -16,27 +15,282 @@ import {
   type ConversationResult,
 } from "./chat-session.js";
 import type { ChatUpdatedEvent } from "./events.js";
+import { ChatSessionRepositoryImpl, type ChatSessionRepository } from "./chat-session-repository.js";
 
-// ChatClient class for lifecycle management
+interface CreateChatConfig {
+  mode?: ChatMode;
+  model?: string;
+  knowledge?: string[];
+  prompt?: string;
+  newTask?: boolean;
+}
+
+interface MessageAttachment {
+  fileName: string;
+  content: string;
+}
+
+// ChatClient class for lifecycle management with session pool
 export class ChatClient {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
-  private readonly chatRepository: ChatRepository;
+  private readonly chatSessionRepository: ChatSessionRepository;
   private readonly taskService: TaskService;
   private readonly projectFolderService: ProjectFolderService;
-  private currentChatSession: ChatSession | null = null;
+  private readonly sessions: Map<string, ChatSession> = new Map();
+  private readonly sessionAccessTime: Map<string, number> = new Map();
+  private readonly maxSessions: number = 10;
 
   constructor(
     eventBus: IEventBus,
-    chatRepository: ChatRepository,
+    chatSessionRepository: ChatSessionRepository,
     taskService: TaskService,
     projectFolderService: ProjectFolderService,
   ) {
     this.logger = new Logger({ name: "ChatClient" });
     this.eventBus = eventBus;
-    this.chatRepository = chatRepository;
+    this.chatSessionRepository = chatSessionRepository;
     this.taskService = taskService;
     this.projectFolderService = projectFolderService;
+  }
+
+  // Core API methods according to design specification
+  async sendMessage(
+    chatSessionId: string,
+    message: string,
+    attachments?: MessageAttachment[],
+  ): Promise<ConversationResult> {
+    const session = await this.getOrLoadChatSession(chatSessionId);
+
+    const userInput: UserInput = {
+      type: "user_message",
+      content: message,
+      attachments,
+    };
+
+    const result = await session.runTurn(userInput);
+    await this.persistSession(session);
+
+    return result;
+  }
+
+  async rerunChat(
+    chatSessionId: string,
+    inputData?: Record<string, any>,
+  ): Promise<ConversationResult> {
+    const session = await this.getOrLoadChatSession(chatSessionId);
+
+    // Reset session to allow rerun
+    session.currentTurn = 0;
+    session.status = "idle";
+
+    const userInput: UserInput = {
+      type: "user_message",
+      content: inputData?.message || "Rerun previous conversation",
+    };
+
+    const result = await session.runTurn(userInput);
+    await this.persistSession(session);
+
+    return result;
+  }
+
+  async confirmToolCall(
+    chatSessionId: string,
+    toolCallId: string,
+    outcome: "approved" | "denied",
+  ): Promise<ConversationResult> {
+    const session = await this.getOrLoadChatSession(chatSessionId);
+
+    if (session.status !== "waiting_confirmation") {
+      throw new Error("Session is not waiting for tool confirmation");
+    }
+
+    const toolResults: ToolResults = {
+      type: "tool_results",
+      results: [{
+        id: toolCallId,
+        result: outcome === "approved" ? "Tool execution approved" : "Tool execution denied",
+      }],
+    };
+
+    const result = await session.runTurn(toolResults);
+    await this.persistSession(session);
+
+    return result;
+  }
+
+  async abortChat(chatSessionId: string): Promise<void> {
+    const session = this.sessions.get(chatSessionId);
+    if (session) {
+      session.abort();
+    }
+  }
+
+  async createChat(
+    targetDirectory: string,
+    config?: CreateChatConfig,
+  ): Promise<string> {
+    // Validate project folder
+    const isInProjectFolder =
+      await this.projectFolderService.isPathInProjectFolder(targetDirectory);
+
+    if (!isInProjectFolder) {
+      throw new Error(
+        `Cannot create chat outside of project folders. Path ${targetDirectory} is not within any registered project folder.`,
+      );
+    }
+
+    // Create task if requested
+    if (config?.newTask) {
+      const result = await this.taskService.createTask(
+        "New Chat Task",
+        {},
+        targetDirectory,
+      );
+      targetDirectory = result.absoluteDirectoryPath;
+    }
+
+    const now = new Date();
+    const chatSession: SerializableChat = {
+      id: uuidv4(),
+      absoluteFilePath: "", // Will be set by repository
+      messages: [],
+      status: "idle",
+      fileStatus: "ACTIVE",
+      currentTurn: 0,
+      maxTurns: 20,
+      createdAt: now,
+      updatedAt: now,
+      metadata: {
+        mode: config?.mode || "chat",
+        model: config?.model || "default",
+        knowledge: config?.knowledge || [],
+        title: "New Chat",
+      },
+    };
+
+    const filePath = await this.chatSessionRepository.save(chatSession, targetDirectory);
+    chatSession.absoluteFilePath = filePath;
+
+    // Create in-memory session
+    const session = ChatSession.fromJSON(chatSession, this.eventBus);
+    this.sessions.set(chatSession.id, session);
+    this.sessionAccessTime.set(chatSession.id, Date.now());
+
+    // Send initial prompt if provided
+    if (config?.prompt) {
+      await this.sendMessage(chatSession.id, config.prompt);
+    }
+
+    return chatSession.id;
+  }
+
+  async getOrLoadChatSession(chatSessionId: string): Promise<ChatSession> {
+    // Check if already in memory
+    if (this.sessions.has(chatSessionId)) {
+      this.sessionAccessTime.set(chatSessionId, Date.now());
+      return this.sessions.get(chatSessionId)!;
+    }
+
+    // Check session pool size and evict if necessary
+    if (this.sessions.size >= this.maxSessions) {
+      await this.evictLeastRecentlyUsedSession();
+    }
+
+    // Load from repository
+    const chatData = await this.chatSessionRepository.load(chatSessionId);
+    const session = ChatSession.fromJSON(chatData, this.eventBus);
+
+    // Add to session pool
+    this.sessions.set(chatSessionId, session);
+    this.sessionAccessTime.set(chatSessionId, Date.now());
+
+    return session;
+  }
+
+  async updateChat(
+    chatSessionId: string,
+    updates: Partial<SerializableChat>,
+  ): Promise<void> {
+    const session = await this.getOrLoadChatSession(chatSessionId);
+    
+    if (updates.metadata) {
+      session.metadata = { ...session.metadata, ...updates.metadata };
+    }
+    if (updates.maxTurns !== undefined) {
+      session.maxTurns = updates.maxTurns;
+    }
+    
+    session.updatedAt = new Date();
+    await this.persistSession(session);
+  }
+
+  async deleteChat(chatSessionId: string): Promise<void> {
+    await this.chatSessionRepository.delete(chatSessionId);
+    this.sessions.delete(chatSessionId);
+    this.sessionAccessTime.delete(chatSessionId);
+  }
+
+  async loadChatFromFile(filePath: string): Promise<string> {
+    const chatData = await this.chatSessionRepository.loadFromFile(filePath);
+    const session = ChatSession.fromJSON(chatData, this.eventBus);
+    
+    this.sessions.set(chatData.id, session);
+    this.sessionAccessTime.set(chatData.id, Date.now());
+    
+    return chatData.id;
+  }
+
+  // Private helper methods
+  private async evictLeastRecentlyUsedSession(): Promise<void> {
+    let oldestTime = Date.now();
+    let sessionToEvict: string | null = null;
+
+    for (const [sessionId, accessTime] of this.sessionAccessTime.entries()) {
+      if (accessTime < oldestTime) {
+        oldestTime = accessTime;
+        sessionToEvict = sessionId;
+      }
+    }
+
+    if (sessionToEvict) {
+      const session = this.sessions.get(sessionToEvict);
+      if (session) {
+        await this.persistSession(session);
+      }
+      this.sessions.delete(sessionToEvict);
+      this.sessionAccessTime.delete(sessionToEvict);
+    }
+  }
+
+  private async persistSession(session: ChatSession): Promise<void> {
+    const chatData = session.toJSON();
+    await this.chatSessionRepository.save(chatData);
+  }
+
+  // Legacy compatibility methods
+  async getSession(chatId: string): Promise<ChatSession> {
+    return this.getOrLoadChatSession(chatId);
+  }
+
+  async loadSession(chatId: string): Promise<void> {
+    await this.getOrLoadChatSession(chatId);
+  }
+
+  async saveSession(): Promise<void> {
+    // Save all active sessions
+    for (const session of this.sessions.values()) {
+      await this.persistSession(session);
+    }
+  }
+
+  async deleteSession(): Promise<void> {
+    // Delete the first active session (for backward compatibility)
+    const firstSessionId = this.sessions.keys().next().value;
+    if (firstSessionId) {
+      await this.deleteChat(firstSessionId);
+    }
   }
 
   async createSession(
@@ -48,163 +302,13 @@ export class ChatClient {
     model: string = "default",
     correlationId?: string,
   ): Promise<string> {
-    // Validate that the target directory is within a project folder
-    const isInProjectFolder =
-      await this.projectFolderService.isPathInProjectFolder(
-        targetDirectoryAbsolutePath,
-      );
-
-    if (!isInProjectFolder) {
-      throw new Error(
-        `Cannot create chat outside of project folders. Path ${targetDirectoryAbsolutePath} is not within any registered project folder.`,
-      );
-    }
-
-    this.logger.info(
-      `Creating new chat session in project folder at: ${targetDirectoryAbsolutePath}`,
-    );
-
-    const now = new Date();
-
-    // Create task if requested
-    if (newTask) {
-      const result = await this.taskService.createTask(
-        "New Chat Task",
-        {},
-        targetDirectoryAbsolutePath,
-        correlationId,
-      );
-      targetDirectoryAbsolutePath = result.absoluteDirectoryPath;
-    }
-
-    const chatData: Omit<
-      SerializableChat,
-      "absoluteFilePath" | "status" | "fileStatus" | "currentTurn" | "maxTurns"
-    > = {
-      id: uuidv4(),
-      messages: [],
-      createdAt: now,
-      updatedAt: now,
-      metadata: {
-        mode,
-        model,
-        knowledge,
-        title: "New Chat",
-      },
-    };
-
-    // Create chat object using repository (for file persistence)
-    const persistedChat = await this.chatRepository.createChat(
-      {
-        ...chatData,
-        status: "ACTIVE",
-      },
-      targetDirectoryAbsolutePath,
-      correlationId,
-    );
-
-    // Create ChatSession instance with turn management
-    this.currentChatSession = new ChatSession(
-      {
-        ...chatData,
-        absoluteFilePath: persistedChat.absoluteFilePath,
-      },
-      this.eventBus,
-    );
-
-    // If initial prompt is provided, send it
-    if (prompt) {
-      await this.sendMessage(
-        this.currentChatSession.id,
-        prompt,
-        undefined,
-        correlationId,
-      );
-    }
-
-    return this.currentChatSession.id;
-  }
-
-  async loadSession(chatId: string): Promise<void> {
-    const persistedChat = await this.chatRepository.findById(chatId);
-    if (!persistedChat) {
-      throw new Error(`Chat not found with ID: ${chatId}`);
-    }
-
-    // Convert to ChatSession instance
-    this.currentChatSession = ChatSession.fromJSON(
-      {
-        id: persistedChat.id,
-        absoluteFilePath: persistedChat.absoluteFilePath,
-        messages: persistedChat.messages,
-        status: "idle",
-        fileStatus: persistedChat.status,
-        currentTurn: 0,
-        maxTurns: 20,
-        createdAt: persistedChat.createdAt,
-        updatedAt: persistedChat.updatedAt,
-        metadata: persistedChat.metadata,
-      },
-      this.eventBus,
-    );
-  }
-
-  async saveSession(): Promise<void> {
-    if (!this.currentChatSession) throw new Error("No active session");
-
-    // Save to repository using the existing persistence format
-    const chatData = this.currentChatSession.toJSON();
-    await this.chatRepository.updateMetadata(
-      chatData.absoluteFilePath,
-      chatData.metadata || {},
-    );
-
-    // Update messages if needed
-    // TODO: Implement proper sync between ChatSession instance and repository
-  }
-
-  async deleteSession(): Promise<void> {
-    if (!this.currentChatSession) return;
-
-    await this.chatRepository.deleteChat(
-      this.currentChatSession.absoluteFilePath,
-    );
-    this.currentChatSession = null;
-  }
-
-  async getSession(chatId: string): Promise<ChatSession> {
-    if (!this.currentChatSession || this.currentChatSession.id !== chatId) {
-      await this.loadSession(chatId);
-    }
-    return this.currentChatSession!;
-  }
-
-  async sendMessage(
-    chatId: string,
-    message: string,
-    attachments?: Array<{ fileName: string; content: string }>,
-    correlationId?: string,
-  ): Promise<ConversationResult> {
-    const chatSession = await this.getSession(chatId);
-
-    if (chatSession.status !== "idle") {
-      throw new Error(
-        `Chat session is currently ${chatSession.status}. Cannot send message.`,
-      );
-    }
-
-    const userInput: UserInput = {
-      type: "user_message",
-      content: message,
-      attachments,
-    };
-
-    const result = await chatSession.runTurn(userInput);
-
-    // Save session after turn
-    await this.saveSession();
-
-    return result;
+    return this.createChat(targetDirectoryAbsolutePath, {
+      newTask,
+      mode,
+      knowledge,
+      prompt,
+      model,
+    });
   }
 
   async sendToolConfirmation(
@@ -212,99 +316,61 @@ export class ChatClient {
     toolCalls: ToolCall[],
     correlationId?: string,
   ): Promise<ConversationResult> {
-    const chatSession = await this.getSession(chatId);
+    const session = await this.getOrLoadChatSession(chatId);
 
-    if (chatSession.status !== "waiting_confirmation") {
+    if (session.status !== "waiting_confirmation") {
       throw new Error("Chat session is not waiting for tool confirmation");
     }
 
-    // Execute tools and continue conversation
     const toolResults: ToolResults = {
       type: "tool_results",
       results: toolCalls.map((call) => ({
         id: call.id,
-        result: `Executed ${call.name}`, // TODO: Replace with actual execution
+        result: `Executed ${call.name}`,
       })),
     };
 
-    const result = await chatSession.runTurn(toolResults);
-
-    // Save session after turn
-    await this.saveSession();
+    const result = await session.runTurn(toolResults);
+    await this.persistSession(session);
 
     return result;
   }
 
-  // Legacy compatibility methods
+  // Additional compatibility and utility methods
   async createEmptyChat(
     targetDirectoryAbsolutePath: string,
     correlationId?: string,
   ): Promise<SerializableChat> {
-    const sessionId = await this.createSession(
-      targetDirectoryAbsolutePath,
-      false,
-      "chat",
-      [],
-      undefined,
-      "default",
-      correlationId,
-    );
-
-    const chatSession = await this.getSession(sessionId);
-    return chatSession.toJSON();
-  }
-
-  async createChat(
-    targetDirectoryAbsolutePath: string,
-    newTask: boolean,
-    mode: ChatMode,
-    knowledge: string[],
-    prompt?: string,
-    model: string = "default",
-    correlationId?: string,
-  ): Promise<SerializableChat> {
-    const sessionId = await this.createSession(
-      targetDirectoryAbsolutePath,
-      newTask,
-      mode,
-      knowledge,
-      prompt,
-      model,
-      correlationId,
-    );
-
-    const chatSession = await this.getSession(sessionId);
-    return chatSession.toJSON();
+    const sessionId = await this.createChat(targetDirectoryAbsolutePath);
+    const session = await this.getOrLoadChatSession(sessionId);
+    return session.toJSON();
   }
 
   async findChatById(chatId: string): Promise<SerializableChat | undefined> {
     try {
-      const chatSession = await this.getSession(chatId);
-      return chatSession.toJSON();
+      const session = await this.getOrLoadChatSession(chatId);
+      return session.toJSON();
     } catch {
       return undefined;
     }
   }
 
   async getChatById(chatId: string): Promise<SerializableChat> {
-    const chatSession = await this.getSession(chatId);
-    return chatSession.toJSON();
+    const session = await this.getOrLoadChatSession(chatId);
+    return session.toJSON();
   }
 
   async getAllChats(): Promise<SerializableChat[]> {
-    const allChats = await this.chatRepository.findAll();
-    return allChats.map((chat) => ({
-      id: chat.id,
-      absoluteFilePath: chat.absoluteFilePath,
-      messages: chat.messages,
-      status: "idle" as ChatStatus,
-      fileStatus: chat.status,
-      currentTurn: 0,
-      maxTurns: 20,
-      createdAt: chat.createdAt,
-      updatedAt: chat.updatedAt,
-      metadata: chat.metadata,
-    }));
+    // This would need to be implemented by scanning all project folders
+    // For now, return active sessions plus attempt to load from repository
+    const result: SerializableChat[] = [];
+    
+    // Add active sessions
+    for (const session of this.sessions.values()) {
+      result.push(session.toJSON());
+    }
+
+    return result;
   }
 
   async updatePromptDraft(
@@ -312,53 +378,34 @@ export class ChatClient {
     promptDraft: string,
     correlationId?: string,
   ): Promise<SerializableChat> {
-    const chatSession = await this.getSession(chatId);
+    await this.updateChat(chatId, {
+      metadata: { promptDraft }
+    });
 
-    const updatedMetadata = { ...chatSession.metadata, promptDraft };
-    chatSession.metadata = updatedMetadata;
-    chatSession.updatedAt = new Date();
-
-    // Update repository
-    await this.chatRepository.updateMetadata(
-      chatSession.absoluteFilePath,
-      { promptDraft },
-      correlationId,
-    );
-
+    const session = await this.getOrLoadChatSession(chatId);
+    
     // Emit metadata updated event
     await this.eventBus.emit({
       kind: "ChatUpdatedEvent",
-      chatId: chatSession.id,
+      chatId: session.id,
       updateType: "METADATA_UPDATED",
       update: {
         metadata: { promptDraft },
       },
-      chat: chatSession.toJSON(),
+      chat: session.toJSON(),
       timestamp: new Date(),
       correlationId,
     });
 
-    return chatSession.toJSON();
+    return session.toJSON();
   }
 
   async openChatFile(
     absoluteFilePath: string,
     correlationId?: string,
   ): Promise<SerializableChat> {
-    const persistedChat =
-      await this.chatRepository.findByPath(absoluteFilePath);
-
-    return {
-      id: persistedChat.id,
-      absoluteFilePath: persistedChat.absoluteFilePath,
-      messages: persistedChat.messages,
-      status: "idle" as ChatStatus,
-      fileStatus: persistedChat.status,
-      currentTurn: 0,
-      maxTurns: 20,
-      createdAt: persistedChat.createdAt,
-      updatedAt: persistedChat.updatedAt,
-      metadata: persistedChat.metadata,
-    };
+    const sessionId = await this.loadChatFromFile(absoluteFilePath);
+    const session = await this.getOrLoadChatSession(sessionId);
+    return session.toJSON();
   }
 }

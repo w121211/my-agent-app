@@ -1,0 +1,270 @@
+<!-- docs/design_app/design-ui-v15-final-settings.html -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>App Settings UI - Final</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Tailwind CSS v4 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Bootstrap Icons CDN -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
+    />
+    <style type="text/tailwindcss">
+      @theme {
+        --color-background: #0d1117;
+        --color-surface: #161b22;
+        --color-panel: #161b22;
+        --color-border: #30363d;
+        --color-foreground: #e6edf3;
+        --color-muted: #8b949e;
+        --color-accent: #58a6ff;
+        --color-hover: #21262d;
+        --color-selected: #2f363e;
+        --color-input-background: #0d1117;
+        --color-input-border: #30363d;
+
+        --font-family-sans: "Inter", "Segoe UI", "Arial", sans-serif;
+      }
+
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 8px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #21262d;
+        border-radius: 4px;
+      }
+      /* Simple toggle switch */
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 24px;
+      }
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #30363d;
+        transition: 0.4s;
+        border-radius: 24px;
+      }
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+      input:checked + .toggle-slider {
+        background-color: #1d4ed8; /* Darker, more subtle blue */
+      }
+      input:checked + .toggle-slider:before {
+        transform: translateX(16px);
+      }
+    </style>
+  </head>
+  <body
+    class="bg-background text-foreground h-screen overflow-hidden font-sans text-[15px]"
+  >
+    <div class="flex h-screen">
+      <!-- Sidebar -->
+      <aside class="bg-surface border-border flex w-64 flex-col border-r">
+        <div
+          class="border-border flex items-center justify-between border-b p-3"
+        >
+          <span class="text-muted text-xs font-semibold uppercase tracking-wide"
+            >Projects</span
+          >
+          <button
+            class="text-muted hover:text-accent cursor-pointer p-1"
+            title="Add Project"
+          >
+            <i class="bi bi-plus-lg"></i>
+          </button>
+        </div>
+        <div class="scrollbar-thin flex-1 overflow-y-auto">
+          <div class="p-1">
+            <div>
+              <div
+                class="hover:bg-hover group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
+              >
+                <i class="bi bi-chevron-down text-muted mr-1 text-xs"></i>
+                <span class="text-sm">my-ai-project</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="border-border border-t p-3">
+          <button
+            class="bg-selected text-foreground flex w-full cursor-pointer items-center justify-center rounded-md px-3 py-2 text-xs font-medium"
+          >
+            <i class="bi bi-gear mr-2"></i>Settings
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Workspace -->
+      <main class="flex min-w-0 flex-1 flex-col">
+        <!-- Header -->
+        <header
+          class="bg-surface border-border flex h-12 shrink-0 items-center gap-2 border-b px-4"
+        >
+          <i class="bi bi-gear-wide-connected text-muted"></i>
+          <span class="font-semibold">Settings</span>
+        </header>
+
+        <!-- Settings Content -->
+        <div class="scrollbar-thin flex-1 overflow-y-auto p-6">
+            <div class="mx-auto max-w-3xl space-y-10">
+                <!-- Projects Settings -->
+                <section id="projects-settings">
+                  <h2 class="text-lg font-semibold">Project Management</h2>
+                  <p class="text-muted mt-1 text-sm">
+                    Manage the project folders the application has access to.
+                  </p>
+                  <div
+                    class="border-border mt-4 rounded-lg border"
+                  >
+                    <div class="border-border flex items-center justify-between border-b p-3">
+                        <h3 class="text-sm font-medium">Project Folders</h3>
+                        <button class="bg-surface hover:bg-hover border-border text-foreground cursor-pointer rounded-md border px-3 py-1 text-sm font-medium">
+                            <i class="bi bi-plus-lg mr-1 text-xs"></i> Add Folder
+                        </button>
+                    </div>
+                    <ul class="divide-border divide-y">
+                        <li class="flex items-center justify-between px-3 py-2">
+                            <p class="font-mono text-sm">/Users/cw/Documents/GitHub/my-agent-app</p>
+                            <button class="text-muted hover:text-red-500 cursor-pointer" title="Remove">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </li>
+                        <li class="flex items-center justify-between px-3 py-2">
+                            <p class="font-mono text-sm">/Users/cw/Documents/Projects/another-project</p>
+                            <button class="text-muted hover:text-red-500 cursor-pointer" title="Remove">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </li>
+                    </ul>
+                  </div>
+                </section>
+
+                <!-- AI Providers Settings -->
+                <section id="providers-settings">
+                  <h2 class="text-lg font-semibold">AI Providers</h2>
+                  <p class="text-muted mt-1 text-sm">
+                    Configure API keys for the AI models you want to use.
+                  </p>
+                  <div class="border-border mt-4 overflow-hidden rounded-lg border">
+                    <table class="w-full">
+                        <thead class="bg-surface/50">
+                            <tr>
+                                <th class="text-muted w-1/4 p-3 text-left text-xs font-semibold uppercase">Provider</th>
+                                <th class="text-muted w-2/4 p-3 text-left text-xs font-semibold uppercase">API Key</th>
+                                <th class="text-muted w-1/4 p-3 text-left text-xs font-semibold uppercase">Enabled</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-border divide-y">
+                            <!-- OpenAI -->
+                            <tr class="hover:bg-hover">
+                                <td class="p-3 font-medium">OpenAI</td>
+                                <td class="p-3">
+                                    <input type="password" value="mock-api-key-for-display" class="bg-input-background border-input-border focus:border-accent w-full rounded-md border px-2 py-1 text-sm focus:outline-none">
+                                </td>
+                                <td class="p-3">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            <!-- Anthropic -->
+                            <tr class="hover:bg-hover">
+                                <td class="p-3 font-medium">Anthropic</td>
+                                <td class="p-3">
+                                    <input type="password" value="mock-api-key-for-display" class="bg-input-background border-input-border focus:border-accent w-full rounded-md border px-2 py-1 text-sm focus:outline-none">
+                                </td>
+                                <td class="p-3">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                            <!-- Google -->
+                            <tr class="hover:bg-hover">
+                                <td class="p-3 font-medium">Google</td>
+                                <td class="p-3">
+                                    <input type="password" placeholder="Enter your Google API key" class="bg-input-background border-input-border focus:border-accent w-full rounded-md border px-2 py-1 text-sm focus:outline-none">
+                                </td>
+                                <td class="p-3">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <!-- MCP Servers Settings -->
+                <section id="mcp-settings">
+                  <h2 class="text-lg font-semibold">MCP Servers</h2>
+                  <p class="text-muted mt-1 text-sm">
+                    Manage external tool servers using the Model Context Protocol.
+                  </p>
+                  <div class="border-border mt-4 rounded-lg border">
+                    <div class="border-border flex items-center justify-between border-b p-3">
+                        <h3 class="text-sm font-medium">Configured Servers</h3>
+                        <button class="bg-surface hover:bg-hover border-border text-foreground cursor-pointer rounded-md border px-3 py-1 text-sm font-medium">
+                            <i class="bi bi-plus-lg mr-1 text-xs"></i> Add Server
+                        </button>
+                    </div>
+                    <ul class="divide-border divide-y">
+                        <li class="flex items-center justify-between px-3 py-2">
+                            <div>
+                                <p class="font-medium">GitHub MCP</p>
+                                <p class="text-muted font-mono text-xs">http://localhost:3001</p>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span class="rounded border border-blue-600/40 bg-blue-600/20 px-1.5 py-0.5 text-xs text-blue-400">Enabled</span>
+                                <button class="text-muted hover:text-accent cursor-pointer" title="Edit"><i class="bi bi-pencil"></i></button>
+                                <button class="text-muted hover:text-red-500 cursor-pointer" title="Remove"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </li>
+                        <li class="flex items-center justify-between px-3 py-2">
+                            <div>
+                                <p class="font-medium">Jira MCP</p>
+                                <p class="text-muted font-mono text-xs">https://mcp.internal.corp/jira</p>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span class="rounded border border-gray-600/40 bg-gray-600/20 px-1.5 py-0.5 text-xs text-gray-400">Disabled</span>
+                                <button class="text-muted hover:text-accent cursor-pointer" title="Edit"><i class="bi bi-pencil"></i></button>
+                                <button class="text-muted hover:text-red-500 cursor-pointer" title="Remove"><i class="bi bi-trash"></i></button>
+                            </div>
+                        </li>
+                    </ul>
+                  </div>
+                </section>
+            </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

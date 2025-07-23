@@ -353,9 +353,22 @@ _基於 list_app_features_to_methods_v1_2.md 功能規劃進行全面評估_
 
 ---
 
-<!-- Working on -->
+## 🔌 **Function Call / MCP 顯示**
+
+**預期功能**
+
+- Function call 執行過程的視覺化顯示
+- MCP 工具調用結果呈現
+- 權限確認對話框
+
+**完成情形**
+
+- ❌ **完全未實現** - 整個 MCP 整合的 UI 層完全缺失
+- ❌ 無任何 Function call 相關的訊息類型處理
 
 ---
+
+<!-- Working on -->
 
 ## ✏️ **核心：訊息操作 (Message Actions)**
 
@@ -402,10 +415,10 @@ _基於 list_app_features_to_methods_v1_2.md 功能規劃進行全面評估_
 - 停止執行功能
 <!-- - 自動備份機制（run0, run1, run2...） => 備份機制是另一個 feature -->
 
-UI
+UI：chat 控制介面（run, stop）
 
-- chat 的控制介面（run, stop）參考 task 的設計， 放在 explorer 的 chat file node
-- 現階段不考慮在其他地方放控制介面
+- 照搬 task 的設計，放在 explorer 的 chat file node
+- 現階段不考慮在其他地方放 chat 控制介面
 
 **完成情形**
 
