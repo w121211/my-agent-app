@@ -29,49 +29,31 @@ const ChatFileDataSchema = z.object({
 type ChatFileData = z.infer<typeof ChatFileDataSchema>;
 
 export interface ChatSessionRepository {
-  save(
+  saveToFile(
+    absoluteFilePath: string,
     chatSession: SerializableChat,
-    targetDirectory?: string,
+  ): Promise<void>;
+  loadFromFile(absoluteFilePath: string): Promise<SerializableChat>;
+  deleteFile(absoluteFilePath: string): Promise<void>;
+  createNewFile(
+    targetDirectory: string,
+    chatSession: Omit<SerializableChat, "absoluteFilePath">,
   ): Promise<string>;
-  load(chatSessionId: string): Promise<SerializableChat>;
-  loadFromFile(filePath: string): Promise<SerializableChat>;
-  delete(chatSessionId: string): Promise<void>;
 }
 
 export class ChatSessionRepositoryImpl implements ChatSessionRepository {
   private readonly logger: Logger<ILogObj>;
-  private pathIndex: Map<string, string> = new Map();
 
   constructor() {
     this.logger = new Logger({ name: "ChatSessionRepository" });
   }
 
-  async save(
+  async saveToFile(
+    absoluteFilePath: string,
     chatSession: SerializableChat,
-    targetDirectory?: string,
-  ): Promise<string> {
-    let filePath: string;
-
-    if (chatSession.absoluteFilePath) {
-      filePath = chatSession.absoluteFilePath;
-    } else {
-      if (!targetDirectory) {
-        throw new Error("Target directory is required for new chat sessions");
-      }
-      filePath = await this.generateNewFilePath(targetDirectory);
-    }
-
+  ): Promise<void> {
     const fileData = this.convertToFileFormat(chatSession);
-    await writeJsonFile(filePath, fileData);
-
-    this.pathIndex.set(chatSession.id, filePath);
-
-    return filePath;
-  }
-
-  async load(chatSessionId: string): Promise<SerializableChat> {
-    const filePath = await this.resolveFilePath(chatSessionId);
-    return this.loadFromFile(filePath);
+    await writeJsonFile(absoluteFilePath, fileData);
   }
 
   async loadFromFile(filePath: string): Promise<SerializableChat> {
@@ -80,17 +62,28 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
     return this.convertFromFileFormat(validatedData, filePath);
   }
 
-  async delete(chatSessionId: string): Promise<void> {
-    const filePath = await this.resolveFilePath(chatSessionId);
+  async deleteFile(absoluteFilePath: string): Promise<void> {
     const fs = await import("fs/promises");
-    await fs.unlink(filePath);
-    this.pathIndex.delete(chatSessionId);
+    await fs.unlink(absoluteFilePath);
   }
 
-  private async generateNewFilePath(targetDirectory: string): Promise<string> {
+  async createNewFile(
+    targetDirectory: string,
+    chatSession: Omit<SerializableChat, "absoluteFilePath">,
+  ): Promise<string> {
     await createDirectory(targetDirectory);
     const chatNumber = await this.getNextChatNumber(targetDirectory);
-    return path.join(targetDirectory, `chat${chatNumber}.chat.json`);
+    const filePath = path.join(targetDirectory, `chat${chatNumber}.chat.json`);
+
+    const chatData = {
+      ...chatSession,
+      absoluteFilePath: filePath,
+    };
+
+    const fileData = this.convertToFileFormat(chatData);
+    await writeJsonFile(filePath, fileData);
+
+    return filePath;
   }
 
   private async getNextChatNumber(folderPath: string): Promise<number> {
@@ -99,92 +92,11 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
       .filter((file) => file.name.match(/^chat\d+\.chat\.json$/))
       .map((file) => {
         const match = file.name.match(/^chat(\d+)\.chat\.json$/);
-        return match ? parseInt(match[1], 10) : 0;
+        return match ? parseInt(match[1]!, 10) : 0;
       })
       .filter((num) => !isNaN(num));
 
     return chatNumbers.length > 0 ? Math.max(...chatNumbers) + 1 : 1;
-  }
-
-  private async resolveFilePath(chatSessionId: string): Promise<string> {
-    if (this.pathIndex.has(chatSessionId)) {
-      return this.pathIndex.get(chatSessionId)!;
-    }
-
-    const filePath = await this.searchForChatFile(chatSessionId);
-    if (!filePath) {
-      throw new Error(`Chat file not found for session ID: ${chatSessionId}`);
-    }
-
-    this.pathIndex.set(chatSessionId, filePath);
-    return filePath;
-  }
-
-  private async searchForChatFile(
-    chatSessionId: string,
-  ): Promise<string | null> {
-    const projectFolders = await this.getProjectFolders();
-
-    for (const projectFolder of projectFolders) {
-      const chatFile = await this.findChatInDirectory(
-        projectFolder,
-        chatSessionId,
-      );
-      if (chatFile) {
-        return chatFile;
-      }
-    }
-
-    return null;
-  }
-
-  private async getProjectFolders(): Promise<string[]> {
-    try {
-      const userSettingsPath = path.join(process.cwd(), "user-settings.json");
-      const userSettings = await readJsonFile<{ projectFolders?: string[] }>(
-        userSettingsPath,
-      );
-      return userSettings.projectFolders || [];
-    } catch {
-      return [process.cwd()];
-    }
-  }
-
-  private async findChatInDirectory(
-    directory: string,
-    chatSessionId: string,
-  ): Promise<string | null> {
-    try {
-      const files = await listDirectory(directory);
-
-      for (const file of files) {
-        if (file.name.endsWith(".chat.json")) {
-          const filePath = path.join(directory, file.name);
-          try {
-            const fileData = await readJsonFile<ChatFileData>(filePath);
-            if (fileData.id === chatSessionId) {
-              return filePath;
-            }
-          } catch {
-            continue;
-          }
-        }
-      }
-
-      for (const file of files) {
-        if (file.type === "directory") {
-          const subPath = path.join(directory, file.name);
-          const result = await this.findChatInDirectory(subPath, chatSessionId);
-          if (result) {
-            return result;
-          }
-        }
-      }
-    } catch {
-      // Directory access error, skip
-    }
-
-    return null;
   }
 
   private convertToFileFormat(chatSession: SerializableChat): ChatFileData {
@@ -218,41 +130,5 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
       updatedAt: fileData.updatedAt,
       metadata: fileData.metadata,
     };
-  }
-
-  async buildPathIndex(): Promise<void> {
-    this.logger.info("Building chat session path index...");
-    this.pathIndex.clear();
-
-    const projectFolders = await this.getProjectFolders();
-
-    for (const projectFolder of projectFolders) {
-      await this.indexDirectory(projectFolder);
-    }
-
-    this.logger.info(`Indexed ${this.pathIndex.size} chat sessions`);
-  }
-
-  private async indexDirectory(directory: string): Promise<void> {
-    try {
-      const files = await listDirectory(directory);
-
-      for (const file of files) {
-        const filePath = path.join(directory, file.name);
-
-        if (file.name.endsWith(".chat.json")) {
-          try {
-            const fileData = await readJsonFile<ChatFileData>(filePath);
-            this.pathIndex.set(fileData.id, filePath);
-          } catch {
-            continue;
-          }
-        } else if (file.type === "directory") {
-          await this.indexDirectory(filePath);
-        }
-      }
-    } catch {
-      // Directory access error, skip
-    }
   }
 }

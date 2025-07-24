@@ -8,17 +8,23 @@ import {
   ChatSession,
   type SerializableChat,
   type ChatMode,
-  type ChatStatus,
   type UserInput,
-  type ToolCall,
   type ToolResults,
   type ConversationResult,
 } from "./chat-session.js";
 import type { ChatModelConfig, AvailableModel } from "./types.js";
-import { buildProviderRegistry } from "./provider-registry-builder.js";
+import {
+  buildProviderRegistry,
+  parseModelConfig,
+  validateModelAvailability,
+  getAvailableModels,
+  type ProviderRegistry,
+} from "./ai-provider-utils.js";
+import { ToolRegistry } from "../tool-call/tool-registry.js";
+import { ToolCallScheduler } from "../tool-call/tool-call-scheduler.js";
+import { ApprovalMode } from "../tool-call/types.js";
 import type { UserSettingsService } from "../user-settings-service.js";
-import type { ChatUpdatedEvent } from "./events.js";
-import { ChatSessionRepositoryImpl, type ChatSessionRepository } from "./chat-session-repository.js";
+import type { ChatSessionRepository } from "./chat-session-repository.js";
 
 interface CreateChatConfig {
   mode?: ChatMode;
@@ -26,6 +32,11 @@ interface CreateChatConfig {
   knowledge?: string[];
   prompt?: string;
   newTask?: boolean;
+}
+
+interface CreateChatResult {
+  absoluteFilePath: string;
+  chatSessionId: string;
 }
 
 interface MessageAttachment {
@@ -41,9 +52,12 @@ export class ChatClient {
   private readonly taskService: TaskService;
   private readonly projectFolderService: ProjectFolderService;
   private readonly userSettingsService: UserSettingsService;
-  private readonly sessions: Map<string, ChatSession> = new Map();
+  private readonly sessions: Map<string, ChatSession> = new Map(); // absoluteFilePath -> ChatSession
   private readonly sessionAccessTime: Map<string, number> = new Map();
   private readonly maxSessions: number = 10;
+  private providerRegistry: ProviderRegistry | null = null;
+  private globalToolRegistry: ToolRegistry | null = null;
+  // ToolCallScheduler is now owned by individual ChatSession instances
 
   constructor(
     eventBus: IEventBus,
@@ -58,15 +72,35 @@ export class ChatClient {
     this.taskService = taskService;
     this.projectFolderService = projectFolderService;
     this.userSettingsService = userSettingsService;
+
+    this.initializeGlobalDependencies();
   }
 
-  // Core API methods according to design specification
+  private async initializeGlobalDependencies(): Promise<void> {
+    try {
+      const userSettings = await this.userSettingsService.getUserSettings();
+      this.providerRegistry = await buildProviderRegistry(userSettings);
+      this.globalToolRegistry = new ToolRegistry(this.eventBus, this.logger);
+    } catch (error) {
+      this.logger.error("Failed to initialize global dependencies", error);
+    }
+  }
+
+  // Core API methods with file-first design
   async sendMessage(
+    absoluteFilePath: string,
     chatSessionId: string,
     message: string,
     attachments?: MessageAttachment[],
   ): Promise<ConversationResult> {
-    const session = await this.getOrLoadChatSession(chatSessionId);
+    const session = await this.getOrLoadChatSession(absoluteFilePath);
+
+    // Verify ID consistency
+    if (session.id !== chatSessionId) {
+      throw new Error(
+        `Session ID mismatch: expected ${session.id}, got ${chatSessionId}`,
+      );
+    }
 
     const userInput: UserInput = {
       type: "user_message",
@@ -81,10 +115,18 @@ export class ChatClient {
   }
 
   async rerunChat(
+    absoluteFilePath: string,
     chatSessionId: string,
     inputData?: Record<string, any>,
   ): Promise<ConversationResult> {
-    const session = await this.getOrLoadChatSession(chatSessionId);
+    const session = await this.getOrLoadChatSession(absoluteFilePath);
+
+    // Verify ID consistency
+    if (session.id !== chatSessionId) {
+      throw new Error(
+        `Session ID mismatch: expected ${session.id}, got ${chatSessionId}`,
+      );
+    }
 
     // Reset session to allow rerun
     session.currentTurn = 0;
@@ -102,11 +144,19 @@ export class ChatClient {
   }
 
   async confirmToolCall(
+    absoluteFilePath: string,
     chatSessionId: string,
     toolCallId: string,
     outcome: "approved" | "denied",
   ): Promise<ConversationResult> {
-    const session = await this.getOrLoadChatSession(chatSessionId);
+    const session = await this.getOrLoadChatSession(absoluteFilePath);
+
+    // Verify ID consistency
+    if (session.id !== chatSessionId) {
+      throw new Error(
+        `Session ID mismatch: expected ${session.id}, got ${chatSessionId}`,
+      );
+    }
 
     if (session.status !== "waiting_confirmation") {
       throw new Error("Session is not waiting for tool confirmation");
@@ -114,10 +164,15 @@ export class ChatClient {
 
     const toolResults: ToolResults = {
       type: "tool_results",
-      results: [{
-        id: toolCallId,
-        result: outcome === "approved" ? "Tool execution approved" : "Tool execution denied",
-      }],
+      results: [
+        {
+          id: toolCallId,
+          result:
+            outcome === "approved"
+              ? "Tool execution approved"
+              : "Tool execution denied",
+        },
+      ],
     };
 
     const result = await session.runTurn(toolResults);
@@ -126,9 +181,12 @@ export class ChatClient {
     return result;
   }
 
-  async abortChat(chatSessionId: string): Promise<void> {
-    const session = this.sessions.get(chatSessionId);
-    if (session) {
+  async abortChat(
+    absoluteFilePath: string,
+    chatSessionId: string,
+  ): Promise<void> {
+    const session = this.sessions.get(absoluteFilePath);
+    if (session && session.id === chatSessionId) {
       session.abort();
     }
   }
@@ -136,7 +194,7 @@ export class ChatClient {
   async createChat(
     targetDirectory: string,
     config?: CreateChatConfig,
-  ): Promise<string> {
+  ): Promise<CreateChatResult> {
     // Validate project folder
     const isInProjectFolder =
       await this.projectFolderService.isPathInProjectFolder(targetDirectory);
@@ -176,27 +234,40 @@ export class ChatClient {
       },
     };
 
-    const filePath = await this.chatSessionRepository.save(chatSession, targetDirectory);
+    const filePath = await this.chatSessionRepository.createNewFile(
+      targetDirectory,
+      chatSession,
+    );
     chatSession.absoluteFilePath = filePath;
 
-    // Create in-memory session
-    const session = ChatSession.fromJSON(chatSession, this.eventBus, undefined, this.userSettingsService);
-    this.sessions.set(chatSession.id, session);
-    this.sessionAccessTime.set(chatSession.id, Date.now());
+    // Create in-memory session with full dependencies
+    const toolScheduler = this.createToolScheduler();
+    const session = new ChatSession(
+      chatSession,
+      this.eventBus,
+      this.providerRegistry!,
+      toolScheduler,
+      this.userSettingsService,
+    );
+    this.sessions.set(filePath, session);
+    this.sessionAccessTime.set(filePath, Date.now());
 
     // Send initial prompt if provided
     if (config?.prompt) {
-      await this.sendMessage(chatSession.id, config.prompt);
+      await this.sendMessage(filePath, chatSession.id, config.prompt);
     }
 
-    return chatSession.id;
+    return {
+      absoluteFilePath: filePath,
+      chatSessionId: chatSession.id,
+    };
   }
 
-  async getOrLoadChatSession(chatSessionId: string): Promise<ChatSession> {
+  async getOrLoadChatSession(absoluteFilePath: string): Promise<ChatSession> {
     // Check if already in memory
-    if (this.sessions.has(chatSessionId)) {
-      this.sessionAccessTime.set(chatSessionId, Date.now());
-      return this.sessions.get(chatSessionId)!;
+    if (this.sessions.has(absoluteFilePath)) {
+      this.sessionAccessTime.set(absoluteFilePath, Date.now());
+      return this.sessions.get(absoluteFilePath)!;
     }
 
     // Check session pool size and evict if necessary
@@ -205,58 +276,117 @@ export class ChatClient {
     }
 
     // Load from repository
-    const chatData = await this.chatSessionRepository.load(chatSessionId);
-    const session = ChatSession.fromJSON(chatData, this.eventBus, undefined, this.userSettingsService);
+    const chatData =
+      await this.chatSessionRepository.loadFromFile(absoluteFilePath);
+    const toolScheduler = this.createToolScheduler();
+    const session = new ChatSession(
+      chatData,
+      this.eventBus,
+      this.providerRegistry!,
+      toolScheduler,
+      this.userSettingsService,
+    );
 
     // Add to session pool
-    this.sessions.set(chatSessionId, session);
-    this.sessionAccessTime.set(chatSessionId, Date.now());
+    this.sessions.set(absoluteFilePath, session);
+    this.sessionAccessTime.set(absoluteFilePath, Date.now());
 
     return session;
   }
 
   async updateChat(
-    chatSessionId: string,
+    absoluteFilePath: string,
     updates: Partial<SerializableChat>,
   ): Promise<void> {
-    const session = await this.getOrLoadChatSession(chatSessionId);
-    
+    const session = await this.getOrLoadChatSession(absoluteFilePath);
+
     if (updates.metadata) {
       session.metadata = { ...session.metadata, ...updates.metadata };
     }
     if (updates.maxTurns !== undefined) {
       session.maxTurns = updates.maxTurns;
     }
-    
+
     session.updatedAt = new Date();
     await this.persistSession(session);
   }
 
-  async deleteChat(chatSessionId: string): Promise<void> {
-    await this.chatSessionRepository.delete(chatSessionId);
-    this.sessions.delete(chatSessionId);
-    this.sessionAccessTime.delete(chatSessionId);
+  async deleteChat(absoluteFilePath: string): Promise<void> {
+    const fs = await import("fs/promises");
+    await fs.unlink(absoluteFilePath);
+
+    const session = this.sessions.get(absoluteFilePath);
+    if (session) {
+      // Clean up session (now handles its own scheduler cleanup)
+      await session.cleanup();
+    }
+
+    this.sessions.delete(absoluteFilePath);
+    this.sessionAccessTime.delete(absoluteFilePath);
   }
 
-  async loadChatFromFile(filePath: string): Promise<string> {
-    const chatData = await this.chatSessionRepository.loadFromFile(filePath);
-    const session = ChatSession.fromJSON(chatData, this.eventBus, undefined, this.userSettingsService);
-    
-    this.sessions.set(chatData.id, session);
-    this.sessionAccessTime.set(chatData.id, Date.now());
-    
-    return chatData.id;
+  // AI mdoels methods
+  async getAvailableModels(): Promise<AvailableModel[]> {
+    const userSettings = await this.userSettingsService.getUserSettings();
+    return getAvailableModels(userSettings);
+  }
+
+  async validateModelConfig(modelConfig: ChatModelConfig): Promise<boolean> {
+    if (!this.providerRegistry) {
+      await this.initializeGlobalDependencies();
+    }
+
+    if (!this.providerRegistry) {
+      return false;
+    }
+
+    return validateModelAvailability(this.providerRegistry, modelConfig);
   }
 
   // Private helper methods
+  private createToolScheduler(): ToolCallScheduler {
+    if (!this.globalToolRegistry) {
+      throw new Error("Global tool registry not initialized");
+    }
+
+    return new ToolCallScheduler({
+      toolRegistry: Promise.resolve(this.globalToolRegistry),
+      eventBus: this.eventBus,
+      logger: this.logger,
+      approvalMode: ApprovalMode.DEFAULT,
+      outputUpdateHandler: (toolCallId, chunk) => {
+        this.eventBus.emit({
+          kind: "TOOL_OUTPUT_UPDATE",
+          messageId: "", // Will be set by session
+          toolCallId,
+          outputChunk: chunk,
+          timestamp: new Date(),
+        });
+      },
+      onAllToolCallsComplete: (completedCalls) => {
+        this.logger.info("Tool calls completed", {
+          count: completedCalls.length,
+        });
+      },
+      onToolCallsUpdate: (toolCalls) => {
+        this.eventBus.emit({
+          kind: "TOOL_CALLS_UPDATE",
+          messageId: "", // Will be set by session
+          toolCalls,
+          timestamp: new Date(),
+        });
+      },
+    });
+  }
+
   private async evictLeastRecentlyUsedSession(): Promise<void> {
     let oldestTime = Date.now();
     let sessionToEvict: string | null = null;
 
-    for (const [sessionId, accessTime] of this.sessionAccessTime.entries()) {
+    for (const [filePath, accessTime] of this.sessionAccessTime.entries()) {
       if (accessTime < oldestTime) {
         oldestTime = accessTime;
-        sessionToEvict = sessionId;
+        sessionToEvict = filePath;
       }
     }
 
@@ -264,6 +394,8 @@ export class ChatClient {
       const session = this.sessions.get(sessionToEvict);
       if (session) {
         await this.persistSession(session);
+        // Clean up session (now handles its own scheduler cleanup)
+        await session.cleanup();
       }
       this.sessions.delete(sessionToEvict);
       this.sessionAccessTime.delete(sessionToEvict);
@@ -272,221 +404,9 @@ export class ChatClient {
 
   private async persistSession(session: ChatSession): Promise<void> {
     const chatData = session.toJSON();
-    await this.chatSessionRepository.save(chatData);
-  }
-
-  // Legacy compatibility methods
-  async getSession(chatId: string): Promise<ChatSession> {
-    return this.getOrLoadChatSession(chatId);
-  }
-
-  async loadSession(chatId: string): Promise<void> {
-    await this.getOrLoadChatSession(chatId);
-  }
-
-  async saveSession(): Promise<void> {
-    // Save all active sessions
-    for (const session of this.sessions.values()) {
-      await this.persistSession(session);
-    }
-  }
-
-  async deleteSession(): Promise<void> {
-    // Delete the first active session (for backward compatibility)
-    const firstSessionId = this.sessions.keys().next().value;
-    if (firstSessionId) {
-      await this.deleteChat(firstSessionId);
-    }
-  }
-
-  async createSession(
-    targetDirectoryAbsolutePath: string,
-    newTask: boolean,
-    mode: ChatMode,
-    knowledge: string[],
-    prompt?: string,
-    model: string = "default",
-    correlationId?: string,
-  ): Promise<string> {
-    return this.createChat(targetDirectoryAbsolutePath, {
-      newTask,
-      mode,
-      knowledge,
-      prompt,
-      model,
-    });
-  }
-
-  async sendToolConfirmation(
-    chatId: string,
-    toolCalls: ToolCall[],
-    correlationId?: string,
-  ): Promise<ConversationResult> {
-    const session = await this.getOrLoadChatSession(chatId);
-
-    if (session.status !== "waiting_confirmation") {
-      throw new Error("Chat session is not waiting for tool confirmation");
-    }
-
-    const toolResults: ToolResults = {
-      type: "tool_results",
-      results: toolCalls.map((call) => ({
-        id: call.id,
-        result: `Executed ${call.name}`,
-      })),
-    };
-
-    const result = await session.runTurn(toolResults);
-    await this.persistSession(session);
-
-    return result;
-  }
-
-  // Additional compatibility and utility methods
-  async createEmptyChat(
-    targetDirectoryAbsolutePath: string,
-    correlationId?: string,
-  ): Promise<SerializableChat> {
-    const sessionId = await this.createChat(targetDirectoryAbsolutePath);
-    const session = await this.getOrLoadChatSession(sessionId);
-    return session.toJSON();
-  }
-
-  async findChatById(chatId: string): Promise<SerializableChat | undefined> {
-    try {
-      const session = await this.getOrLoadChatSession(chatId);
-      return session.toJSON();
-    } catch {
-      return undefined;
-    }
-  }
-
-  async getChatById(chatId: string): Promise<SerializableChat> {
-    const session = await this.getOrLoadChatSession(chatId);
-    return session.toJSON();
-  }
-
-  async getAllChats(): Promise<SerializableChat[]> {
-    // This would need to be implemented by scanning all project folders
-    // For now, return active sessions plus attempt to load from repository
-    const result: SerializableChat[] = [];
-    
-    // Add active sessions
-    for (const session of this.sessions.values()) {
-      result.push(session.toJSON());
-    }
-
-    return result;
-  }
-
-  async updatePromptDraft(
-    chatId: string,
-    promptDraft: string,
-    correlationId?: string,
-  ): Promise<SerializableChat> {
-    await this.updateChat(chatId, {
-      metadata: { promptDraft }
-    });
-
-    const session = await this.getOrLoadChatSession(chatId);
-    
-    // Emit metadata updated event
-    await this.eventBus.emit({
-      kind: "ChatUpdatedEvent",
-      chatId: session.id,
-      updateType: "METADATA_UPDATED",
-      update: {
-        metadata: { promptDraft },
-      },
-      chat: session.toJSON(),
-      timestamp: new Date(),
-      correlationId,
-    });
-
-    return session.toJSON();
-  }
-
-  async openChatFile(
-    absoluteFilePath: string,
-    correlationId?: string,
-  ): Promise<SerializableChat> {
-    const sessionId = await this.loadChatFromFile(absoluteFilePath);
-    const session = await this.getOrLoadChatSession(sessionId);
-    return session.toJSON();
-  }
-
-  // Enhanced AI SDK v5 methods
-  async getAvailableModels(): Promise<AvailableModel[]> {
-    const userSettings = await this.userSettingsService.getUserSettings();
-    return this.buildAvailableModelsList(userSettings);
-  }
-
-  async validateModelConfig(modelConfig: ChatModelConfig): Promise<boolean> {
-    try {
-      const userSettings = await this.userSettingsService.getUserSettings();
-      const registry = buildProviderRegistry(userSettings);
-      
-      // Use the official AI SDK registry method
-      registry.languageModel(`${modelConfig.provider}:${modelConfig.modelId}`);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  private buildAvailableModelsList(userSettings: any): AvailableModel[] {
-    const models: AvailableModel[] = [];
-
-    if (userSettings.providers.openai?.enabled) {
-      models.push(
-        {
-          id: 'openai:gpt-4',
-          provider: 'openai',
-          modelId: 'gpt-4',
-          displayName: 'GPT-4',
-          capabilities: ['text', 'tools'],
-        },
-        {
-          id: 'openai:gpt-4-turbo',
-          provider: 'openai',
-          modelId: 'gpt-4-turbo',
-          displayName: 'GPT-4 Turbo',
-          capabilities: ['text', 'tools', 'vision'],
-        },
-      );
-    }
-
-    if (userSettings.providers.anthropic?.enabled) {
-      models.push(
-        {
-          id: 'anthropic:claude-3-sonnet',
-          provider: 'anthropic',
-          modelId: 'claude-3-sonnet',
-          displayName: 'Claude 3 Sonnet',
-          capabilities: ['text', 'tools', 'vision'],
-        },
-        {
-          id: 'anthropic:claude-3-opus',
-          provider: 'anthropic',
-          modelId: 'claude-3-opus',
-          displayName: 'Claude 3 Opus',
-          capabilities: ['text', 'tools', 'vision'],
-        },
-      );
-    }
-
-    if (userSettings.providers.google?.enabled) {
-      models.push(
-        {
-          id: 'google:gemini-pro',
-          provider: 'google',
-          modelId: 'gemini-pro',
-          displayName: 'Gemini Pro',
-          capabilities: ['text', 'tools'],
-        },
-      );
-    }
-
-    return models;
+    await this.chatSessionRepository.saveToFile(
+      chatData.absoluteFilePath,
+      chatData,
+    );
   }
 }

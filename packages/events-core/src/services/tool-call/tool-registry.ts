@@ -1,7 +1,7 @@
 // packages/events-core/src/services/tool-call/tool-registry.ts
 
-import { Logger, type ILogObj } from "tslog"
-import type { IEventBus } from "../../event-bus"
+import { Logger, type ILogObj } from "tslog";
+import type { IEventBus } from "../../event-bus.js";
 import type {
   Tool,
   ToolRegistry as IToolRegistry,
@@ -12,50 +12,50 @@ import type {
   MCPToolInfo,
   ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
-} from "./types"
+} from "./types.js";
 
 export class ToolRegistry implements IToolRegistry {
-  private tools: Map<string, Tool> = new Map()
-  private mcpClients: Map<string, MCPClient> = new Map()
-  private toolCategories: Map<string, string[]> = new Map()
-  private logger: Logger<ILogObj>
-  private eventBus: IEventBus
+  private tools: Map<string, Tool> = new Map();
+  private mcpClients: Map<string, MCPClient> = new Map();
+  private toolCategories: Map<string, string[]> = new Map();
+  private logger: Logger<ILogObj>;
+  private eventBus: IEventBus;
 
   constructor(eventBus: IEventBus, logger: Logger<ILogObj>) {
-    this.eventBus = eventBus
-    this.logger = logger
+    this.eventBus = eventBus;
+    this.logger = logger;
   }
 
   registerTool(tool: Tool): void {
-    this.logger.info("Registering built-in tool", { name: tool.name })
-    this.tools.set(tool.name, tool)
+    this.logger.info("Registering built-in tool", { name: tool.name });
+    this.tools.set(tool.name, tool);
 
     this.eventBus.emit({
       kind: "TOOL_REGISTERED",
       toolName: tool.name,
       toolType: "built-in",
       timestamp: new Date(),
-    })
+    });
   }
 
   async registerMCPServer(serverConfig: MCPServerConfig): Promise<void> {
     this.logger.info("Registering MCP server", {
       serverName: serverConfig.name,
-    })
+    });
 
     try {
       // Create a mock MCP client for this implementation
-      const mcpClient = await this.createMockMCPClient(serverConfig)
+      const mcpClient = await this.createMockMCPClient(serverConfig);
 
       // Handle OAuth authentication (if needed)
       if (serverConfig.oauth?.enabled) {
-        await this.handleMCPOAuth(mcpClient, serverConfig)
+        await this.handleMCPOAuth(mcpClient, serverConfig);
       }
 
       // Get available tools list
-      const toolsInfo = await mcpClient.listTools()
-      const resourcesInfo = await mcpClient.listResources()
-      const promptsInfo = await mcpClient.listPrompts()
+      const toolsInfo = await mcpClient.listTools();
+      const resourcesInfo = await mcpClient.listResources();
+      const promptsInfo = await mcpClient.listPrompts();
 
       // Create wrapper for each MCP tool
       for (const toolInfo of toolsInfo) {
@@ -63,41 +63,43 @@ export class ToolRegistry implements IToolRegistry {
           toolInfo,
           mcpClient,
           serverConfig,
-        )
-        this.tools.set(toolInfo.name, mcpTool)
+        );
+        this.tools.set(toolInfo.name, mcpTool);
 
         // Category management
-        const category = serverConfig.category || "mcp"
+        const category = serverConfig.category || "mcp";
         if (!this.toolCategories.has(category)) {
-          this.toolCategories.set(category, [])
+          this.toolCategories.set(category, []);
         }
-        this.toolCategories.get(category)!.push(toolInfo.name)
+        this.toolCategories.get(category)!.push(toolInfo.name);
       }
 
-      this.mcpClients.set(serverConfig.name, mcpClient)
+      this.mcpClients.set(serverConfig.name, mcpClient);
 
       this.logger.info("MCP server registered successfully", {
         serverName: serverConfig.name,
         toolCount: toolsInfo.length,
         resourceCount: resourcesInfo.length,
         promptCount: promptsInfo.length,
-      })
+      });
 
       this.eventBus.emit({
         kind: "MCP_SERVER_REGISTERED",
         serverName: serverConfig.name,
         toolCount: toolsInfo.length,
         timestamp: new Date(),
-      })
+      });
     } catch (error) {
-      this.logger.error("Failed to register MCP server", error)
+      this.logger.error("Failed to register MCP server", error);
       throw new Error(
         `Failed to register MCP server ${serverConfig.name}: ${error}`,
-      )
+      );
     }
   }
 
-  private async createMockMCPClient(serverConfig: MCPServerConfig): Promise<MCPClient> {
+  private async createMockMCPClient(
+    serverConfig: MCPServerConfig,
+  ): Promise<MCPClient> {
     // Mock MCP client implementation for demo purposes
     return {
       async listTools(): Promise<MCPToolInfo[]> {
@@ -108,71 +110,75 @@ export class ToolRegistry implements IToolRegistry {
             inputSchema: {
               type: "object",
               properties: {
-                path: { type: "string" }
+                path: { type: "string" },
               },
-              required: ["path"]
-            }
+              required: ["path"],
+            },
           },
           {
-            name: "file_write", 
+            name: "file_write",
             description: "Write file content",
             inputSchema: {
               type: "object",
               properties: {
                 path: { type: "string" },
-                content: { type: "string" }
+                content: { type: "string" },
               },
-              required: ["path", "content"]
-            }
-          }
-        ]
+              required: ["path", "content"],
+            },
+          },
+        ];
       },
 
       async listResources(): Promise<unknown[]> {
-        return []
+        return [];
       },
 
       async listPrompts(): Promise<unknown[]> {
-        return []
+        return [];
       },
 
-      async callTool(name: string, args: Record<string, unknown>, options?: {
-        signal?: AbortSignal
-        onProgress?: (chunk: string) => void
-      }): Promise<unknown> {
+      async callTool(
+        name: string,
+        args: Record<string, unknown>,
+        options?: {
+          signal?: AbortSignal;
+          onProgress?: (chunk: string) => void;
+        },
+      ): Promise<unknown> {
         // Mock tool execution
         if (name === "file_read") {
-          return `Mock content for file: ${args.path}`
+          return `Mock content for file: ${args.path}`;
         } else if (name === "file_write") {
-          return `Successfully wrote to file: ${args.path}`
+          return `Successfully wrote to file: ${args.path}`;
         }
-        return `Mock result for tool ${name}`
+        return `Mock result for tool ${name}`;
       },
 
       async authenticate(token: string): Promise<void> {
         // Mock authentication
-        return
+        return;
       },
 
       async ping(): Promise<void> {
-        return
-      }
-    }
+        return;
+      },
+    };
   }
 
   private async handleMCPOAuth(
     client: MCPClient,
     serverConfig: MCPServerConfig,
   ): Promise<void> {
-    const oauthConfig = serverConfig.oauth!
+    const oauthConfig = serverConfig.oauth!;
 
     // Mock OAuth flow for demo
     this.logger.info("Starting OAuth flow for MCP server", {
       serverName: serverConfig.name,
-    })
+    });
 
     // Use mock token for authentication
-    await client.authenticate("mock-oauth-token")
+    await client.authenticate("mock-oauth-token");
   }
 
   private createMCPToolWrapper(
@@ -193,10 +199,10 @@ export class ToolRegistry implements IToolRegistry {
           toolInfo,
           args,
           serverConfig,
-        )
+        );
 
         if (dangerLevel === "low") {
-          return null // Auto-approve low risk operations
+          return null; // Auto-approve low risk operations
         }
 
         return {
@@ -208,41 +214,41 @@ export class ToolRegistry implements IToolRegistry {
               toolName: toolInfo.name,
               serverName: serverConfig.name,
               outcome,
-            })
+            });
           },
-        }
+        };
       },
 
       async execute(args, options) {
-        const startTime = Date.now()
+        const startTime = Date.now();
 
         try {
           this.logger.info("Executing MCP tool", {
             toolName: toolInfo.name,
             serverName: serverConfig.name,
-          })
+          });
 
           // Call MCP tool
           const result = await client.callTool(toolInfo.name, args, {
             signal: options.signal,
             onProgress: options.onOutput,
-          })
+          });
 
-          const duration = Date.now() - startTime
+          const duration = Date.now() - startTime;
           this.logger.info("MCP tool executed successfully", {
             toolName: toolInfo.name,
             duration,
-          })
+          });
 
-          return result
+          return result;
         } catch (error) {
-          const duration = Date.now() - startTime
+          const duration = Date.now() - startTime;
           this.logger.error("MCP tool execution failed", {
             toolName: toolInfo.name,
             duration,
             error,
-          })
-          throw error
+          });
+          throw error;
         }
       },
 
@@ -252,9 +258,9 @@ export class ToolRegistry implements IToolRegistry {
           description: toolInfo.description || "",
           category: serverConfig.category || "mcp",
           inputSchema: toolInfo.inputSchema,
-        }
+        };
       },
-    }
+    };
   }
 
   private assessMCPToolDanger(
@@ -263,49 +269,68 @@ export class ToolRegistry implements IToolRegistry {
     serverConfig: MCPServerConfig,
   ): "low" | "medium" | "high" {
     // Simple risk assessment based on tool name and args
-    const toolName = toolInfo.name.toLowerCase()
-    
-    if (toolName.includes("read") || toolName.includes("get") || toolName.includes("list")) {
-      return "low"
+    const toolName = toolInfo.name.toLowerCase();
+
+    if (
+      toolName.includes("read") ||
+      toolName.includes("get") ||
+      toolName.includes("list")
+    ) {
+      return "low";
     }
-    
-    if (toolName.includes("write") || toolName.includes("create") || toolName.includes("update")) {
-      return "medium"
+
+    if (
+      toolName.includes("write") ||
+      toolName.includes("create") ||
+      toolName.includes("update")
+    ) {
+      return "medium";
     }
-    
-    if (toolName.includes("delete") || toolName.includes("remove") || toolName.includes("execute")) {
-      return "high"
+
+    if (
+      toolName.includes("delete") ||
+      toolName.includes("remove") ||
+      toolName.includes("execute")
+    ) {
+      return "high";
     }
-    
-    return "medium"
+
+    return "medium";
   }
 
   private extractAffectedResources(args: Record<string, unknown>): string[] {
-    const resources: string[] = []
-    
+    const resources: string[] = [];
+
     // Extract file paths from common argument names
-    const pathFields = ["path", "file", "filepath", "filename", "target", "source"]
-    
+    const pathFields = [
+      "path",
+      "file",
+      "filepath",
+      "filename",
+      "target",
+      "source",
+    ];
+
     for (const field of pathFields) {
       if (args[field] && typeof args[field] === "string") {
-        resources.push(args[field] as string)
+        resources.push(args[field] as string);
       }
     }
-    
-    return resources
+
+    return resources;
   }
 
   getTool(name: string): Tool | undefined {
-    return this.tools.get(name)
+    return this.tools.get(name);
   }
 
   getAllTools(): Tool[] {
-    return Array.from(this.tools.values())
+    return Array.from(this.tools.values());
   }
 
   getToolsByCategory(category: string): Tool[] {
-    const toolNames = this.toolCategories.get(category) || []
-    return toolNames.map((name) => this.tools.get(name)!).filter(Boolean)
+    const toolNames = this.toolCategories.get(category) || [];
+    return toolNames.map((name) => this.tools.get(name)!).filter(Boolean);
   }
 
   async checkToolHealth(): Promise<ToolHealthReport> {
@@ -319,35 +344,35 @@ export class ToolRegistry implements IToolRegistry {
         unhealthy: 0,
       },
       details: new Map(),
-    }
+    };
 
     // Check built-in tools
     for (const [name, tool] of this.tools.entries()) {
       try {
         // Try basic tool metadata check
-        const metadata = tool.getMetadata()
-        report.healthyTools++
-        report.details.set(name, { status: "healthy", metadata })
+        const metadata = tool.getMetadata();
+        report.healthyTools++;
+        report.details.set(name, { status: "healthy", metadata });
       } catch (error) {
-        report.unhealthyTools++
-        report.details.set(name, { status: "unhealthy", error: String(error) })
+        report.unhealthyTools++;
+        report.details.set(name, { status: "unhealthy", error: String(error) });
       }
     }
 
     // Check MCP server health status
     for (const [serverName, client] of this.mcpClients.entries()) {
       try {
-        await client.ping()
-        report.mcpServers.healthy++
+        await client.ping();
+        report.mcpServers.healthy++;
       } catch (error) {
-        report.mcpServers.unhealthy++
+        report.mcpServers.unhealthy++;
         this.logger.warn("MCP server health check failed", {
           serverName,
           error,
-        })
+        });
       }
     }
 
-    return report
+    return report;
   }
 }

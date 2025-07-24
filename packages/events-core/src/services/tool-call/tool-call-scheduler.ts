@@ -1,7 +1,7 @@
 // packages/events-core/src/services/tool-call/tool-call-scheduler.ts
 
-import { Logger, type ILogObj } from "tslog"
-import type { IEventBus } from "../../event-bus"
+import { Logger, type ILogObj } from "tslog";
+import type { IEventBus } from "../../event-bus.js";
 import {
   ApprovalMode,
   type ToolCall,
@@ -26,27 +26,27 @@ import {
   type AllToolCallsCompleteHandler,
   type ToolCallsUpdateHandler,
   type ToolCallSchedulerOptions,
-} from "./types"
+} from "./types.js";
 
 export class ToolCallScheduler {
-  private toolRegistry: Promise<ToolRegistry>
-  private toolCalls: Map<string, ToolCall[]> = new Map() // messageId -> ToolCall[]
-  private outputUpdateHandler?: OutputUpdateHandler
-  private onAllToolCallsComplete?: AllToolCallsCompleteHandler
-  private onToolCallsUpdate?: ToolCallsUpdateHandler
-  private approvalMode: ApprovalMode
-  private eventBus: IEventBus
-  private logger: Logger<ILogObj>
-  private pendingConfirmations: Map<string, WaitingToolCall> = new Map()
+  private toolRegistry: Promise<ToolRegistry>;
+  private toolCalls: Map<string, ToolCall[]> = new Map(); // messageId -> ToolCall[]
+  private outputUpdateHandler?: OutputUpdateHandler;
+  private onAllToolCallsComplete?: AllToolCallsCompleteHandler;
+  private onToolCallsUpdate?: ToolCallsUpdateHandler;
+  private approvalMode: ApprovalMode;
+  private eventBus: IEventBus;
+  private logger: Logger<ILogObj>;
+  private pendingConfirmations: Map<string, WaitingToolCall> = new Map();
 
   constructor(options: ToolCallSchedulerOptions) {
-    this.toolRegistry = options.toolRegistry
-    this.outputUpdateHandler = options.outputUpdateHandler
-    this.onAllToolCallsComplete = options.onAllToolCallsComplete
-    this.onToolCallsUpdate = options.onToolCallsUpdate
-    this.approvalMode = options.approvalMode ?? ApprovalMode.DEFAULT
-    this.eventBus = options.eventBus
-    this.logger = options.logger
+    this.toolRegistry = options.toolRegistry;
+    this.outputUpdateHandler = options.outputUpdateHandler;
+    this.onAllToolCallsComplete = options.onAllToolCallsComplete;
+    this.onToolCallsUpdate = options.onToolCallsUpdate;
+    this.approvalMode = options.approvalMode ?? ApprovalMode.DEFAULT;
+    this.eventBus = options.eventBus;
+    this.logger = options.logger;
   }
 
   async execute(
@@ -58,15 +58,15 @@ export class ToolCallScheduler {
     this.logger.info("Starting tool call execution", {
       messageId,
       requestCount: Array.isArray(request) ? request.length : 1,
-    })
+    });
 
-    const requestsToProcess = Array.isArray(request) ? request : [request]
-    const toolRegistry = await this.toolRegistry
+    const requestsToProcess = Array.isArray(request) ? request : [request];
+    const toolRegistry = await this.toolRegistry;
 
     // 1. Create initial ToolCall objects (validating state)
     const newToolCalls: ToolCall[] = requestsToProcess.map(
       (reqInfo): ToolCall => {
-        const toolInstance = toolRegistry.getTool(reqInfo.name)
+        const toolInstance = toolRegistry.getTool(reqInfo.name);
         if (!toolInstance) {
           return {
             status: "error",
@@ -76,35 +76,35 @@ export class ToolCallScheduler {
               new Error(`Tool "${reqInfo.name}" not found`),
             ),
             durationMs: 0,
-          }
+          };
         }
         return {
           status: "validating",
           request: reqInfo,
           tool: toolInstance,
           startTime: Date.now(),
-        }
+        };
       },
-    )
+    );
 
     // 2. Store tool calls and notify updates
-    this.toolCalls.set(messageId, newToolCalls)
-    this.notifyToolCallsUpdate(messageId)
+    this.toolCalls.set(messageId, newToolCalls);
+    this.notifyToolCallsUpdate(messageId);
 
     // 3. Process validation and permission checks for each tool call
     for (const toolCall of newToolCalls) {
-      if (toolCall.status !== "validating") continue
+      if (toolCall.status !== "validating") continue;
 
-      await this.processToolCallValidation(toolCall, messageId, signal)
+      await this.processToolCallValidation(toolCall, messageId, signal);
     }
 
     // 4. Attempt to execute scheduled tool calls
-    await this.attemptExecutionOfScheduledCalls(messageId, signal)
+    await this.attemptExecutionOfScheduledCalls(messageId, signal);
 
     // 5. Check and notify completion
-    this.checkAndNotifyCompletion(messageId)
+    this.checkAndNotifyCompletion(messageId);
 
-    return this.getCompletedToolCalls(messageId)
+    return this.getCompletedToolCalls(messageId);
   }
 
   private async processToolCallValidation(
@@ -112,18 +112,18 @@ export class ToolCallScheduler {
     messageId: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    const { request: reqInfo, tool: toolInstance } = toolCall
+    const { request: reqInfo, tool: toolInstance } = toolCall;
 
     try {
       if (this.approvalMode === ApprovalMode.YOLO) {
         // Auto-approve mode
-        this.setStatusInternal(messageId, reqInfo.callId, "scheduled")
+        this.setStatusInternal(messageId, reqInfo.callId, "scheduled");
       } else {
         // Check if confirmation is needed
         const confirmationDetails = await toolInstance.shouldConfirmExecute(
           reqInfo.args,
           signal,
-        )
+        );
 
         if (confirmationDetails) {
           // User confirmation required
@@ -141,18 +141,18 @@ export class ToolCallScheduler {
                 signal,
                 payload,
               ),
-          }
+          };
 
           this.setStatusInternal(
             messageId,
             reqInfo.callId,
             "awaiting_approval",
             wrappedConfirmationDetails,
-          )
+          );
           this.pendingConfirmations.set(
             reqInfo.callId,
             toolCall as WaitingToolCall,
-          )
+          );
 
           // Send permission request event to event bus
           this.eventBus.emit({
@@ -161,10 +161,10 @@ export class ToolCallScheduler {
             toolCallId: reqInfo.callId,
             confirmationDetails: wrappedConfirmationDetails,
             timestamp: new Date(),
-          })
+          });
         } else {
           // No confirmation needed, schedule directly
-          this.setStatusInternal(messageId, reqInfo.callId, "scheduled")
+          this.setStatusInternal(messageId, reqInfo.callId, "scheduled");
         }
       }
     } catch (error) {
@@ -176,7 +176,7 @@ export class ToolCallScheduler {
           reqInfo,
           error instanceof Error ? error : new Error(String(error)),
         ),
-      )
+      );
     }
   }
 
@@ -184,24 +184,24 @@ export class ToolCallScheduler {
     messageId: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    const toolCalls = this.toolCalls.get(messageId) || []
+    const toolCalls = this.toolCalls.get(messageId) || [];
     const scheduledCalls = toolCalls.filter(
       (tc) => tc.status === "scheduled",
-    ) as ScheduledToolCall[]
+    ) as ScheduledToolCall[];
 
-    if (scheduledCalls.length === 0) return
+    if (scheduledCalls.length === 0) return;
 
     this.logger.info("Executing scheduled tool calls", {
       messageId,
       count: scheduledCalls.length,
-    })
+    });
 
     // Execute all scheduled tool calls in parallel
     await Promise.all(
       scheduledCalls.map((toolCall) =>
         this.executeSingleToolCall(messageId, toolCall, signal),
       ),
-    )
+    );
   }
 
   private async executeSingleToolCall(
@@ -209,27 +209,27 @@ export class ToolCallScheduler {
     toolCall: ScheduledToolCall,
     signal?: AbortSignal,
   ): Promise<void> {
-    const { request, tool } = toolCall
+    const { request, tool } = toolCall;
 
     try {
       // Set executing status
-      this.setStatusInternal(messageId, request.callId, "executing")
+      this.setStatusInternal(messageId, request.callId, "executing");
 
       this.logger.info("Executing tool call", {
         messageId,
         toolCallId: request.callId,
         toolName: request.name,
-      })
+      });
 
       // Execute tool (supports streaming output)
       const result = await tool.execute(request.args, {
         signal,
         onOutput: (chunk: string) => {
           // Update live output
-          this.updateLiveOutput(messageId, request.callId, chunk)
+          this.updateLiveOutput(messageId, request.callId, chunk);
 
           // Notify output update
-          this.outputUpdateHandler?.(request.callId, chunk)
+          this.outputUpdateHandler?.(request.callId, chunk);
 
           // Send output event
           this.eventBus.emit({
@@ -238,22 +238,22 @@ export class ToolCallScheduler {
             toolCallId: request.callId,
             outputChunk: chunk,
             timestamp: new Date(),
-          })
+          });
         },
-      })
+      });
 
       // Successfully completed
-      const durationMs = Date.now() - (toolCall.startTime || 0)
+      const durationMs = Date.now() - (toolCall.startTime || 0);
       this.setStatusInternal(
         messageId,
         request.callId,
         "success",
         this.createSuccessResponse(request, result),
         { durationMs },
-      )
+      );
     } catch (error) {
       // Execution failed
-      const durationMs = Date.now() - (toolCall.startTime || 0)
+      const durationMs = Date.now() - (toolCall.startTime || 0);
       this.setStatusInternal(
         messageId,
         request.callId,
@@ -263,7 +263,7 @@ export class ToolCallScheduler {
           error instanceof Error ? error : new Error(String(error)),
         ),
         { durationMs },
-      )
+      );
     }
   }
 
@@ -279,22 +279,22 @@ export class ToolCallScheduler {
       messageId,
       callId,
       outcome,
-    })
+    });
 
     try {
       // Call original confirmation handler
-      await originalOnConfirm(outcome)
+      await originalOnConfirm(outcome);
 
       // Update tool call state
-      const toolCall = this.findToolCall(messageId, callId)
+      const toolCall = this.findToolCall(messageId, callId);
       if (toolCall) {
-        toolCall.outcome = outcome
+        toolCall.outcome = outcome;
       }
 
       if (outcome === "approved") {
         // User approved, schedule execution
-        this.setStatusInternal(messageId, callId, "scheduled")
-        await this.attemptExecutionOfScheduledCalls(messageId, signal)
+        this.setStatusInternal(messageId, callId, "scheduled");
+        await this.attemptExecutionOfScheduledCalls(messageId, signal);
       } else {
         // User denied, cancel execution
         this.setStatusInternal(
@@ -302,16 +302,16 @@ export class ToolCallScheduler {
           callId,
           "cancelled",
           this.createCancelledResponse(callId, "User denied permission"),
-        )
+        );
       }
 
       // Remove from pending confirmations list
-      this.pendingConfirmations.delete(callId)
+      this.pendingConfirmations.delete(callId);
 
       // Check if all tool calls are completed
-      this.checkAndNotifyCompletion(messageId)
+      this.checkAndNotifyCompletion(messageId);
     } catch (error) {
-      this.logger.error("Error in confirmation response handling", error)
+      this.logger.error("Error in confirmation response handling", error);
       this.setStatusInternal(
         messageId,
         callId,
@@ -320,7 +320,7 @@ export class ToolCallScheduler {
           { callId, name: "unknown", args: {} },
           error instanceof Error ? error : new Error(String(error)),
         ),
-      )
+      );
     }
   }
 
@@ -331,7 +331,7 @@ export class ToolCallScheduler {
     auxiliaryData?: unknown,
     extraData?: unknown,
   ): void {
-    const toolCalls = this.toolCalls.get(messageId) || []
+    const toolCalls = this.toolCalls.get(messageId) || [];
     const updatedToolCalls = toolCalls.map((currentCall) => {
       if (
         currentCall.request.callId !== targetCallId ||
@@ -339,12 +339,12 @@ export class ToolCallScheduler {
         currentCall.status === "error" ||
         currentCall.status === "cancelled"
       ) {
-        return currentCall
+        return currentCall;
       }
 
-      const existingStartTime = currentCall.startTime
-      const toolInstance = currentCall.tool
-      const outcome = currentCall.outcome
+      const existingStartTime = currentCall.startTime;
+      const toolInstance = currentCall.tool;
+      const outcome = currentCall.outcome;
 
       switch (newStatus) {
         case "success":
@@ -355,7 +355,7 @@ export class ToolCallScheduler {
             response: auxiliaryData,
             durationMs: (extraData as any)?.durationMs,
             outcome,
-          } as SuccessfulToolCall
+          } as SuccessfulToolCall;
 
         case "error":
           return {
@@ -364,7 +364,7 @@ export class ToolCallScheduler {
             response: auxiliaryData,
             durationMs: (extraData as any)?.durationMs,
             outcome,
-          } as ErroredToolCall
+          } as ErroredToolCall;
 
         case "cancelled":
           return {
@@ -374,7 +374,7 @@ export class ToolCallScheduler {
             response: auxiliaryData,
             durationMs: (extraData as any)?.durationMs,
             outcome,
-          } as CancelledToolCall
+          } as CancelledToolCall;
 
         case "awaiting_approval":
           return {
@@ -384,7 +384,7 @@ export class ToolCallScheduler {
             confirmationDetails: auxiliaryData,
             startTime: existingStartTime,
             outcome,
-          } as WaitingToolCall
+          } as WaitingToolCall;
 
         case "executing":
         case "scheduled":
@@ -393,22 +393,22 @@ export class ToolCallScheduler {
             ...currentCall,
             status: newStatus,
             startTime: existingStartTime,
-          }
+          };
 
         default:
-          return currentCall
+          return currentCall;
       }
-    })
+    });
 
-    this.toolCalls.set(messageId, updatedToolCalls)
-    this.notifyToolCallsUpdate(messageId)
+    this.toolCalls.set(messageId, updatedToolCalls);
+    this.notifyToolCallsUpdate(messageId);
   }
 
   private notifyToolCallsUpdate(messageId: string): void {
-    const toolCalls = this.toolCalls.get(messageId) || []
+    const toolCalls = this.toolCalls.get(messageId) || [];
 
     // Call callback handler
-    this.onToolCallsUpdate?.(toolCalls)
+    this.onToolCallsUpdate?.(toolCalls);
 
     // Send event to event bus
     this.eventBus.emit({
@@ -416,12 +416,12 @@ export class ToolCallScheduler {
       messageId,
       toolCalls,
       timestamp: new Date(),
-    })
+    });
   }
 
   private checkAndNotifyCompletion(messageId: string): void {
-    const toolCalls = this.toolCalls.get(messageId) || []
-    const completedCalls = this.getCompletedToolCalls(messageId)
+    const toolCalls = this.toolCalls.get(messageId) || [];
+    const completedCalls = this.getCompletedToolCalls(messageId);
 
     if (completedCalls.length === toolCalls.length && toolCalls.length > 0) {
       this.logger.info("All tool calls completed", {
@@ -432,10 +432,10 @@ export class ToolCallScheduler {
         errorCount: completedCalls.filter((tc) => tc.status === "error").length,
         cancelledCount: completedCalls.filter((tc) => tc.status === "cancelled")
           .length,
-      })
+      });
 
       // Call completion callback
-      this.onAllToolCallsComplete?.(completedCalls)
+      this.onAllToolCallsComplete?.(completedCalls);
 
       // Send completion event
       this.eventBus.emit({
@@ -443,27 +443,27 @@ export class ToolCallScheduler {
         messageId,
         completedToolCalls: completedCalls,
         timestamp: new Date(),
-      })
+      });
     }
   }
 
   // Tool call queries and management
   getToolCalls(messageId: string): ToolCall[] {
-    return this.toolCalls.get(messageId) || []
+    return this.toolCalls.get(messageId) || [];
   }
 
   getCompletedToolCalls(messageId: string): CompletedToolCall[] {
-    const toolCalls = this.toolCalls.get(messageId) || []
+    const toolCalls = this.toolCalls.get(messageId) || [];
     return toolCalls.filter(
       (tc) =>
         tc.status === "success" ||
         tc.status === "error" ||
         tc.status === "cancelled",
-    ) as CompletedToolCall[]
+    ) as CompletedToolCall[];
   }
 
   getPendingApprovals(): WaitingToolCall[] {
-    return Array.from(this.pendingConfirmations.values())
+    return Array.from(this.pendingConfirmations.values());
   }
 
   // Cancel and cleanup mechanisms
@@ -471,14 +471,14 @@ export class ToolCallScheduler {
     messageId: string,
     reason: string = "Cancelled by user",
   ): Promise<void> {
-    const toolCalls = this.toolCalls.get(messageId) || []
+    const toolCalls = this.toolCalls.get(messageId) || [];
     const activeCalls = toolCalls.filter(
       (tc) =>
         tc.status === "validating" ||
         tc.status === "scheduled" ||
         tc.status === "executing" ||
         tc.status === "awaiting_approval",
-    )
+    );
 
     for (const toolCall of activeCalls) {
       this.setStatusInternal(
@@ -486,10 +486,10 @@ export class ToolCallScheduler {
         toolCall.request.callId,
         "cancelled",
         this.createCancelledResponse(toolCall.request.callId, reason),
-      )
+      );
     }
 
-    this.checkAndNotifyCompletion(messageId)
+    this.checkAndNotifyCompletion(messageId);
   }
 
   // Helper methods
@@ -497,8 +497,8 @@ export class ToolCallScheduler {
     messageId: string,
     callId: string,
   ): ToolCall | undefined {
-    const toolCalls = this.toolCalls.get(messageId) || []
-    return toolCalls.find((tc) => tc.request.callId === callId)
+    const toolCalls = this.toolCalls.get(messageId) || [];
+    return toolCalls.find((tc) => tc.request.callId === callId);
   }
 
   private updateLiveOutput(
@@ -506,19 +506,19 @@ export class ToolCallScheduler {
     callId: string,
     output: string,
   ): void {
-    const toolCalls = this.toolCalls.get(messageId) || []
+    const toolCalls = this.toolCalls.get(messageId) || [];
     const updatedToolCalls = toolCalls.map((tc) => {
       if (tc.request.callId === callId && tc.status === "executing") {
         return {
           ...tc,
           liveOutput: (tc.liveOutput || "") + output,
-        } as ExecutingToolCall
+        } as ExecutingToolCall;
       }
-      return tc
-    })
+      return tc;
+    });
 
-    this.toolCalls.set(messageId, updatedToolCalls)
-    this.notifyToolCallsUpdate(messageId)
+    this.toolCalls.set(messageId, updatedToolCalls);
+    this.notifyToolCallsUpdate(messageId);
   }
 
   private createErrorResponse(
@@ -530,7 +530,7 @@ export class ToolCallScheduler {
       result: null,
       error: error.message,
       timestamp: new Date(),
-    }
+    };
   }
 
   private createSuccessResponse(
@@ -542,7 +542,7 @@ export class ToolCallScheduler {
       result,
       error: null,
       timestamp: new Date(),
-    }
+    };
   }
 
   private createCancelledResponse(
@@ -554,6 +554,6 @@ export class ToolCallScheduler {
       result: null,
       error: `Cancelled: ${reason}`,
       timestamp: new Date(),
-    }
+    };
   }
 }

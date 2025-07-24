@@ -28,6 +28,7 @@ const createChatConfigSchema = z.object({
 });
 
 const sendMessageSchema = z.object({
+  absoluteFilePath: z.string(),
   chatSessionId: z.string(),
   message: z.string(),
   attachments: z.array(z.object({
@@ -58,17 +59,18 @@ export function createChatEngineRouter(
         config: createChatConfigSchema.optional(),
       }))
       .mutation(async ({ input }) => {
-        const chatSessionId = await chatClient.createChat(
+        const result = await chatClient.createChat(
           input.targetDirectory,
           input.config,
         );
-        return { chatSessionId };
+        return result;
       }),
 
     sendMessage: publicProcedure
       .input(sendMessageSchema)
       .mutation(async ({ input }) => {
         const result = await chatClient.sendMessage(
+          input.absoluteFilePath,
           input.chatSessionId,
           input.message,
           input.attachments,
@@ -78,12 +80,14 @@ export function createChatEngineRouter(
 
     confirmToolCall: publicProcedure
       .input(z.object({
+        absoluteFilePath: z.string(),
         chatSessionId: z.string(),
         toolCallId: z.string(),
         outcome: z.enum(['approved', 'denied']),
       }))
       .mutation(async ({ input }) => {
         const result = await chatClient.confirmToolCall(
+          input.absoluteFilePath,
           input.chatSessionId,
           input.toolCallId,
           input.outcome,
@@ -93,10 +97,11 @@ export function createChatEngineRouter(
 
     abortChat: publicProcedure
       .input(z.object({
+        absoluteFilePath: z.string(),
         chatSessionId: z.string(),
       }))
       .mutation(async ({ input }) => {
-        await chatClient.abortChat(input.chatSessionId);
+        await chatClient.abortChat(input.absoluteFilePath, input.chatSessionId);
         return { success: true };
       }),
 
@@ -115,42 +120,42 @@ export function createChatEngineRouter(
 
     updateChat: publicProcedure
       .input(z.object({
-        chatSessionId: z.string(),
+        absoluteFilePath: z.string(),
         updates: z.object({
           metadata: z.any().optional(),
           maxTurns: z.number().optional(),
         }).optional(),
       }))
       .mutation(async ({ input }) => {
-        await chatClient.updateChat(input.chatSessionId, input.updates || {});
+        await chatClient.updateChat(input.absoluteFilePath, input.updates || {});
         return { success: true };
       }),
 
     deleteChat: publicProcedure
       .input(z.object({
-        chatSessionId: z.string(),
+        absoluteFilePath: z.string(),
       }))
       .mutation(async ({ input }) => {
-        await chatClient.deleteChat(input.chatSessionId);
+        await chatClient.deleteChat(input.absoluteFilePath);
         return { success: true };
       }),
 
-    getChatById: publicProcedure
+    getChatSession: publicProcedure
       .input(z.object({
-        chatSessionId: z.string(),
+        absoluteFilePath: z.string(),
       }))
       .query(async ({ input }) => {
-        const chat = await chatClient.getChatById(input.chatSessionId);
-        return chat;
+        const session = await chatClient.getOrLoadChatSession(input.absoluteFilePath);
+        return session.toJSON();
       }),
 
     loadChatFromFile: publicProcedure
       .input(z.object({
-        filePath: z.string(),
+        absoluteFilePath: z.string(),
       }))
       .mutation(async ({ input }) => {
-        const chatSessionId = await chatClient.loadChatFromFile(input.filePath);
-        return { chatSessionId };
+        const session = await chatClient.getOrLoadChatSession(input.absoluteFilePath);
+        return { chatSessionId: session.id };
       }),
   });
 }
