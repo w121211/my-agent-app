@@ -1,0 +1,398 @@
+# Feature
+
+## 📋 核心：Run/Rerun Chat 系統
+
+預期功能
+
+ChatService.runChat() - 重新執行整個 chat workflow
+支援 inputData 注入（{{inputData}} 變數）
+停止執行功能 # - 自動備份機制（run0, run1, run2...） => 備份機制是另一個 feature
+
+UI
+
+chat 的控制介面（run, stop）參考 task 的設計， 放在 explorer 的 chat file node
+現階段不考慮在其他地方放控制介面
+目標：針對以上 feature ，讓我們一起討論構思，設計 1. 後端系統 2. 前端系統
+
+步驟：請先檢查後端的實裝情形
+
+- 讓我們一起討論構思如何設計，有問題請提出
+
+目前專案情形
+
+- ChatService已經廢棄
+- 後端 chat 系統遷移至 chat engine
+  - 例如 packages/events-core/src/services/chat-engine/chat-client.ts
+
+Edit
+
+分析 Run/Rerun Chat 系統的後端架構和實現策略
+11s
+
+我來檢查一下後端的實裝情形，然後我們討論 Run/Rerun Chat 系統的設計。
+
+🔍 後端架構現狀分析
+當前 Chat Engine 架構
+從代碼檢查中發現，當前系統採用了三層架構：
+
+ChatClient (chat-client.ts) - 生命週期管理層
+ChatSession (chat-session.ts) - Turn 執行管理層
+ChatRepository - 持久化層
+現有架構的設計限制
+核心問題：當前設計是 turn-based execution，但 Run/Rerun 需要的是 workflow-based execution
+
+typescript
+// 當前設計：逐個 turn 執行
+ChatSession.runTurn(input) → single turn result
+
+// 需要的設計：整個 workflow 執行
+ChatService.runChat(chatPath, inputData) → complete workflow result
+具體限制：
+
+執行粒度不匹配 - runTurn() 只處理單一互動，無法重跑整個對話流
+狀態管理局部化 - ChatSession 只管理當前 turn 狀態，缺乏 workflow 層級的狀態
+inputData 注入缺失 - 現有 message processing 沒有統一的變數替換機制
+🏗️ Run/Rerun 系統設計方案
+設計策略：擴展現有架構 vs 新增服務層
+建議方案：新增 ChatWorkflowService 作為協調層
+
+WHY：避免破壞現有 turn-based 設計，同時添加 workflow-level 功能
+
+架構設計
+typescript
+// 新增的 Workflow 層
+ChatWorkflowService {
+runChat(chatPath, inputData?, options?)
+stopChatExecution(chatPath)
+getChatExecutionStatus(chatPath)
+}
+
+// 現有層級保持不變
+ChatClient → ChatSession → ChatRepository
+核心組件責任劃分
+
+1. ChatWorkflowService - Workflow 協調者
+   責任：
+
+管理整個 chat 的執行生命週期
+處理 inputData 注入和 message preprocessing
+控制執行狀態（running, stopped, completed）
+與事件系統整合
+關鍵方法設計：
+
+typescript
+interface ChatWorkflowService {
+// 核心執行功能
+runChat(chatPath: string, inputData?: Record<string, any>, options?: {
+signal?: AbortSignal,
+startFromMessage?: number,
+correlationId?: string
+}): Promise<ChatExecutionResult>
+
+// 控制功能
+stopChatExecution(chatPath: string): Promise<void>
+getChatExecutionStatus(chatPath: string): ChatExecutionStatus
+} 2. Message Processing Enhancement
+WHY：需要統一處理 inputData 注入，但保持與現有 file reference 邏輯的兼容性
+
+設計策略：擴展現有的 message-processing-utils.ts
+
+typescript
+// 擴展現有 utils
+function processMessageWithInputData(
+message: string,
+inputData: Record<string, any>,
+fileContentMap: Map<string, string>
+): string {
+// 1. 處理 {{inputData}} 變數
+// 2. 處理 @file references (現有邏輯)
+// 3. 回傳處理完的 message
+} 3. Execution State Management
+狀態設計：
+
+typescript
+type ChatExecutionStatus =
+| 'idle' // 沒有執行中
+| 'running' // 正在執行
+| 'paused' // 暫停（未來功能）
+| 'completed' // 執行完成
+| 'failed' // 執行失敗
+| 'cancelled' // 用戶取消
+
+interface ChatExecutionState {
+status: ChatExecutionStatus
+currentMessageIndex: number
+totalMessages: number
+startTime?: Date
+abortController?: AbortController
+}
+🔄 執行流程設計
+runChat() 執行邏輯
+typescript
+// 偽代碼說明執行流程
+async function runChat(chatPath, inputData, options) {
+// 1. 載入 chat file
+const chat = await chatRepository.findByPath(chatPath)
+
+// 2. 建立執行狀態
+const executionState = createExecutionState(chat, options)
+
+// 3. 預處理所有 messages（注入 inputData）
+const processedMessages = await preprocessMessages(chat.messages, inputData)
+
+// 4. 循序執行每個 message
+for (const [index, message] of processedMessages.entries()) {
+// 檢查是否被取消
+if (executionState.abortController.signal.aborted) break
+
+    // 更新執行狀態
+    updateExecutionState(executionState, index)
+
+    // 執行單一 message（複用現有 ChatSession.runTurn）
+    await executeMessage(message, chat, executionState)
+
+    // 發送進度事件
+    emitProgressEvent(chatPath, executionState)
+
+}
+
+// 5. 完成執行，清理狀態
+finalizeExecution(chatPath, executionState)
+}
+與現有系統的整合點
+複用策略：
+
+ChatRepository - 直接使用現有的檔案讀寫邏輯
+ChatSession.runTurn() - 作為單一 message 的執行引擎
+Event System - 擴展現有事件，新增 workflow 層級事件
+Message Processing Utils - 擴展變數處理能力
+🎯 關鍵設計決策
+
+1. 執行粒度：Message-level vs Turn-level
+   選擇：Message-level execution WHY：Chat file 中的每個 message block 代表一個邏輯步驟，重跑時應該按 message 順序執行
+
+2. State Management：In-memory vs Persistent
+   選擇：In-memory with event notification WHY：執行狀態是短暫的，不需要持久化，但需要通過事件讓 UI 即時更新
+
+3. inputData 處理時機：Runtime vs Preprocessing
+   選擇：Preprocessing approach WHY：在執行前統一處理所有變數替換，避免執行過程中的複雜狀態管理
+
+4. 錯誤處理策略
+   設計原則：
+
+Fail-fast - 遇到錯誤立即停止
+Partial success - 記錄已完成的 messages
+Recovery support - 支援從失敗點繼續執行（未來功能）
+🤔 討論問題
+執行模式：你覺得 message-by-message 執行是否符合預期？還是有其他執行模式的考慮？
+inputData 格式：{{inputData}} 語法是否足夠？是否需要支援更複雜的變數引用（如 {{inputData.user.name}}）？
+停止機制：除了 AbortController，是否需要更細緻的停止控制（如「執行完當前 message 後停止」）？
+與現有 ChatClient 的關係：是否需要修改 ChatClient 來支援 workflow 執行，還是完全通過新的 ChatWorkflowService 處理？
+你對這個設計方向有什麼想法？特別是關於如何與現有 chat engine 架構整合的部分？
+
+Retry
+我現在想要改命名方式，service 只在特定情況使用。哪些 class 適合命名為 service？
+ChatWorkflowService -> ChatRunner？
+Run chat 的流程跟現在的 chat 基本相同，只是 user prompt可以直接帶入歷史訊息，tool calls, ai 需要重跑
+以下設計會不會有問題？如果可以用此方式，那我們就可以重複利用 runTurn、或者直接用 client.sendMessage？請仔細分析 ``` for each message in chat.messages: if message is user message: 1. add user message to new message list 2. messages (can be ai response, tool calls, etc …) <- run turn to generate ai response 3. add ai response to new message list
+else if tool calls:
+…
+
+else if ai response:
+…
+
+```
+1. cache ai generating content -> as placeholder
+2. 透過 cache 來加速 rerun，當context（as input messages）沒有變動，例如prompt沒變、外部注入的 value 沒變、tool call 的結果沒變，就直接使用 cache，不用 call AI
+
+請先檢視分析我的意見，再想想
+不要 code
+
+Edit
+
+分析命名、重跑對話流程和緩存策略的複雜性
+20s
+
+
+
+
+
+
+
+
+
+
+讓我仔細分析你的想法：
+
+🏷️ 命名方式檢視
+Service 適用情況分析
+適合保留 Service 命名的 classes：
+
+ChatService - 協調多個領域的業務邏輯（chat + task + project + file）
+TaskService - 管理 task 生命週期和業務規則
+ProjectFolderService - 跨系統整合（settings + file watching + validation）
+UserSettingsService - 業務邏輯協調層
+應該改名的 classes：
+
+FileService → FileReader or FileManager（主要是工具性功能）
+FileWatcherService → FileWatcher（單一職責的監控器）
+ChatWorkflowService → ChatRunner（執行器，非業務協調）
+WHY：Service 應該保留給"協調多個領域的業務邏輯"，而非單純的工具類或執行器。
+
+🔄 Run Chat 流程設計分析
+你的觀察很重要：
+"Run chat 的流程跟現在的 chat 基本相同，只是 user prompt 可以直接帶入歷史訊息"
+
+這個洞察非常關鍵！重跑本質上就是「重新播放對話」。
+
+你提出的循環設計分析
+for each message in chat.messages:
+  if message is user message:
+    1. add user message to new message list
+    2. messages <- run turn to generate ai response
+    3. add ai response to new message list
+設計優勢：
+
+✅ 複用現有邏輯 - 直接使用 runTurn() 或 client.sendMessage()
+✅ 架構簡潔 - 不需要複雜的新層級
+✅ 自然的執行模式 - 模擬真實的對話重播
+需要深入考慮的問題：
+
+1. 訊息關聯性處理
+問題：Chat messages 不是獨立的，而是有上下文關聯的
+
+// 實際 chat.messages 結構
+[
+  { role: "USER", content: "幫我寫個函數" },
+  { role: "ASSISTANT", content: "好的，我來寫..." },
+  { role: "FUNCTION_EXECUTOR", content: "tool_call: write_file" },
+  { role: "ASSISTANT", content: "檔案已寫入完成" },
+  { role: "USER", content: "修改一下這個函數" },  // <- 這裡引用了前面的 context
+  // ...
+]
+解決方案考量：
+
+每次 runTurn() 需要提供完整的對話歷史作為 context
+不能只處理單一 message，而是需要累積式的 context
+2. 執行流程的修正
+建議調整：
+
+// 修正後的流程設計
+const newMessages = []
+for (const message of chat.messages) {
+  if (message.role === "USER") {
+    // 1. 添加 user message
+    newMessages.push(processedUserMessage)
+
+    // 2. 使用累積的 context 執行 runTurn
+    const result = await chatSession.runTurn(userInput, {
+      context: newMessages  // 提供完整歷史
+    })
+
+    // 3. 添加所有生成的 messages（可能包含 AI response + tool calls + tool results）
+    newMessages.push(...result.generatedMessages)
+  }
+  // 跳過非 USER messages，因為它們會被重新生成
+}
+WHY：只處理 USER messages，讓系統重新生成所有 AI responses 和 tool interactions。
+
+🚀 Cache 機制設計
+你的 Cache 想法非常重要
+"當 context 沒有變動，例如 prompt 沒變、外部注入的 value 沒變、tool call 的結果沒變，就直接使用 cache"
+
+Cache Key 設計考量：
+
+typescript
+interface CacheKey {
+  contextHash: string      // 之前所有 messages 的 hash
+  inputDataHash: string    // {{inputData}} 的 hash
+  fileReferencesHash: string  // @file 內容的 hash
+  modelConfig: string      // AI model 設定
+}
+Cache 存儲設計：
+
+typescript
+interface CacheEntry {
+  key: CacheKey
+  response: AIResponse
+  toolCalls?: ToolCall[]
+  timestamp: Date
+}
+Cache 失效策略
+自動失效條件：
+
+引用的檔案內容變更（通過 FileWatcher 檢測）
+inputData 變更
+對話 context 變更（前面任何 message 的改變）
+🎯 整合現有系統的可行性
+直接使用 client.sendMessage() 的可行性分析
+可行性：✅ 高度可行
+
+WHY：
+
+sendMessage() 已經處理完整的對話流程
+已經整合 tool calls, file references 等功能
+有完整的 event emission
+實作策略：
+
+typescript
+class ChatRunner {
+  async runChat(chatPath: string, inputData?: any) {
+    // 1. 載入原始 chat
+    const originalChat = await chatRepository.findByPath(chatPath)
+
+    // 2. 創建新的 chat session
+    const chatSession = new ChatSession(...)
+
+    // 3. 重播每個 user message
+    for (const message of originalChat.messages) {
+      if (message.role === "USER") {
+        // 檢查 cache
+        const cacheKey = generateCacheKey(chatSession.messages, inputData)
+        const cached = await getFromCache(cacheKey)
+
+        if (cached) {
+          // 使用快取結果
+          chatSession.addMessages(cached.messages)
+        } else {
+          // 重新執行
+          const processedContent = processInputData(message.content, inputData)
+          const result = await chatClient.sendMessage(chatSession.id, processedContent)
+
+          // 存入快取
+          await saveToCache(cacheKey, result)
+        }
+      }
+    }
+  }
+}
+🤔 關鍵問題討論
+1. 執行範圍
+問題：是重新執行所有 user messages，還是支援"從特定 message 開始重跑"？
+
+建議：MVP 先支援完整重跑，未來可擴展部分重跑
+
+2. 結果處理
+問題：重跑的結果如何處理？
+
+覆蓋原 chat file？
+創建新的 chat file？
+顯示 diff？
+3. Tool Call 的確定性
+問題：某些 tool calls（如發送郵件、創建檔案）不應該重複執行
+
+可能方案：
+
+Tool call cache with "idempotent" 標記
+危險操作的二次確認機制
+你覺得這個基於 "message 重播 + cache" 的設計方向如何？特別是關於如何處理 tool calls 的重複執行問題？
+
+
+
+
+Retry
+
+
+
+
+
