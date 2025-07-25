@@ -1,9 +1,9 @@
-<!-- docs/design_app/design-ui-v13-compact-tool-calls.html -->
+<!-- docs/design_app/design-ui-v10_2.html -->
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>AI Chat App UI - Compact Tool Calls</title>
+    <title>AI Chat App UI</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Tailwind CSS v4 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
@@ -46,57 +46,6 @@
       }
       .group:hover .message-actions {
         opacity: 1;
-      }
-
-      /* Collapsible Tool Call System */
-      /* Each tool call item header is clickable for expand/collapse functionality */
-      /* Currently implemented as demo with alerts - actual collapse logic can be added */
-
-      /* Status Dot Animations */
-      .dot-validating {
-        background: #f59e0b;
-        animation: pulse 2s infinite;
-      }
-      .dot-scheduled {
-        background: #3b82f6;
-      }
-      .dot-executing {
-        background: #10b981;
-        animation: pulse 1s infinite;
-      }
-      .dot-awaiting {
-        background: #f97316;
-        animation: blink 1s infinite;
-      }
-      .dot-success {
-        background: #10b981;
-      }
-      .dot-error {
-        background: #ef4444;
-      }
-      .dot-cancelled {
-        background: #6b7280;
-      }
-
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0.5;
-        }
-      }
-
-      @keyframes blink {
-        0%,
-        50% {
-          opacity: 1;
-        }
-        51%,
-        100% {
-          opacity: 0.3;
-        }
       }
     </style>
   </head>
@@ -146,7 +95,7 @@
               </div>
               <div class="folder-content ml-3 pl-0">
                 <div
-                  class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
+                  class="hover:bg-hover explorer-node selected group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
                   onclick="selectNode(this); openChat('design-discussion')"
                 >
                   <i class="bi bi-chat-dots mr-1.5 text-xs"></i>
@@ -162,24 +111,8 @@
                   </button>
                 </div>
                 <div
-                  class="hover:bg-hover explorer-node selected group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                  onclick="selectNode(this); openChat('tool-call-demo')"
-                >
-                  <i class="bi bi-chat-dots mr-1.5 text-xs"></i>
-                  <span class="max-w-[120px] truncate text-sm"
-                    >tool-call-demo.chat.json</span
-                  >
-                  <button
-                    class="text-muted hover:text-accent ml-auto cursor-pointer"
-                    title="Menu"
-                    onclick="event.stopPropagation();"
-                  >
-                    <i class="bi bi-three-dots-vertical"></i>
-                  </button>
-                </div>
-                <div
                   class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                  onclick="selectNode(this); alert('File preview - demo only')"
+                  onclick="selectNode(this); previewFile('README.md')"
                 >
                   <i class="bi bi-file-earmark mr-1.5 text-xs"></i>
                   <span class="max-w-[120px] truncate text-sm">README.md</span>
@@ -197,7 +130,7 @@
                 </div>
                 <div
                   class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                  onclick="selectNode(this); alert('File preview - demo only')"
+                  onclick="selectNode(this); previewFile('api.md')"
                 >
                   <i class="bi bi-file-earmark mr-1.5 text-xs"></i>
                   <span class="text-sm">api.md</span>
@@ -235,7 +168,7 @@
                   <div class="folder-content ml-3 pl-0">
                     <div
                       class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                      onclick="selectNode(this); alert('File preview - demo only')"
+                      onclick="selectNode(this); previewFile('main.ts')"
                     >
                       <i class="bi bi-file-earmark mr-1.5 text-xs"></i>
                       <span class="text-sm">main.ts</span>
@@ -249,7 +182,7 @@
                     </div>
                     <div
                       class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                      onclick="selectNode(this); alert('File preview - demo only')"
+                      onclick="selectNode(this); previewFile('utils.ts')"
                     >
                       <i class="bi bi-file-earmark mr-1.5 text-xs"></i>
                       <span class="text-sm">utils.ts</span>
@@ -300,7 +233,7 @@
                   <div class="folder-content ml-3 hidden pl-0">
                     <div
                       class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                      onclick="selectNode(this); alert('File preview - demo only')"
+                      onclick="selectNode(this); previewFile('release.log')"
                     >
                       <i class="bi bi-file-earmark mr-1.5 text-xs"></i>
                       <span class="text-sm">release.log</span>
@@ -314,7 +247,7 @@
                     </div>
                     <div
                       class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                      onclick="selectNode(this); alert('File preview - demo only')"
+                      onclick="selectNode(this); previewFile('build.yaml')"
                     >
                       <i class="bi bi-file-earmark mr-1.5 text-xs"></i>
                       <span class="text-sm">build.yaml</span>
@@ -370,7 +303,7 @@
                 </div>
                 <div
                   class="hover:bg-hover explorer-node group relative flex min-h-[28px] cursor-pointer items-center rounded px-1 py-0.5 text-[13px]"
-                  onclick="selectNode(this); alert('File preview - demo only')"
+                  onclick="selectNode(this); previewFile('demo.md')"
                 >
                   <i class="bi bi-file-earmark mr-1.5 text-xs"></i>
                   <span class="text-sm">demo.md</span>
@@ -390,7 +323,6 @@
         <div class="border-border border-t p-3">
           <button
             class="text-muted hover:text-accent flex w-full cursor-pointer items-center justify-center px-3 py-2 text-xs font-medium"
-            onclick="window.open('tools-registry-settings.html', '_blank')"
           >
             <i class="bi bi-gear mr-2"></i>Settings
           </button>
@@ -408,33 +340,13 @@
             <i class="bi bi-house-door text-muted"></i>
             <span class="text-muted text-xs">my-ai-project</span>
             <i class="bi bi-chevron-right text-muted text-xs"></i>
-            <span class="text-muted text-xs">tool-call-demo.chat.json</span>
+            <span class="text-muted text-xs">design-discussion.chat.json</span>
           </header>
-
           <!-- Messages -->
           <div
             class="scrollbar-thin bg-background flex-1 space-y-5 overflow-y-auto px-8 py-6"
           >
-            <!-- User Message -->
-            <div class="group flex flex-col items-end">
-              <div
-                class="bg-accent/20 border-accent/30 text-foreground ml-auto max-w-xl rounded-lg border px-4 py-2"
-              >
-                因為在設計時，設計師並沒有看到 event-core
-                所以，請檢查討論中所提出的後端設計 跟現行的 event-core
-                有沒有差異？
-              </div>
-              <div class="message-actions mr-2 mt-1 flex items-center gap-2">
-                <button
-                  class="text-muted hover:text-accent cursor-pointer"
-                  title="Edit"
-                >
-                  <i class="bi bi-pencil"></i>
-                </button>
-              </div>
-            </div>
-
-            <!-- AI Message with Tool Calls -->
+            <!-- AI Message -->
             <div class="group flex flex-col items-start">
               <div class="mb-0.5 flex items-center gap-2">
                 <span
@@ -446,162 +358,130 @@
                 >
               </div>
               <div class="text-foreground pl-7 leading-normal">
-                我需要先了解現行的 event-core
-                架構，讓我搜尋相關資訊來比較與討論中設計的差異。
+                Hi! How can I help with your product design? Let me know your
+                focus today.
               </div>
-
-              <!-- Tool Call Block - Collapsible structure with mixed states -->
-              <!-- Header shows overall progress, items can be individually collapsed/expanded -->
-              <div class="bg-surface border border-border rounded-md my-4 ml-7">
-                <!-- Tool Call Header -->
-                <div class="flex items-center px-3 py-2 border-b border-border bg-background rounded-t-md text-sm">
-                  <i class="bi bi-search text-accent mr-2"></i>
-                  <span class="text-foreground font-medium"
-                    >檢查 event-core 架構差異</span
-                  >
-                  <div id="header-status-display" class="ml-auto">
-                    <!-- Status will be inserted here based on selected design -->
-                  </div>
-                </div>
-
-                <!-- Tool Call Item 1: Search (EXPANDED STATE) -->
-                <div class="px-3 py-2 border-b border-border text-sm last:border-b-0 last:rounded-b-md">
-                  <!-- Clickable header for collapse/expand -->
-                  <div class="flex items-center gap-2 mb-2 cursor-pointer hover:bg-hover/50 -mx-1 px-1 py-1 rounded"
-                       onclick="handleToolCallToggle(this, 'item1')"
-                       title="Click to collapse">
-                    <i class="bi bi-folder2-open text-muted text-xs"></i>
-                    <span class="text-foreground font-medium"
-                      >搜尋 "event-core architecture services"</span
-                    >
-                    <div class="ml-auto flex items-center gap-2">
-                      <span class="text-muted text-xs">6 results</span>
-                      <div id="item1-status-display">
-                        <!-- Status will be inserted here -->
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Expanded Results (visible when expanded) -->
-                  <div class="bg-background border border-border rounded px-2 py-2 font-mono text-xs leading-relaxed max-h-[120px] overflow-y-auto">
-                    <div class="space-y-1">
-                      <div class="text-accent text-xs">
-                        packages/events-core/src/server/routers/event-router.ts
-                      </div>
-                      <div class="text-foreground text-xs">
-                        packages/events-core/src/server/root-router.ts
-                      </div>
-                      <div class="text-foreground text-xs">
-                        packages/events-core/src/event-types.ts
-                      </div>
-                      <div class="text-muted text-xs">+ 3 more files...</div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Tool Call Item 2: Analysis (COLLAPSED STATE) -->
-                <div class="px-3 py-2 border-b border-border text-sm last:border-b-0 last:rounded-b-md">
-                  <!-- Clickable header for collapse/expand -->
-                  <div class="flex items-center justify-between cursor-pointer hover:bg-hover/50 -mx-1 px-1 py-1 rounded"
-                       onclick="handleToolCallToggle(this, 'item2')"
-                       title="Click to expand">
-                    <div class="flex items-center gap-2">
-                      <i class="bi bi-search text-muted text-xs"></i>
-                      <span class="text-foreground font-medium"
-                        >分析架構差異</span
-                      >
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-muted text-xs ml-auto">4s</span>
-                      <div id="item2-status-display">
-                        <!-- Status will be inserted here -->
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Content hidden when collapsed -->
-                </div>
-
-                <!-- Tool Call Item 3: Further Search (COLLAPSED STATE) -->
-                <div class="px-3 py-2 border-b border-border text-sm last:border-b-0 last:rounded-b-md">
-                  <!-- Clickable header for collapse/expand -->
-                  <div class="flex items-center justify-between cursor-pointer hover:bg-hover/50 -mx-1 px-1 py-1 rounded"
-                       onclick="handleToolCallToggle(this, 'item3')"
-                       title="Click to expand">
-                    <div class="flex items-center gap-2">
-                      <i class="bi bi-folder2-open text-muted text-xs"></i>
-                      <span class="text-foreground font-medium"
-                        >搜尋 "ChatService file references"</span
-                      >
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-muted text-xs">5 results</span>
-                      <div id="item3-status-display">
-                        <!-- Status will be inserted here -->
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Content hidden when collapsed -->
-                </div>
-
-                <!-- Tool Call Item 4: Final Analysis (COLLAPSED STATE) -->
-                <div class="px-3 py-2 border-b border-border text-sm last:border-b-0 last:rounded-b-md">
-                  <!-- Clickable header for collapse/expand -->
-                  <div class="flex items-center justify-between cursor-pointer hover:bg-hover/50 -mx-1 px-1 py-1 rounded"
-                       onclick="handleToolCallToggle(this, 'item4')"
-                       title="Click to expand">
-                    <div class="flex items-center gap-2">
-                      <i class="bi bi-check-circle text-muted text-xs"></i>
-                      <span class="text-foreground font-medium"
-                        >完成架構比較</span
-                      >
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-muted text-xs ml-auto">12s</span>
-                      <div id="item4-status-display">
-                        <!-- Status will be inserted here -->
-                      </div>
-                    </div>
-                  </div>
-                  <!-- Content hidden when collapsed -->
-                </div>
-              </div>
-
-              <!-- AI Response -->
-              <div class="text-foreground mt-3 pl-7 leading-normal">
-                <p class="mb-3">
-                  非常好！檢視 event-core
-                  架構後，我發現討論中的設計有幾個重要差異需要修正：
-                </p>
-
-                <div
-                  class="bg-surface border-border mt-2 rounded-lg border p-3"
+              <div class="message-actions ml-7 mt-1 flex items-center gap-3">
+                <button
+                  class="text-muted hover:text-accent cursor-pointer"
+                  title="Edit"
                 >
-                  <h3 class="text-accent mb-2 text-sm font-semibold">
-                    關鍵架構差異分析
-                  </h3>
-
-                  <div class="space-y-2 text-sm">
-                    <div>
-                      <span class="text-foreground font-medium"
-                        >1. 服務命名錯誤</span
-                      >
-                      <div class="text-muted mt-1 text-xs">
-                        討論中設計 → 實際架構
-                      </div>
-                    </div>
-                    <div>
-                      <span class="text-foreground font-medium"
-                        >2. 事件系統整合</span
-                      >
-                      <div class="text-muted mt-1 text-xs">
-                        現有 EventBus 架構已經非常完整
-                      </div>
-                    </div>
-                  </div>
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button
+                  class="text-muted hover:text-accent cursor-pointer"
+                  title="Copy"
+                >
+                  <i class="bi bi-copy"></i>
+                </button>
+                <button
+                  class="text-muted hover:text-accent cursor-pointer"
+                  title="More"
+                >
+                  <i class="bi bi-three-dots"></i>
+                </button>
+              </div>
+            </div>
+            <!-- User Message -->
+            <div class="group flex flex-col items-end">
+              <div
+                class="bg-accent/20 border-accent/30 text-foreground ml-auto max-w-xl rounded-lg border px-4 py-2"
+              >
+                <a
+                  href="javascript:void(0)"
+                  class="text-accent hover:text-accent/80 ml-1 cursor-pointer"
+                  onclick="previewFile('vscode-screenshot.png')"
+                  >#vscode-screenshot.png</a
+                >
+                <a
+                  href="javascript:void(0)"
+                  class="text-accent hover:text-accent/80 ml-1 cursor-pointer"
+                  onclick="previewFile('vscode-screenshot.png')"
+                  >#claude-screenshot.png</a
+                >
+                I want a chat UI that feels modern and professional, like VS
+                Code but for conversations.
+              </div>
+              <div class="message-actions mr-2 mt-1 flex items-center gap-2">
+                <button
+                  class="text-muted hover:text-accent cursor-pointer"
+                  title="Edit"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+              </div>
+            </div>
+            <!-- AI Message -->
+            <div class="group flex flex-col items-start">
+              <div class="mb-0.5 flex items-center gap-2">
+                <span
+                  class="bg-accent flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
+                  >C</span
+                >
+                <span class="text-muted text-xs font-medium"
+                  >Claude Sonnet 4</span
+                >
+              </div>
+              <div class="text-foreground pl-7 leading-normal">
+                Great! Here are some key principles:<br />
+                <ul
+                  class="text-foreground mt-1 list-disc space-y-0.5 pl-5 text-[15px]"
+                >
+                  <li>Minimal dark theme, subtle contrast</li>
+                  <li>Three-panel layout: explorer, chat, preview</li>
+                  <li>Modern sans-serif font</li>
+                  <li>Contextual file management</li>
+                </ul>
+              </div>
+              <div class="message-actions ml-7 mt-1 flex items-center gap-3">
+                <button
+                  class="text-muted hover:text-accent cursor-pointer"
+                  title="Edit"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button
+                  class="text-muted hover:text-accent cursor-pointer"
+                  title="Copy"
+                >
+                  <i class="bi bi-copy"></i>
+                </button>
+                <button
+                  class="text-muted hover:text-accent cursor-pointer"
+                  title="More"
+                >
+                  <i class="bi bi-three-dots"></i>
+                </button>
+              </div>
+            </div>
+            <!-- AI Message with Artifact -->
+            <div class="group flex flex-col items-start">
+              <div class="mb-0.5 flex items-center gap-2">
+                <span
+                  class="bg-accent flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
+                  >C</span
+                >
+                <span class="text-muted text-xs font-medium"
+                  >Claude Sonnet 4</span
+                >
+              </div>
+              <div class="text-foreground pl-7 leading-normal">
+                Here's a wireframe artifact for your chat UI. You can preview or
+                download it.<br />
+                <div class="mt-2">
+                  <button
+                    class="border-border bg-panel hover:bg-hover text-foreground flex cursor-pointer items-center gap-2 rounded border px-3 py-1 text-sm font-medium"
+                    onclick="previewFile('wireframe.html')"
+                  >
+                    wireframe.html
+                    <span class="text-muted ml-1 text-xs">v3</span>
+                    <i
+                      class="bi bi-download text-muted hover:text-accent ml-2 cursor-pointer text-base"
+                    ></i>
+                  </button>
                 </div>
               </div>
-
-              <div class="message-actions ml-7 mt-2 flex items-center gap-3">
+              <div class="message-actions ml-7 mt-1 flex items-center gap-3">
                 <button
                   class="text-muted hover:text-accent cursor-pointer"
                   title="Edit"
@@ -623,7 +503,6 @@
               </div>
             </div>
           </div>
-
           <!-- Input Area -->
           <footer class="border-border bg-panel border-t px-3 py-3">
             <div class="relative">
@@ -648,7 +527,7 @@
                   class="text-muted hover:text-accent flex cursor-pointer items-center gap-1 text-xs"
                   title="Chat Mode"
                 >
-                  <span id="selected-mode">Agent</span>
+                  <span id="selected-mode">Chat</span>
                   <i class="bi bi-chevron-down ml-1 text-xs"></i>
                 </button>
                 <div
@@ -697,13 +576,13 @@
               </div>
               <button
                 class="text-muted hover:text-accent cursor-pointer text-xs"
-                onclick="alert('What\'s Next: Continue analyzing event-core architecture differences.')"
+                onclick="openWhatsNextModal()"
               >
                 <i class="bi bi-lightbulb mr-1"></i>What's next
               </button>
               <button
                 class="text-muted hover:text-accent cursor-pointer text-xs"
-                onclick="alert('Chat summary saved to analysis.md')"
+                onclick="summarizeChat()"
               >
                 <i class="bi bi-pen mr-1"></i>Summarize
               </button>
@@ -722,6 +601,48 @@
         <aside
           class="bg-surface border-border relative flex w-96 flex-col border-l"
         >
+          <!-- Preview Overlay -->
+          <div
+            class="bg-surface absolute inset-0 z-20 hidden"
+            id="preview-panel"
+          >
+            <div
+              class="border-border flex h-12 items-center justify-between border-b px-4"
+            >
+              <div class="flex items-center">
+                <span class="font-medium" id="preview-title">README.md</span>
+                <span class="text-muted ml-2 text-xs">Preview</span>
+              </div>
+              <div class="flex items-center space-x-3">
+                <button class="text-muted hover:text-accent cursor-pointer">
+                  <i class="bi bi-download"></i>
+                </button>
+                <button
+                  onclick="closePreview()"
+                  class="text-muted hover:text-accent cursor-pointer"
+                >
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+            </div>
+            <div
+              class="scrollbar-thin flex-1 overflow-y-auto p-4"
+              id="preview-content"
+            >
+              <div class="prose prose-invert max-w-none">
+                <h1 class="text-foreground mb-4 text-xl font-bold">README</h1>
+                <p class="text-foreground mb-4">
+                  This is a markdown file preview. Actual file content would be
+                  loaded here.
+                </p>
+                <ul class="text-foreground list-disc pl-5">
+                  <li>Dynamic content loading</li>
+                  <li>Syntax highlighting</li>
+                  <li>Live preview updates</li>
+                </ul>
+              </div>
+            </div>
+          </div>
           <!-- Chat Control Base Layer -->
           <div class="flex h-full flex-col">
             <!-- Panel Header -->
@@ -745,28 +666,50 @@
                     id="edit-context-btn"
                     class="text-muted hover:text-accent cursor-pointer text-xs"
                     title="Edit"
-                    onclick="alert('Edit context feature - demo only')"
+                    onclick="toggleContextEdit(true)"
                   >
                     <i class="bi bi-pencil"></i>
+                  </button>
+                  <button
+                    id="save-context-btn"
+                    class="text-muted hover:text-accent hidden cursor-pointer text-xs"
+                    title="Save"
+                    onclick="saveContext()"
+                  >
+                    <i class="bi bi-check-lg"></i>
                   </button>
                 </div>
                 <!-- View mode -->
                 <div id="context-view" class="space-y-2">
                   <div
                     class="bg-input-background border-input-border text-muted min-h-[100px] cursor-text rounded border p-3 text-sm"
-                    onclick="alert('Edit context feature - demo only')"
+                    onclick="toggleContextEdit(true)"
                   >
                     <button
                       class="text-accent hover:text-accent/80 mr-2 cursor-pointer underline"
-                      onclick="alert('File preview - demo only'); event.stopPropagation();"
+                      onclick="previewFile('demo.md'); event.stopPropagation();"
                     >
                       @&lt;demo-project&gt;/demo.md</button
+                    ><br />
+                    <button
+                      class="text-accent hover:text-accent/80 mr-2 cursor-pointer underline"
+                      onclick="previewFile('outside-file.md'); event.stopPropagation();"
+                    >
+                      @/path/to/outside/file.md</button
                     ><br />
                     Text is also allowed
                   </div>
                 </div>
+                <!-- Edit mode -->
+                <div id="context-edit" class="hidden">
+                  <textarea
+                    id="context-textarea"
+                    rows="4"
+                    class="text-foreground bg-input-background border-input-border focus:border-accent placeholder-muted w-full resize-none rounded-md border px-3 py-2 text-sm focus:outline-none"
+                    placeholder="@&lt;demo-project&gt;/demo.md @/path/to/outside/file.md&#10;Text is also allowed"
+                  ></textarea>
+                </div>
               </div>
-
               <!-- Artifacts -->
               <div class="border-border border-b p-4">
                 <div class="mb-2 flex items-center justify-between">
@@ -783,10 +726,14 @@
                 <div class="space-y-2">
                   <div
                     class="bg-panel hover:bg-hover flex cursor-pointer items-center justify-between rounded p-2"
+                    onclick="previewFile('wireframe.html')"
                   >
                     <div class="flex items-center">
                       <i class="bi bi-file-earmark text-foreground mr-2"></i>
-                      <span class="text-foreground text-sm">analysis.md</span>
+                      <span class="text-foreground text-sm"
+                        >wireframe.html</span
+                      >
+                      <span class="text-muted ml-1 text-xs">v3</span>
                     </div>
                     <button
                       class="text-muted hover:text-accent cursor-pointer text-xs"
@@ -802,22 +749,26 @@
         </aside>
       </main>
     </div>
-
     <script>
       let selectedNode = document.querySelector(".explorer-node.selected");
-
       function selectNode(element) {
         if (selectedNode) selectedNode.classList.remove("selected");
         selectedNode = element;
         element.classList.add("selected");
       }
-
       function openChat(chatName) {
         document.querySelector(
           "header span.text-muted.text-xs:last-child",
         ).textContent = chatName + ".chat.json";
+        closePreview();
       }
-
+      function previewFile(fileName) {
+        document.getElementById("preview-title").textContent = fileName;
+        document.getElementById("preview-panel").classList.remove("hidden");
+      }
+      function closePreview() {
+        document.getElementById("preview-panel").classList.add("hidden");
+      }
       function toggleFolder(element) {
         const icon = element.querySelector("i.bi");
         const folderContent = element.nextElementSibling;
@@ -836,64 +787,38 @@
           }
         }
       }
-
-      // Handle tool call item toggle
-      function handleToolCallToggle(element, itemId) {
-        const isExpanded = element.parentElement.querySelector('.bg-background.border'); // Check if content exists
-        
-        if (isExpanded) {
-          // Currently expanded - show collapse message
-          alert(`Tool call "${itemId}" collapsed. Content hidden.`);
-          element.setAttribute('title', 'Click to expand');
+      function toggleContextEdit(editing) {
+        const view = document.getElementById("context-view");
+        const edit = document.getElementById("context-edit");
+        const editBtn = document.getElementById("edit-context-btn");
+        const saveBtn = document.getElementById("save-context-btn");
+        if (editing) {
+          view.classList.add("hidden");
+          edit.classList.remove("hidden");
+          editBtn.classList.add("hidden");
+          saveBtn.classList.remove("hidden");
+          const textarea = document.getElementById("context-textarea");
+          textarea.focus();
+          textarea.select();
         } else {
-          // Currently collapsed - show expand message  
-          alert(`Tool call "${itemId}" expanded. Content would be shown here.`);
-          element.setAttribute('title', 'Click to collapse');
+          view.classList.remove("hidden");
+          edit.classList.add("hidden");
+          editBtn.classList.remove("hidden");
+          saveBtn.classList.add("hidden");
         }
       }
-
-      // Initialize status displays with dot design
-      function initializeStatusDisplays() {
-        const statusDisplays = {
-          "header-status-display": "executing",
-          "item1-status-display": "success",
-          "item2-status-display": "executing",
-          "item3-status-display": "success",
-          "item4-status-display": "success",
-        };
-
-        Object.entries(statusDisplays).forEach(([id, status]) => {
-          const element = document.getElementById(id);
-          if (element) {
-            element.innerHTML = generateStatusHTML(status);
-          }
-        });
+      function saveContext() {
+        const textarea = document.getElementById("context-textarea");
+        const content = textarea.value;
+        console.log("Saved context:", content);
+        toggleContextEdit(false);
       }
-
-      function generateStatusHTML(status) {
-        const statusData = {
-          validating: { label: "驗證中", color: "validating" },
-          scheduled: { label: "已排程", color: "scheduled" },
-          executing: { label: "執行中", color: "executing" },
-          awaiting: { label: "等待確認", color: "awaiting" },
-          success: { label: "完成", color: "success" },
-          error: { label: "錯誤", color: "error" },
-          cancelled: { label: "已取消", color: "cancelled" },
-        };
-
-        const data = statusData[status];
-        if (!data) return "";
-
-        return `<div class="flex items-center gap-1.5 text-xs">
-          <div class="w-2 h-2 rounded-full dot-${data.color}"></div>
-          <span class="text-muted">${data.label}</span>
-        </div>`;
+      function openWhatsNextModal() {
+        alert("What's Next: Refactor your utils.ts for better modularity.");
       }
-
-      // Initialize status displays
-      document.addEventListener("DOMContentLoaded", function () {
-        initializeStatusDisplays();
-      });
+      function summarizeChat() {
+        alert("Chat summary saved to #./chat-summary.md");
+      }
     </script>
   </body>
 </html>
