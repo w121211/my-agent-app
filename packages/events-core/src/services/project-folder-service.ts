@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { v4 as uuidv4 } from "uuid";
 import { Logger, ILogObj } from "tslog";
 import fuzzysort from "fuzzysort";
+import { walk } from "ignore-walk";
 import type { IEventBus, BaseEvent } from "../event-bus.js";
 import type { UserSettingsRepository } from "./user-settings-repository.js";
 import { FileWatcherService } from "./file-watcher-service.js";
@@ -327,6 +328,36 @@ export class ProjectFolderService {
   /**
    * Search for files in a specific project using fuzzy search
    */
+  private async getSearchableFiles(projectPath: string): Promise<FileSearchResult[]> {
+    try {
+      // Use ignore-walk to get files that are not gitignored
+      const allowedFiles = await walk({
+        path: projectPath,
+        ignoreFiles: ['.gitignore'],
+        includeEmpty: false,
+        follow: false
+      });
+      
+      return allowedFiles
+        .filter(file => 
+          // Only include searchable file types
+          /\.(ts|js|tsx|jsx|md|txt|json|py|html|css|yml|yaml|toml|rs|go|java|c|cpp|h|hpp|sh|sql)$/.test(file)
+        )
+        .map(relativePath => {
+          const absolutePath = path.join(projectPath, relativePath);
+          return {
+            name: path.basename(relativePath),
+            relativePath,
+            absolutePath
+          };
+        });
+    } catch (error) {
+      this.logger.error(`Error getting searchable files for ${projectPath}: ${error}`);
+      // Fallback to empty array if ignore-walk fails
+      return [];
+    }
+  }
+
   public async searchFilesInProject(
     query: string,
     projectId: string,
@@ -344,23 +375,8 @@ export class ProjectFolderService {
       throw new Error(`Project folder with ID ${projectId} not found`);
     }
 
-    // Get the folder tree for the project
-    const folderTree = await this.getFolderTree(projectFolder.path);
-
-    // Flatten the tree to get all files
-    const allFiles = this.flattenTreeToFiles(folderTree, projectFolder.path);
-
-    // Filter files to exclude unnecessary directories and files
-    const filteredFiles = allFiles.filter((file) => {
-      const relativePath = file.relativePath.toLowerCase();
-      return (
-        !relativePath.includes("node_modules") &&
-        !relativePath.includes(".git") &&
-        !relativePath.includes("dist") &&
-        !relativePath.includes("build") &&
-        !relativePath.startsWith(".")
-      );
-    });
+    // Get searchable files using .gitignore rules
+    const filteredFiles = await this.getSearchableFiles(projectFolder.path);
 
     // If no query, return all filtered files (limited)
     if (!query.trim()) {

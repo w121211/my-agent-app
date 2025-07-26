@@ -3,7 +3,6 @@ import { z } from "zod";
 import { tracked } from "@trpc/server";
 import { IEventBus, BaseEvent } from "../../event-bus.js";
 import { FileWatcherEvent } from "../../services/file-watcher-service.js";
-import { ChatUpdatedEvent } from "../../services/chat-service.js";
 import { TaskUpdatedEvent } from "../../services/task-service.js";
 import { ProjectFolderUpdatedEvent } from "../../services/project-folder-service.js";
 import { router, publicProcedure } from "../trpc-server.js";
@@ -11,7 +10,6 @@ import { router, publicProcedure } from "../trpc-server.js";
 // Define the known event kinds
 const eventKindEnum = z.enum([
   "FileWatcherEvent",
-  "ChatUpdatedEvent",
   "TaskUpdatedEvent",
   "ProjectFolderUpdatedEvent",
 ] as const);
@@ -19,7 +17,6 @@ const eventKindEnum = z.enum([
 // Map event kinds to their event types
 interface EventTypeMap {
   FileWatcherEvent: FileWatcherEvent;
-  ChatUpdatedEvent: ChatUpdatedEvent;
   TaskUpdatedEvent: TaskUpdatedEvent;
   ProjectFolderUpdatedEvent: ProjectFolderUpdatedEvent;
   PingEvent: BaseEvent & { message: string };
@@ -49,7 +46,6 @@ function createEventSubscription<K extends keyof EventTypeMap>(
 export function createEventRouter(eventBus: IEventBus) {
   return router({
     fileWatcherEvents: createEventSubscription(eventBus, "FileWatcherEvent"),
-    chatEvents: createEventSubscription(eventBus, "ChatUpdatedEvent"),
     taskEvents: createEventSubscription(eventBus, "TaskUpdatedEvent"),
     projectFolderEvents: createEventSubscription(
       eventBus,

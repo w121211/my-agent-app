@@ -1,0 +1,1188 @@
+
+目標：參考討論串 chat-refactor-chat_engine-3.txt 制定 chat engine 更新方案
+
+步驟：請針對 P0 給予具體的更新方案
+* 有些應該已經有實現，如果不需要更改就不要改
+* 請參考 ai_sdk_v5_index.d.ts，分析目前 chat engine 的 types，哪些可以轉移到 ai sdk，哪些需要自定義，盡量仔細
+* MessageProcessor - 目前應該已經有類似的實現了，看是否有滿足需求
+
+Notes
+* ChatService已經廢棄，後端 chat 系統遷移至 chat engine packages/events-core/src/services/chat-engine
+* Tool call 使用 packages/events-core/src/services/tool-call/tool-call-scheduler.ts
+* 不用考慮 backward compatibility
+* 用Big bang，直接重構，不用管fallback
+* 目前app在MVP開發階段，沒有使用者、也沒有向後支援需求，一切採用最速做法
+* 先不要管 API（tRPC），等到我們的 chat-engine 都弄好了才來重構 API
+
+🔴 P0 - 必須完成 (重新調整)
+1. Types 標準化程度 (調整到 P0)
+問題： 哪些自定義 types 保留？
+你的決定： 既然要用 AI SDK v5，就盡量按照 AI SDK 定義的來做，不要重複造輪子
+執行方向：
+
+檢視 AI SDK v5 的 type definitions
+替換所有可以用 AI SDK 的 types (Message, Role, ModelConfig 等)
+只保留業務特定的 types (ChatMode, ChatFileStatus 等)
+2. 命名規範統一 (調整到 P0)
+問題： 確認統一命名？
+你的決定： ChatSession (runtime), ChatFileData (storage), ChatMessage (統一)
+執行方向：
+
+立即統一所有相關檔案的命名
+避免後續重構成本
+3. File Reference (@) 整合
+問題： 獨立 MessageProcessor 服務
+執行方向：
+
+建立 MessageProcessor 類別
+整合到 ChatSession.runTurn() 流程中
+4. .gitignore 支援
+問題： 檢查根目錄 vs 完整路徑階層？
+你的決定： 直接套用現成的 library
+執行方向：
+
+找現成的 .gitignore 解析 library (如 ignore npm package)
+整合到 MessageProcessor 中
+5. Stream Response 架構
+問題： 如何處理 AI streaming？
+執行方向：
+
+在 ChatSession 中實作 streaming 處理
+暫時不管前端，先讓後端 streaming 邏輯正確
+6. Event 系統整合
+問題： 確保新系統發送完整事件
+執行方向：
+
+在 ChatSession 關鍵節點發送事件
+採用新事件格式，不兼容舊系統
+🟡 P1 - 重要功能
+7. Tool Call 真正整合
+執行方向：
+
+在 ChatSession.runTurn() 中真正調用 ToolCallScheduler
+處理 tool results 並繼續對話流程
+8. 並發存取控制
+你的決定： 限制一個 file 只能有一個 active session
+執行方向： 在 ChatClient 中加入檔案鎖定邏輯
+
+Context Window 管理
+你的決定： 簡單的滑動視窗 - 保留最近 N 條訊息
+執行方向： 在 buildMessagesForAI() 中實作訊息截斷
+
+ChatSessionRepository 功能補齊
+執行方向：
+
+補齊 scanDirectory 功能
+移除對舊 ChatRepository 的依賴
+11. 核心 CRUD 功能
+你的決定： getAllChats, updateMetadata, deleteChat 為必須
+執行方向： 在 ChatClient 中實作這些方法
+
+🟢 P2 - 品質提升
+12. 舊系統清理
+你的決定： 不用管舊 chat files，直接棄用
+執行方向：
+
+直接刪除 chat-service.ts, chat-repository.ts
+清理所有相關 imports
+13. 錯誤處理強化
+你的決定： 最多重試 3 次，指數退避
+執行方向： 在 ChatSession 中加入重試邏輯
+
+Input Validation
+你的決定： message 長度 < 50K 字元，路徑安全檢查
+執行方向： 在 ChatClient 和 MessageProcessor 中加入驗證
+
+File System 安全性
+你的決定： 只允許專案資料夾內檔案，檔案大小 < 1MB
+執行方向： 在 MessageProcessor 中實作安全檢查
+
+🔵 P3 - Demo 與驗證
+16. AI SDK v5 真實 Demo
+你的決定： 使用 OpenAI (GPT-4)，需要使用者提供 API key
+執行方向：
+
+建立 demo script
+測試完整的對話流程
+❌ 移除或降級的項目
+API 路由兼容性 → 移除
+理由： 等 chat-engine 穩定後再重構 API
+
+Model Configuration 管理 → 降級到 P2
+理由： 每個 chat 固定一個模型，簡化實作
+
+Agent vs Chat Mode 差異化 → 降級到 P3
+理由： 暫時與 Chat mode 相同
+
+Draft Message 功能 → 移除
+理由： 前端負責，跟後端無關
+
+Rate Limiting → 移除
+理由： MVP 階段不需要
+
+Provider Registry 健壯性 → 降級到 P2
+理由： 先讓基本功能可用
+
+📋 最速執行順序
+Week 1: 基礎重構 1. Types 標準化 (AI SDK v5) 2. 命名規範統一 3. 舊系統清理
+
+Week 2: 核心功能 4. MessageProcessor + .gitignore 支援 5. ChatSession streaming 整合 6. Event 系統整合
+
+Week 3: 完善功能 7. Tool Call 整合 8. 並發控制 9. CRUD 功能補齊
+
+Week 4: 測試與 Demo 10. Context Window 管理 11. 錯誤處理 12. 真實 Demo
+
+🎯 Big Bang 重構策略
+直接刪除舊檔案 - 不保留任何 fallback
+一次性重寫 - 不考慮向後兼容
+最簡實作 - 先讓功能可用，細節後續迭代
+延後 API 設計 - 專注於 chat-engine 內部邏輯
+這樣的策略確保能最快速度交付可用的 chat engine，避免被兼容性問題拖慢進度。
+
+Edit
+
+Strategized comprehensive chat engine refactoring with AI SDK v5
+3s
+
+
+
+
+我需要先搜索項目知識來了解當前的chat engine狀況和討論內容，然後分析AI SDK v5的types定義。
+
+
+Searched project for “chat-refactor-chat_engine-3.txt chat engine refactor discussion P0 P1 P2”
+1 result
+
+
+
+
+現在我需要搜索更多相關信息來了解當前的chat engine實現和AI SDK v5的types。
+1s
+
+
+
+Searched project for “ai_sdk_v5_index.d.ts AI SDK types Message Role ModelConfig interfaces”
+2 results
+
+
+
+
+
+
+現在我來搜索現有的 MessageProcessor 相關實現，看看是否已經有類似功能：
+1s
+
+
+
+Searched project for “MessageProcessor file reference @ syntax chat-file-utils message-processing-utils”
+5 results
+
+
+
+
+
+
+
+
+
+Strategized comprehensive chat engine refactoring with AI SDK v5
+6s
+
+
+
+
+現在根據搜索到的信息，我來針對 P0 項目給出具體的更新方案：
+
+P0 具體更新方案分析
+1. Types 標準化程度 (P0)
+當前狀況分析：
+
+✅ 已部分使用 AI SDK types：AssistantModelMessage, ProviderRegistryProvider
+⚠️ 自定義 types 可以替換：
+可以轉移到 AI SDK 的 types：
+
+typescript
+// 目前自定義 → 可用 AI SDK 替代
+Role: "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR" 
+// → 使用 UIMessage["role"]: "system" | "user" | "assistant"
+
+ChatStatus (部分) 
+// → 使用 ChatStatus: "submitted" | "streaming" | "ready" | "error"
+
+Message 格式
+// → 使用 UIMessage 接口及其 UIMessagePart
+需要保留的自定義 types：
+
+typescript
+// 業務特定，必須保留
+export type ChatMode = "chat" | "agent"
+export type ChatFileStatus = "SAVED" | "SAVING" | "ERROR" 
+export interface ChatMetadata { title?, tags?, mode?, ... }
+建議執行方向：
+
+立即替換 Role → 使用 UIMessage["role"]
+ChatMessage 格式改用 UIMessage 結構
+保留 ChatMode, ChatFileStatus 等業務專用 types
+2. 命名規範統一 (P0)
+當前命名混亂問題：
+
+Chat, SerializableChat, ChatSession 概念重疊
+ChatMessage 在新舊系統都有定義
+統一命名方案：
+
+typescript
+// 明確的命名架構
+ChatSession     // 運行時對象，在記憶體中的活躍會話
+ChatFileData    // 儲存格式，替代 SerializableChat
+ChatMessage     // 統一的 message 格式 (使用 AI SDK UIMessage)
+ChatMetadata    // chat 的 metadata
+執行方向：
+
+立即重新命名所有相關檔案和接口
+統一 import/export 的命名
+避免後續大規模重構成本
+3. File Reference (@) 整合 (P0)
+當前狀況分析：
+
+✅ 基礎功能已存在：message-processing-utils.ts, chat-file-utils.ts
+❌ 關鍵缺失：ChatSession 沒有整合這些功能
+❌ 安全漏洞：缺少 .gitignore 支援
+MessageProcessor 需求分析：
+
+typescript
+// 當前 ChatSession.buildMessagesForAI() 直接用原始 content
+// 需要先處理 @ 語法再送給 AI
+設計建議： 建立獨立的 MessageProcessor 服務，理由：
+
+單一職責原則
+可獨立測試 .gitignore 邏輯
+易於維護和擴展
+執行方向：
+
+建立 MessageProcessor 類別，整合現有的 @ 語法處理
+加入 .gitignore 檢查功能 (使用 ignore npm package)
+在 ChatSession.runTurn() 中整合 MessageProcessor
+4. .gitignore 支援 (P0)
+當前缺失：
+
+完全沒有 .gitignore 檢查
+安全風險：@ 語法可能載入敏感檔案
+解決方案：
+
+typescript
+// 使用現成的 library
+import ignore from 'ignore'
+
+class GitignoreChecker {
+  // 檢查完整路徑階層的 .gitignore 規則
+  // Cache 解析結果提升性能
+  async isFileAllowed(filePath: string, projectPath: string): Promise<boolean>
+}
+執行方向：
+
+使用 ignore npm package (現成的 .gitignore 解析器)
+在 MessageProcessor 中整合 gitignore 檢查
+檢查完整路徑階層，不只專案根目錄
+5. Stream Response 架構 (P0)
+當前挑戰：
+
+AI SDK v5 的 streaming 需要前端即時接收
+現有事件系統不支援 streaming
+設計建議：
+
+typescript
+// 在 ChatSession 中實作 streaming 處理
+class ChatSession {
+  async runTurn(input: UserInput): Promise<ConversationResult> {
+    // 1. 處理 streaming response
+    // 2. 透過 eventBus 發送 streaming chunks
+    // 3. 暫時不管前端，專注後端邏輯正確性
+  }
+}
+執行方向：
+
+先在 ChatSession 中實作 AI streaming 邏輯
+透過現有 eventBus 發送 streaming events
+前端整合留到後續處理
+6. Event 系統整合 (P0)
+當前缺失：
+
+ChatSession 只發送部分事件
+缺少 MESSAGE_ADDED, AI_RESPONSE_ADDED 等關鍵事件
+執行方向：
+
+typescript
+// 在 ChatSession 關鍵節點發送完整事件
+class ChatSession {
+  async runTurn() {
+    // 1. 發送 MESSAGE_ADDED 事件
+    // 2. 發送 AI_RESPONSE_STREAMING 事件  
+    // 3. 發送 AI_RESPONSE_COMPLETED 事件
+    // 採用新事件格式，不兼容舊系統
+  }
+}
+關鍵發現與風險
+MessageProcessor 實現狀況：
+
+✅ 基礎 @ 語法功能完整 (extractFileReferences, processFileReferences)
+✅ 檔案載入邏輯健全 (loadFileContentsForChat)
+❌ 但 ChatSession 完全沒有整合這些功能
+❌ 缺少 .gitignore 支援是重大安全漏洞
+AI SDK v5 Types 分析：
+
+可大量替換自定義 types，減少維護負擔
+UIMessage 結構比當前 ChatMessage 更標準化
+建議保留業務特定 types (ChatMode, ChatFileStatus)
+Big Bang 重構建議執行順序：
+
+Week 1: Types 標準化 + 命名規範統一 + 舊系統清理
+Week 2: MessageProcessor 整合 + .gitignore 支援 + Stream Response
+Week 3: Event 系統完整化 + Tool Call 整合
+Week 4: 真實 Demo 驗證
+這樣的順序確保基礎架構先穩固，再逐步加入複雜功能。
+
+
+
+
+Retry
+## 📎 引用檔案 (File References) - @ 語法
+
+### 輸入階段：@ 觸發檔案搜尋
+
+預期功能
+
+輸入 "@" 觸發檔案搜尋選單
+支援 fuzzy search 專案檔案
+鍵盤導航（上下鍵選擇，Enter/Tab 確認，Esc 取消）
+完成情形
+
+❌ 完全未實現
+這是最關鍵的功能缺失
+目前輸入框是純 textarea，無任何搜尋觸發邏輯
+### 顯示階段：已引用檔案的視覺呈現
+
+完成情形
+
+✅ 已引用檔案顯示為可點擊連結（目前使用 # 符號）
+❌ 點擊檔案引用的互動功能尚未實現（僅顯示 toast 提示）
+❌ 檔案狀態指示（檔案不存在、已更新等）尚未實現
+### 後端處理：MessageProcessingService
+
+完成情形
+
+❌ 完全未實現
+規劃中的統一訊息處理管道不存在
+❌ 檔案內容注入邏輯（@{file_path} → 檔案內容）尚未實現
+---
+
+# File References (@syntax) Design Specification
+
+## Overview
+
+File References feature enables users to reference project files in chat messages using @filename syntax. This design follows MVP principles, leveraging existing event-core architecture while introducing minimal complexity.
+
+## Backend Design
+
+### Architecture Strategy
+
+Core Principle: Extend existing services rather than creating new heavyweight components. Use utility functions instead of complex service classes to maintain simplicity.
+
+### Service Extensions
+
+#### ProjectFolderService Enhancement
+
+WHY: File search is fundamentally about "searching within project scope" - a natural extension of existing project management responsibilities.
+
+// Extension to existing ProjectFolderService
+interface ProjectFolderService {
+  // New method added
+  searchFilesInProject(
+    query: string,
+    projectId: string,
+    limit?: number,
+  ): Promise<FileSearchResult[]>;
+
+  // Existing methods remain unchanged
+  getFolderTree(projectPath: string): Promise<FolderTreeNode>;
+  // ...
+}
+
+interface FileSearchResult {
+  name: string; // "world.txt"
+  relativePath: string; // "docs/world.txt"
+  absolutePath: string; // "/project/docs/world.txt"
+  score?: number; // fuzzy search relevance
+  highlight?: string; // highlighted text for UI
+}
+Implementation Strategy:
+
+Leverage existing folderTrees data structure
+Use fuzzysort library for search capability
+Integrate with existing FileWatcherService for auto-sync
+Search only within current project scope
+#### ChatService Integration
+
+WHY: File reference processing is part of message handling flow, not a separate concern requiring its own service.
+
+// Enhanced ChatService.submitMessage flow
+async submitMessage(chatId: string, message: string, attachments?, correlationId?) {
+  // 1. Process file references (new step)
+  const processedMessage = await this.processFileReferences(message, chat)
+
+  // 2. Continue with existing flow
+  const chatMessage = { id, role: "USER", content: processedMessage, timestamp }
+  await this.chatRepository.addMessage(...)
+  await this.processUserMessage(updatedChat, chatMessage, correlationId)
+}
+
+// New private methods
+private async processFileReferences(message: string, chat: Chat): Promise<string>
+private async loadFileContents(fileRefs: string[], projectPath: string): Promise<Map<string, string>>
+### Message Processing Utilities
+
+WHY: Replacing planned MessageProcessingService with stateless utility functions aligns with functional programming principles and reduces complexity.
+
+// message-processing-utils.ts - Pure functions
+export function extractFileReferences(message: string): string[];
+export function processFileReferences(
+  message: string,
+  fileContentMap: Map<string, string>,
+  projectPath: string,
+): string;
+
+// Future extensions
+export function processInputDataPlaceholders(
+  message: string,
+  inputData: Record<string, any>,
+): string;
+export function extractToolCalls(message: string): ToolCall[];
+Processing Strategy:
+
+Raw Message: "hello @world.txt continues"
+Processed Message: "hello <file data-path=\"world.txt\">{{file content}}</file> continues"
+Error Handling: File not found → keep original @world.txt (silent failure)
+### API Design
+
+#### tRPC Router Extension
+
+// Extend existing projectFolder router
+export const projectFolderRouter = router({
+  // Existing methods...
+
+  searchFiles: publicProcedure
+    .input(
+      z.object({
+        query: z.string().min(1),
+        projectId: z.string(),
+        limit: z.number().optional().default(20),
+      }),
+    )
+    .query(async ({ input }) => {
+      return projectFolderService.searchFilesInProject(
+        input.query,
+        input.projectId,
+        input.limit,
+      );
+    }),
+});
+### Data Flow Architecture
+
+User Input "@wor"
+    ↓
+Frontend triggers projectFolder.searchFiles.query("wor", projectId)
+    ↓
+ProjectFolderService.searchFilesInProject()
+    ↓
+Search within existing folderTrees using fuzzysort
+    ↓
+Return FileSearchResult[] with relevance scores
+    ↓
+Frontend displays search menu
+
+User sends "hello @world.txt continues"
+    ↓
+ChatService.submitMessage()
+    ↓
+MessageProcessingUtils.extractFileReferences() → ["world.txt"]
+    ↓
+ChatService.loadFileContents() via FileService.openFile()
+    ↓
+MessageProcessingUtils.processFileReferences() → processed message
+    ↓
+Send processed message to AI API
+    ↓
+Save original message to chat file
+## Frontend Design
+
+### Architecture Strategy
+
+Core Principle: Minimize component complexity while maintaining good user experience. Focus on 80% use cases with 20% implementation effort.
+
+### Component Responsibility
+
+#### ChatInput Component (Primary Modification)
+
+WHY: Centralize @ syntax logic in single component to avoid cross-component state synchronization complexity.
+
+// ChatInput internal state management
+interface ChatInputState {
+  searchQuery: string; // Current search term
+  searchResults: FileResult[]; // Search results from API
+  showSearchMenu: boolean; // Menu visibility
+  selectedIndex: number; // Keyboard navigation selection
+}
+Responsibilities:
+
+Detect @ trigger and extract search query
+Manage search menu state and visibility
+Handle keyboard navigation (up/down, enter, escape)
+Process file selection and text replacement
+#### FileSearchDropdown Component (New Addition)
+
+WHY: Pure presentation component following single responsibility principle.
+
+// FileSearchDropdown interface
+interface FileSearchDropdownProps {
+  results: FileSearchResult[];
+  selectedIndex: number;
+  onSelect: (file: FileSearchResult) => void;
+  onCancel: () => void;
+  visible: boolean;
+}
+Responsibilities:
+
+Display search results with highlighting
+Handle mouse interactions
+Render "no results found" state
+No internal state management
+#### Message Rendering (Minimal Changes)
+
+WHY: Leverage existing file reference display logic, only adding color differentiation.
+
+Enhancement:
+
+Existing files: Display @file.txt in blue color
+Missing files: Display @missing.txt in normal text color
+Logic: Positive indication for success, no special handling for failures
+### User Interaction Flow
+
+#### @ Trigger Mechanism
+
+User types: "hello" → "hello @" → "hello @w" → "hello @wo"
+    ↓
+System response: Show all files → Filter by "w" → Filter by "wo"
+#### File Selection Process
+
+User input: "hello @wo"
+User selects: "world.txt" from dropdown
+Result: "hello @world.txt " (auto-append space)
+Cursor position: After the space for continued typing
+#### Keyboard Navigation
+
+Up/Down arrows: Navigate through search results
+Enter/Tab: Confirm selection
+Escape: Cancel search menu
+Continue typing: Update search criteria
+### Technical Implementation Strategy
+
+#### Text Parsing - Ultra-MVP Approach
+
+Scope Limitation: Only support cursor-at-end scenarios to avoid complexity.
+
+✅ Supported: "hello @wo[cursor]"
+❌ Not supported: "hello @wo[cursor]rld @file"
+❌ Not supported: Multi-line complex scenarios
+Detection Logic:
+
+// Simplified detection algorithm
+function detectFileReference(value: string, cursorPos: number) {
+  // Only process if cursor is at end
+  if (cursorPos !== value.length) return null;
+
+  // Find last @ symbol
+  const lastAtIndex = value.lastIndexOf("@");
+  if (lastAtIndex === -1) return null;
+
+  // Extract text after @
+  const afterAt = value.slice(lastAtIndex + 1);
+  if (afterAt.includes(" ")) return null; // No spaces allowed
+
+  return afterAt; // This becomes the search query
+}
+#### Search Menu Positioning
+
+MVP Strategy: Fixed position below textarea to avoid complex cursor-following logic.
+
+Rationale: Simplifies implementation while providing acceptable user experience for initial version.
+
+#### Search Optimization
+
+Debouncing: 300ms delay to balance responsiveness with API load
+Caching: Short-term result caching for repeated searches
+Fuzzy Search: Use fuzzysort library for intelligent file matching
+### Error Handling Strategy
+
+#### File Status Indication
+
+Philosophy: Positive indication for success states, neutral handling for failures.
+
+Existing files: Blue color indicates successful reference
+Missing files: Normal text color (no special error styling)
+No results: Display "No files found" message while keeping menu open
+#### Graceful Degradation
+
+Feature flag: Wrap @ search functionality for easy disable
+Fallback behavior: If search fails, @ syntax still works as plain text
+Backward compatibility: Existing file reference display unchanged
+---
+
+你漏掉了很重要的:舊系統清理 1. 哪些需要刪除、哪些要整合進當前的 chat engine （包含檔案移動到 /chat-engine）…等等
+> 使用 ignore npm package (現成的 .gitignore 解析器) 1. 用 ignore-walk 感覺比較適合 2. 我們需要 gitignore 是為了 fuzzy search，所以需要在一開始就 ignore 不需要搜尋的 folders, files
+請參考 feat-file_references_spec 1. 現在已經有相關的實裝了嗎？ 2. 哪些需要修改、增加的？
+Edit
+
+
+
+Investigated file reference implementation and system cleanup needs.
+2s
+
+
+
+讓我先搜索看看現在的實現狀況和feat-file_references_spec的內容：
+
+
+Searched project for “feat-file_references_spec file references @ syntax implementation”
+6 results
+
+
+
+
+
+
+
+
+
+
+Analyzed file reference implementation and integration challenges.
+5s
+
+
+
+
+
+根據搜索結果，讓我針對你的三個重點進行具體分析：
+
+1. 舊系統清理 - 具體執行方案
+需要刪除的檔案：
+刪除列表：
+├── packages/events-core/src/services/chat-service.ts ❌
+├── packages/events-core/src/services/chat-repository.ts ❌  
+├── packages/events-core/src/server/routers/chat-router.ts ❌
+└── 相關的舊 event types 和 interfaces ❌
+需要整合到 chat-engine 的檔案：
+移動 & 整合列表：
+├── chat-file-utils.ts 
+│   └── 移動到: packages/events-core/src/services/chat-engine/message-processor.ts
+├── message-processing-utils.ts
+│   └── 整合到: packages/events-core/src/services/chat-engine/message-processor.ts  
+└── 部分 event-types.ts (ChatMessage, ChatMetadata 等)
+    └── 更新命名並移到 chat-engine types
+關鍵發現 - 已有實現但未整合：
+typescript
+// ✅ 舊系統 chat-service.ts 已經實現完整的 @ 語法處理：
+async submitMessage(chatId: string, message: string) {
+  // 已有完整的 file reference 處理！
+  const processedMessage = await processMessageFileReferences(
+    message, chat, this.projectFolderService, this.fileService, this.logger
+  );
+}
+
+// ❌ 但新的 ChatSession 完全沒有整合這個功能
+// ChatSession.runTurn() 直接用原始 message，沒有處理 @
+執行策略：
+
+直接搬移：將 processMessageFileReferences 整合到 ChatSession
+刪除舊檔案：確認沒有其他依賴後直接刪除
+不需要兼容層：Big bang 策略，直接切換
+2. .gitignore 支援 - ignore-walk 方案
+你說得對！ignore-walk 更適合我們的需求：
+
+為什麼 ignore-walk 更好：
+typescript
+// ignore-walk 特點：
+// 1. 直接遍歷目錄並自動排除 gitignore 的檔案
+// 2. 一次性獲得"乾淨"的檔案列表，適合 fuzzy search
+// 3. 效能更好，不需要逐個檔案檢查
+
+import { walk } from 'ignore-walk'
+
+// 用於 fuzzy search 的文件列表建構
+async function buildSearchableFileList(projectPath: string): Promise<string[]> {
+  // 自動排除 .gitignore 中的檔案和資料夾
+  const files = await walk({
+    path: projectPath,
+    ignoreFiles: ['.gitignore'],
+    includeEmpty: false,
+    follow: false
+  });
+  
+  return files.filter(file => 
+    // 過濾出適合搜尋的檔案類型
+    /\.(ts|js|tsx|jsx|md|txt|json|py)$/.test(file)
+  );
+}
+整合到 ProjectFolderService：
+typescript
+// 擴展現有 ProjectFolderService
+interface ProjectFolderService {
+  // 新增方法
+  getSearchableFiles(projectPath: string): Promise<string[]>
+  searchFilesInProject(query: string, projectPath: string): Promise<FileSearchResult[]>
+}
+3. feat-file_references_spec 實現狀況分析
+後端實現狀況：
+✅ 已完成：
+
+✅ extractFileReferences() - 提取 @ 語法
+✅ processFileReferences() - 替換為檔案內容
+✅ processMessageFileReferences() - 完整的檔案引用處理流程
+✅ 安全檢查 - 只允許專案內檔案
+❌ 缺失：
+
+❌ Chat Engine 整合 - ChatSession 完全沒有使用這些功能
+❌ .gitignore 支援 - 目前沒有排除 gitignore 檔案
+❌ 檔案搜尋 API - 沒有 searchFilesInProject API
+前端實現狀況：
+根據 feat-file_references_spec，需要的前端功能：
+
+❌ 完全未實現：
+
+❌ @ 觸發檔案搜尋選單
+❌ fuzzy search 專案檔案
+❌ 鍵盤導航（上下鍵選擇）
+部分實現：
+
+⚠️ 檔案引用顯示（目前用 # 符號，需改為 @ 語法）
+具體更新方案
+P0 - 立即執行：
+1. ChatSession 整合 @ 語法處理：
+
+typescript
+// 修改 ChatSession.runTurn()
+class ChatSession {
+  async runTurn(input: UserInput): Promise<ConversationResult> {
+    // 新增：處理 @ 語法
+    const processedContent = await this.processFileReferences(input.content);
+    
+    // 使用處理後的內容建構 AI messages
+    const messages = this.buildMessagesForAI(processedContent);
+  }
+  
+  private async processFileReferences(content: string): Promise<string> {
+    // 整合現有的 processMessageFileReferences 邏輯
+  }
+}
+2. 檔案移動與整合：
+
+執行步驟：
+1. 建立 packages/events-core/src/services/chat-engine/message-processor.ts
+2. 將 chat-file-utils.ts 和 message-processing-utils.ts 整合進去
+3. 加入 ignore-walk 支援
+4. 在 ChatSession 中整合 MessageProcessor
+5. 刪除舊檔案
+3. 新增檔案搜尋 API：
+
+typescript
+// 擴展 projectFolderRouter
+export const projectFolderRouter = router({
+  searchFiles: publicProcedure
+    .input(z.object({
+      query: z.string().min(1),
+      projectPath: z.string(),
+      limit: z.number().optional().default(20),
+    }))
+    .query(async ({ input }) => {
+      // 使用 ignore-walk + fuzzysort 實現
+    }),
+});
+關鍵優勢：
+舊系統的 @ 語法處理已經很完整，主要是搬移和整合工作，不是重新開發。這大大降低了實現複雜度，符合 Big Bang 重構策略。
+
+
+
+
+Retry
+project-folder-service.ts 應該已經有實裝 search file，確認是否有 gitignore？
+
+Edit
+
+確認 project-folder-service.ts 中的 search file 和 gitignore 實作狀態
+1s
+
+
+
+Searched project for “project-folder-service.ts searchFiles search file gitignore implementation”
+4 results
+
+
+
+
+
+
+
+Discovered search functionality exists, but lacks .gitignore support.
+7s
+
+
+
+
+確認檢查結果！你說得對，project-folder-service.ts 確實已經實現了檔案搜尋功能，包括：
+
+✅ 已實現的功能：
+1. 檔案搜尋 API：
+
+typescript
+// ✅ 已存在完整的搜尋功能
+public async searchFilesInProject(
+  query: string,
+  projectId: string, 
+  limit: number = 20
+): Promise<FileSearchResult[]>
+
+// ✅ 使用 fuzzysort 進行模糊搜尋
+// ✅ 支援 highlight 標記
+// ✅ tRPC API 路由也已經存在
+2. 現有的檔案過濾：
+
+typescript
+// ⚠️ 但目前用硬編碼過濾，不是 .gitignore
+const filteredFiles = allFiles.filter((file) => {
+  const relativePath = file.relativePath.toLowerCase();
+  return (
+    !relativePath.includes("node_modules") &&
+    !relativePath.includes(".git") &&
+    !relativePath.includes("dist") &&
+    !relativePath.includes("build") &&
+    !relativePath.startsWith(".")
+  );
+});
+❌ 缺失：.gitignore 支援
+**問題：**硬編碼過濾規則無法覆蓋專案特定的 .gitignore 設定
+
+**解決方案：**將現有的硬編碼過濾替換為 ignore-walk
+
+具體更新方案
+修改 ProjectFolderService.searchFilesInProject()：
+typescript
+// 修改前（硬編碼過濾）
+const filteredFiles = allFiles.filter((file) => {
+  // 硬編碼規則...
+});
+
+// 修改後（使用 ignore-walk）
+import { walk } from 'ignore-walk';
+
+private async getSearchableFiles(projectPath: string): Promise<FileSearchResult[]> {
+  // 使用 ignore-walk 自動排除 .gitignore 的檔案
+  const allowedFiles = await walk({
+    path: projectPath,
+    ignoreFiles: ['.gitignore'],
+    includeEmpty: false,
+    follow: false
+  });
+  
+  return allowedFiles
+    .filter(file => 
+      // 只保留可搜尋的檔案類型
+      /\.(ts|js|tsx|jsx|md|txt|json|py|html|css|yml|yaml)$/.test(file)
+    )
+    .map(relativePath => {
+      const absolutePath = path.join(projectPath, relativePath);
+      return {
+        name: path.basename(relativePath),
+        relativePath,
+        absolutePath
+      };
+    });
+}
+優化後的搜尋流程：
+typescript
+public async searchFilesInProject(
+  query: string,
+  projectId: string,
+  limit: number = 20
+): Promise<FileSearchResult[]> {
+  // 1. 找到 project folder
+  const projectFolder = settings.projectFolders.find(f => f.id === projectId);
+  
+  // 2. 使用 ignore-walk 獲得過濾後的檔案列表（替代 getFolderTree + flattenTreeToFiles）
+  const searchableFiles = await this.getSearchableFiles(projectFolder.path);
+  
+  // 3. 使用 fuzzysort 搜尋（保持不變）
+  const results = fuzzysort.go(query, searchableFiles, {
+    key: 'name',
+    limit,
+    threshold: -10000
+  });
+  
+  return results;
+}
+關鍵優勢
+1. 現有架構很完善：
+
+API 路由已存在
+前端可以直接使用 projectFolder.searchFiles.query()
+fuzzy search 和 highlight 都已實現
+2. 只需要小幅修改：
+
+添加 ignore-walk 依賴
+替換過濾邏輯
+不需要重寫整個搜尋系統
+3. 符合 Big Bang 策略：
+
+立即升級到 .gitignore 支援
+移除硬編碼限制
+提升搜尋品質和安全性
+總結：檔案搜尋功能比預期更完整，主要是加入 .gitignore 支援的小幅優化工作。
+
+
+
+
+Retry
+okay 請按照以上討論重新給 p0 更新方案
+
+Edit
+
+Strategized comprehensive P0 update plan for system improvements
+3s
+
+
+
+Chat Engine P0 更新方案 (重新制定)
+基於對現有代碼的深入分析，重新制定具體的 P0 執行方案：
+
+🔴 P0 - 必須完成項目
+1. 舊系統清理 (新增到 P0)
+現狀分析：
+
+✅ root-router.ts 已註解掉 ChatService
+❌ 舊檔案仍存在且可能有其他依賴
+具體執行：
+
+刪除檔案清單：
+├── packages/events-core/src/services/chat-service.ts ❌
+├── packages/events-core/src/services/chat-repository.ts ❌
+├── packages/events-core/src/server/routers/chat-router.ts ❌ (已被 chat-engine-router 替代)
+└── 清理相關 imports 和 references
+
+保留但需整合：
+├── packages/events-core/src/services/chat-file-utils.ts 
+│   └── 整合到 chat-engine/message-processor.ts
+└── packages/events-core/src/services/message-processing-utils.ts
+    └── 整合到 chat-engine/message-processor.ts
+風險評估： 低風險 - ChatService 已被停用，主要是清理工作
+
+2. Types 標準化程度
+替換清單：
+
+typescript
+// 可替換的 Types (使用 AI SDK v5)
+Role: "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR" 
+→ UIMessage["role"]: "system" | "user" | "assistant"
+
+部分 ChatStatus
+→ ChatStatus: "submitted" | "streaming" | "ready" | "error"
+
+ChatMessage 結構
+→ 基於 UIMessage 重新設計
+
+// 保留業務特定 Types
+ChatMode = "chat" | "agent"  ✅ 保留
+ChatFileStatus ✅ 保留  
+ChatMetadata ✅ 保留
+執行順序：
+
+更新所有 ChatMessage 接口定義
+修改 ChatSession 和相關服務的 type imports
+確保 AI SDK 和業務邏輯兼容
+3. 命名規範統一
+統一命名方案：
+
+typescript
+// 新的清晰命名架構
+ChatSession      // 運行時對象（記憶體中的活躍會話）
+ChatFileData     // 儲存格式（替代 SerializableChat）
+ChatMessage      // 統一的 message 格式（基於 AI SDK UIMessage）
+ChatMetadata     // chat 的 metadata
+ChatClient       // 管理多個 ChatSession 的客戶端
+執行策略：
+
+立即重命名，避免後續重構成本
+統一所有 import/export
+更新所有相關檔案引用
+4. File Reference (@) 整合到 ChatSession
+關鍵發現：
+
+typescript
+// ✅ 舊系統 chat-service.ts 已有完整實現：
+async submitMessage(chatId: string, message: string) {
+  const processedMessage = await processMessageFileReferences(
+    message, chat, this.projectFolderService, this.fileService, this.logger
+  );
+}
+
+// ❌ 但 ChatSession 完全沒有整合
+class ChatSession {
+  async runTurn(input: UserInput): Promise<ConversationResult> {
+    // 直接使用原始 message，沒有處理 @ 語法！
+  }
+}
+執行方案：
+
+typescript
+// 1. 建立 MessageProcessor 服務
+class MessageProcessor {
+  constructor(
+    private projectFolderService: ProjectFolderService,
+    private fileService: FileService
+  ) {}
+  
+  async processFileReferences(
+    message: string, 
+    projectPath: string
+  ): Promise<string> {
+    // 整合現有的 processMessageFileReferences 邏輯
+  }
+}
+
+// 2. 在 ChatSession 中整合
+class ChatSession {
+  async runTurn(input: UserInput): Promise<ConversationResult> {
+    // 新增：處理 @ 語法
+    const processedContent = await this.messageProcessor.processFileReferences(
+      input.content, this.projectPath
+    );
+    
+    // 使用處理後的內容
+    const messages = this.buildMessagesForAI(processedContent);
+  }
+}
+5. .gitignore 支援 (project-folder-service 升級)
+現狀：
+
+✅ 檔案搜尋功能已完整實現
+❌ 使用硬編碼過濾，不支援 .gitignore
+具體修改：
+
+typescript
+// 修改 ProjectFolderService.searchFilesInProject()
+import { walk } from 'ignore-walk';
+
+private async getSearchableFiles(projectPath: string): Promise<FileSearchResult[]> {
+  // 替換硬編碼過濾為 ignore-walk
+  const allowedFiles = await walk({
+    path: projectPath,
+    ignoreFiles: ['.gitignore'],
+    includeEmpty: false,
+    follow: false
+  });
+  
+  return allowedFiles
+    .filter(file => /\.(ts|js|tsx|jsx|md|txt|json|py|html|css)$/.test(file))
+    .map(relativePath => ({
+      name: path.basename(relativePath),
+      relativePath,
+      absolutePath: path.join(projectPath, relativePath)
+    }));
+}
+執行優勢：
+
+API 路由已存在
+前端可直接使用
+只需小幅修改過濾邏輯
+6. Stream Response 架構
+設計方案：
+
+typescript
+// ChatSession 中實作 streaming
+class ChatSession {
+  async runTurn(input: UserInput): Promise<ConversationResult> {
+    const stream = await this.callAIWithStreaming(messages);
+    
+    // 透過 eventBus 發送 streaming chunks
+    for await (const chunk of stream) {
+      await this.eventBus.emit({
+        kind: "AI_RESPONSE_STREAMING",
+        chatSessionId: this.id,
+        chunk: chunk.text,
+        timestamp: new Date()
+      });
+    }
+  }
+}
+執行重點：
+
+專注後端 streaming 邏輯
+前端整合留到後續階段
+使用現有 eventBus 架構
+7. Event 系統整合
+缺失事件補齊：
+
+typescript
+// 在 ChatSession 關鍵節點發送事件
+class ChatSession {
+  async runTurn(input: UserInput) {
+    // 1. 用戶訊息事件
+    await this.eventBus.emit({
+      kind: "MESSAGE_ADDED",
+      chatSessionId: this.id,
+      message: userMessage
+    });
+    
+    // 2. AI 回應開始
+    await this.eventBus.emit({
+      kind: "AI_RESPONSE_STARTED", 
+      chatSessionId: this.id
+    });
+    
+    // 3. AI 回應完成
+    await this.eventBus.emit({
+      kind: "AI_RESPONSE_COMPLETED",
+      chatSessionId: this.id,
+      message: aiMessage
+    });
+  }
+}
+策略：
+
+採用新事件格式
+不兼容舊系統（Big Bang 原則）
+📋 P0 執行順序 (Big Bang 策略)
+Week 1: 基礎重構清理
+舊系統清理 - 刪除 chat-service.ts, chat-repository.ts 等
+Types 標準化 - 替換為 AI SDK v5 types
+命名規範統一 - 統一所有相關檔案命名
+Week 2: 核心功能整合
+MessageProcessor 建立 - 整合 chat-file-utils 功能
+ChatSession @ 語法整合 - 在 runTurn() 中處理檔案引用
+.gitignore 支援 - 升級 project-folder-service
+Week 3: 事件與流式處理
+Event 系統補齊 - 發送完整的聊天事件
+Stream Response - 實作 AI streaming 邏輯
+🎯 關鍵優勢
+1. 建立在現有功能基礎上：
+
+@ 語法處理邏輯已存在且完整
+檔案搜尋 API 已實現，只需加入 .gitignore
+大幅降低開發風險
+2. Big Bang 策略可行：
+
+沒有使用者需要向後兼容
+舊系統已停用，直接刪除安全
+專注 chat-engine 完善，延後 API 設計
+3. 最小可行功能優先：
+
+先讓基礎對話功能穩定
+@ 語法和 streaming 是核心差異化功能
+Tool calls 等復雜功能留到 P1
+這個 P0 方案基於實際代碼狀況，具有高可執行性和低風險。

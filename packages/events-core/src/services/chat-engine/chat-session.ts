@@ -1,94 +1,26 @@
 // packages/events-core/src/services/chat-engine/chat-session.ts
+import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { Logger, type ILogObj } from "tslog";
-import type { AssistantModelMessage, ProviderRegistryProvider } from "ai";
+import type { ProviderRegistryProvider } from "ai";
 import { streamText } from "ai";
 import type { IEventBus } from "../../event-bus.js";
-import type { ChatModelConfig } from "./types.js";
+import type { 
+  ChatModelConfig, 
+  ChatStatus, 
+  ChatFileStatus, 
+  TurnInput,
+  ToolCall,
+  ConversationResult,
+  ChatMessage,
+  ChatMetadata,
+  ChatFileData
+} from "./types.js";
 import type { UserSettingsService } from "../user-settings-service.js";
 import { ToolCallScheduler } from "../tool-call/tool-call-scheduler.js";
-
-// Type definitions
-export type ChatStatus =
-  | "idle"
-  | "processing"
-  | "waiting_confirmation"
-  | "max_turns_reached";
-export type ChatFileStatus = "ACTIVE" | "ARCHIVED";
-export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR";
-export type ChatMode = "chat" | "agent";
-
-export interface UserInput {
-  type: "user_message";
-  content: string;
-  attachments?: Array<{ fileName: string; content: string }>;
-}
-
-export interface ToolResults {
-  type: "tool_results";
-  results: Array<{ id: string; result: any }>;
-}
-
-export interface ContinueSignal {
-  type: "continue";
-}
-
-export type TurnInput = UserInput | ToolResults | ContinueSignal;
-
-export interface ToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, any>;
-  needsConfirmation: boolean;
-}
-
-export type ConversationResult =
-  | { status: "complete"; content: string }
-  | { status: "waiting_confirmation"; toolCalls: ToolCall[] }
-  | { status: "max_turns_reached" };
-
-export interface ChatMessageMetadata {
-  subtaskId?: string;
-  taskId?: string;
-  functionCalls?: Record<string, unknown>[];
-  isPrompt?: boolean;
-  fileReferences?: Array<{
-    path: string;
-    md5: string;
-  }>;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: Role;
-  content: string;
-  timestamp: Date;
-  metadata?: ChatMessageMetadata;
-}
-
-export interface ChatMetadata {
-  title?: string;
-  summary?: string;
-  tags?: string[];
-  mode?: ChatMode;
-  // TODO: No need legacy support
-  model?: string | ChatModelConfig; // Can be string (legacy) or ChatModelConfig (new)
-  knowledge?: string[];
-  promptDraft?: string;
-}
-
-export interface SerializableChat {
-  id: string;
-  absoluteFilePath: string;
-  messages: ChatMessage[];
-  status: ChatStatus;
-  fileStatus: ChatFileStatus;
-  currentTurn: number;
-  maxTurns: number;
-  createdAt: Date;
-  updatedAt: Date;
-  metadata?: ChatMetadata;
-}
+import { MessageProcessor } from "./message-processor.js";
+import type { FileService } from "../file-service.js";
+import type { ProjectFolderService } from "../project-folder-service.js";
 
 // ChatSession class with turn management
 export class ChatSession {
@@ -109,16 +41,21 @@ export class ChatSession {
   private toolCallScheduler: ToolCallScheduler;
   private logger: Logger<ILogObj>;
   private userSettingsService: UserSettingsService;
+  private messageProcessor: MessageProcessor;
+  private projectPath: string;
 
   constructor(
     data: Omit<
-      SerializableChat,
+      ChatFileData,
       "status" | "fileStatus" | "currentTurn" | "maxTurns"
     >,
     eventBus: IEventBus,
     providerRegistry: ProviderRegistryProvider,
     toolCallScheduler: ToolCallScheduler,
     userSettingsService: UserSettingsService,
+    projectFolderService: ProjectFolderService,
+    fileService: FileService,
+    projectPath: string,
   ) {
     this.id = data.id;
     this.absoluteFilePath = data.absoluteFilePath;
@@ -131,6 +68,8 @@ export class ChatSession {
     this.toolCallScheduler = toolCallScheduler;
     this.userSettingsService = userSettingsService;
     this.logger = new Logger({ name: "ChatSession" });
+    this.messageProcessor = new MessageProcessor(projectFolderService, fileService, this.logger);
+    this.projectPath = projectPath;
   }
 
   async runTurn(
@@ -155,8 +94,8 @@ export class ChatSession {
       this.status = "processing";
       this.currentTurn++;
 
-      // Add input to messages
-      this.addInputToMessages(input);
+      // Process file references in user input before adding to messages
+      await this.processAndAddInputToMessages(input);
 
       // Emit status change event
       await this.eventBus.emit({
@@ -190,6 +129,16 @@ export class ChatSession {
       let content = "";
       const toolCalls: ToolCall[] = [];
 
+      // Emit AI response started event
+      await this.eventBus.emit({
+        kind: "ChatUpdatedEvent",
+        chatId: this.id,
+        updateType: "AI_RESPONSE_STARTED",
+        update: { status: "processing" },
+        chat: this.toSerializableChat(),
+        timestamp: new Date(),
+      });
+
       // Process AI SDK v5 stream
       for await (const part of result.fullStream) {
         if (effectiveSignal.aborted) throw new Error("Operation aborted");
@@ -197,6 +146,19 @@ export class ChatSession {
         switch (part.type) {
           case "text":
             content += part.text;
+            
+            // Emit streaming chunk event
+            await this.eventBus.emit({
+              kind: "ChatUpdatedEvent",
+              chatId: this.id,
+              updateType: "AI_RESPONSE_STREAMING",
+              update: { 
+                chunk: part.text,
+                accumulatedContent: content 
+              },
+              chat: this.toSerializableChat(),
+              timestamp: new Date(),
+            });
             break;
           case "tool-call":
             toolCalls.push({
@@ -212,11 +174,21 @@ export class ChatSession {
       // Add AI message to messages
       const aiMessage: ChatMessage = {
         id: uuidv4(),
-        role: "ASSISTANT",
+        role: "assistant",
         content: content || "AI response",
         timestamp: new Date(),
       };
       this.messages.push(aiMessage);
+
+      // Emit message added event
+      await this.eventBus.emit({
+        kind: "ChatUpdatedEvent",
+        chatId: this.id,
+        updateType: "MESSAGE_ADDED",
+        update: { message: aiMessage },
+        chat: this.toSerializableChat(),
+        timestamp: new Date(),
+      });
 
       // Handle tool calls if any
       if (toolCalls.length > 0) {
@@ -226,6 +198,19 @@ export class ChatSession {
           toolCalls,
         };
       }
+
+      // Emit AI response completed event
+      await this.eventBus.emit({
+        kind: "ChatUpdatedEvent",
+        chatId: this.id,
+        updateType: "AI_RESPONSE_COMPLETED",
+        update: { 
+          message: aiMessage,
+          finalContent: content 
+        },
+        chat: this.toSerializableChat(),
+        timestamp: new Date(),
+      });
 
       // Turn complete
       this.status = "idle";
@@ -266,7 +251,7 @@ export class ChatSession {
     // Future enhancement: add cleanup to ToolCallScheduler
   }
 
-  toJSON(): SerializableChat {
+  toJSON(): ChatFileData {
     return {
       id: this.id,
       absoluteFilePath: this.absoluteFilePath,
@@ -281,26 +266,37 @@ export class ChatSession {
     };
   }
 
-  private toSerializableChat(): SerializableChat {
+  private toSerializableChat(): ChatFileData {
     return this.toJSON();
   }
 
-  private addInputToMessages(input: TurnInput): void {
+  private async processAndAddInputToMessages(input: TurnInput): Promise<void> {
     let message: ChatMessage;
 
     switch (input.type) {
-      case "user_message":
+      case "user_message": {
+        // Process file references in user message content
+        const processedContent = await this.messageProcessor.processFileReferences(
+          input.content,
+          this.projectPath
+        );
+        
+        // Extract file references for metadata
+        const fileReferences = this.messageProcessor.extractChatFileReferences(input.content);
+        
         message = {
           id: uuidv4(),
-          role: "USER",
-          content: input.content,
+          role: "user",
+          content: processedContent,
           timestamp: new Date(),
+          metadata: fileReferences.length > 0 ? { fileReferences } : undefined,
         };
         break;
+      }
       case "tool_results":
         message = {
           id: uuidv4(),
-          role: "FUNCTION_EXECUTOR",
+          role: "system",
           content: JSON.stringify(input.results),
           timestamp: new Date(),
         };
@@ -312,12 +308,23 @@ export class ChatSession {
     }
 
     this.messages.push(message);
+
+    // Emit message added event for user messages
+    if (input.type === "user_message") {
+      await this.eventBus.emit({
+        kind: "ChatUpdatedEvent",
+        chatId: this.id,
+        updateType: "MESSAGE_ADDED",
+        update: { message },
+        chat: this.toSerializableChat(),
+        timestamp: new Date(),
+      });
+    }
   }
 
-  private buildMessagesForAI(): AssistantModelMessage[] {
+  private buildMessagesForAI() {
     return this.messages.map((msg) => ({
-      // role: msg.role.toLowerCase(),
-      role: "assistant",
+      role: msg.role,
       content: msg.content,
     }));
   }
@@ -329,19 +336,28 @@ export class ChatSession {
     return null;
   }
 
-  static fromJSON(
-    data: SerializableChat,
+  static async fromJSON(
+    data: ChatFileData,
     eventBus: IEventBus,
     providerRegistry: ProviderRegistryProvider,
     toolScheduler: ToolCallScheduler,
     userSettingsService: UserSettingsService,
-  ): ChatSession {
+    projectFolderService: ProjectFolderService,
+    fileService: FileService,
+  ): Promise<ChatSession> {
+    // Determine project path by finding the project folder containing this chat file
+    const projectFolder = await projectFolderService.getProjectFolderForPath(data.absoluteFilePath);
+    const projectPath = projectFolder?.path || path.dirname(data.absoluteFilePath);
+    
     const chatSession = new ChatSession(
       data,
       eventBus,
       providerRegistry,
       toolScheduler,
       userSettingsService,
+      projectFolderService,
+      fileService,
+      projectPath,
     );
     chatSession.status = data.status;
     chatSession.fileStatus = data.fileStatus;
