@@ -331,37 +331,22 @@ export class ProjectFolderService {
   private async getSearchableFiles(
     projectPath: string,
   ): Promise<FileSearchResult[]> {
-    try {
-      // Use ignore-walk to get files that are not gitignored
-      const allowedFiles = await walk({
-        path: projectPath,
-        ignoreFiles: [".gitignore"],
-        includeEmpty: false,
-        follow: false,
-      });
+    // Use ignore-walk to get files that are not gitignored
+    const allowedFiles = await walk({
+      path: projectPath,
+      ignoreFiles: [".gitignore"],
+      includeEmpty: false,
+      follow: false,
+    });
 
-      return allowedFiles
-        .filter((file) =>
-          // Only include searchable file types
-          /\.(ts|js|tsx|jsx|md|txt|json|py|html|css|yml|yaml|toml|rs|go|java|c|cpp|h|hpp|sh|sql)$/.test(
-            file,
-          ),
-        )
-        .map((relativePath) => {
-          const absolutePath = path.join(projectPath, relativePath);
-          return {
-            name: path.basename(relativePath),
-            relativePath,
-            absolutePath,
-          };
-        });
-    } catch (error) {
-      this.logger.error(
-        `Error getting searchable files for ${projectPath}: ${error}`,
-      );
-      // Fallback to empty array if ignore-walk fails
-      return [];
-    }
+    return allowedFiles.map((relativePath) => {
+      const absolutePath = path.join(projectPath, relativePath);
+      return {
+        name: path.basename(relativePath),
+        relativePath,
+        absolutePath,
+      };
+    });
   }
 
   public async searchFilesInProject(

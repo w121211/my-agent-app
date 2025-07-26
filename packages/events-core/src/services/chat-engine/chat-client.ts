@@ -39,7 +39,7 @@ interface MessageAttachment {
   content: string;
 }
 
-export class ChatClient<TOOLS extends ToolSet = any> {
+export class ChatClient<TOOLS extends ToolSet> {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
   private readonly chatSessionRepository: ChatSessionRepository;
@@ -177,7 +177,7 @@ export class ChatClient<TOOLS extends ToolSet = any> {
             outcome === "approved"
               ? "Tool execution approved"
               : "Tool execution denied",
-        } as any, // Type assertion needed for ToolResultUnion
+        },
       ],
     };
 
