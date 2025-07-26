@@ -212,6 +212,9 @@ importers:
       '@types/event-source-polyfill':
         specifier: ^1.0.5
         version: 1.0.5
+      '@types/ignore-walk':
+        specifier: ^4.0.3
+        version: 4.0.3
       '@types/jest':
         specifier: ^29.5.14
         version: 29.5.14
@@ -1662,6 +1665,9 @@ packages:
 
   '@types/graceful-fs@4.1.9':
     resolution: {integrity: sha512-olP3sd1qOEe5dXTSaFvQG+02VdRXcdytWLAZsAq1PecU8uqQAhkrnbli7DagjtXKW/Bl7YJbUsa8MPcuc8LHEQ==}
+
+  '@types/ignore-walk@4.0.3':
+    resolution: {integrity: sha512-6V7wDsk0nz8LtRC7qeC0GfXadFLT4FdCtVbXhxoIGRdkn2kLr20iMLupRGiBhlZ79WWWqaObIdR3nkXfUrBPdQ==}
 
   '@types/istanbul-lib-coverage@2.0.6':
     resolution: {integrity: sha512-2QF/t/auWm0lsy8XtKVPG19v3sSOQlJe/YHZgfjb/KBBHOGSV+J2q/S671rcq9uTBrLAXmZpqJiaQbMT+zNU1w==}
@@ -5654,6 +5660,10 @@ snapshots:
   '@types/event-source-polyfill@1.0.5': {}
 
   '@types/graceful-fs@4.1.9':
+    dependencies:
+      '@types/node': 22.16.5
+
+  '@types/ignore-walk@4.0.3':
     dependencies:
       '@types/node': 22.16.5
 

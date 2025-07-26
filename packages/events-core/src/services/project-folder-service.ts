@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { v4 as uuidv4 } from "uuid";
 import { Logger, ILogObj } from "tslog";
 import fuzzysort from "fuzzysort";
-import { walk } from "ignore-walk";
+import walk from "ignore-walk";
 import type { IEventBus, BaseEvent } from "../event-bus.js";
 import type { UserSettingsRepository } from "./user-settings-repository.js";
 import { FileWatcherService } from "./file-watcher-service.js";
@@ -50,7 +50,7 @@ export class ProjectFolderService {
   constructor(
     eventBus: IEventBus,
     userSettingsRepository: UserSettingsRepository,
-    fileWatcherService: FileWatcherService
+    fileWatcherService: FileWatcherService,
   ) {
     this.logger = new Logger({ name: "ProjectFolderService" });
     this.eventBus = eventBus;
@@ -59,10 +59,10 @@ export class ProjectFolderService {
   }
 
   public async getFolderTree(
-    absoluteProjectFolderPath?: string
+    absoluteProjectFolderPath?: string,
   ): Promise<FolderTreeNode> {
     this.logger.info(
-      `Processing folder tree request for: ${absoluteProjectFolderPath || ""}`
+      `Processing folder tree request for: ${absoluteProjectFolderPath || ""}`,
     );
 
     // Get settings to verify project folders
@@ -84,7 +84,7 @@ export class ProjectFolderService {
       // Validate that the path is absolute
       if (!path.isAbsolute(absoluteProjectFolderPath)) {
         throw new Error(
-          `Path must be absolute, received: ${absoluteProjectFolderPath}`
+          `Path must be absolute, received: ${absoluteProjectFolderPath}`,
         );
       }
 
@@ -92,12 +92,12 @@ export class ProjectFolderService {
       const matchingProjectFolder = settings.projectFolders.find(
         (folder) =>
           absoluteProjectFolderPath === folder.path ||
-          absoluteProjectFolderPath.startsWith(folder.path + path.sep)
+          absoluteProjectFolderPath.startsWith(folder.path + path.sep),
       );
 
       if (!matchingProjectFolder) {
         throw new Error(
-          `Path ${absoluteProjectFolderPath} is not within any registered project folder`
+          `Path ${absoluteProjectFolderPath} is not within any registered project folder`,
         );
       }
 
@@ -111,25 +111,25 @@ export class ProjectFolderService {
 
   public async addProjectFolder(
     absoluteProjectFolderPath: string,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<ProjectFolder> {
     this.logger.info(`Adding project folder: ${absoluteProjectFolderPath}`);
 
     // Validate that the path is absolute
     if (!path.isAbsolute(absoluteProjectFolderPath)) {
       throw new Error(
-        `Path must be absolute, received: ${absoluteProjectFolderPath}`
+        `Path must be absolute, received: ${absoluteProjectFolderPath}`,
       );
     }
 
     // Validate if project folder path exists and is a directory
     const isValid = await this.validateProjectFolderPath(
-      absoluteProjectFolderPath
+      absoluteProjectFolderPath,
     );
 
     if (!isValid) {
       throw new Error(
-        `Invalid project folder path: ${absoluteProjectFolderPath}`
+        `Invalid project folder path: ${absoluteProjectFolderPath}`,
       );
     }
 
@@ -138,12 +138,12 @@ export class ProjectFolderService {
 
     // Check if project folder already exists (idempotent operation)
     const existingFolder = settings.projectFolders.find(
-      (folder) => folder.path === absoluteProjectFolderPath
+      (folder) => folder.path === absoluteProjectFolderPath,
     );
 
     if (existingFolder) {
       this.logger.info(
-        `Project folder already exists: ${absoluteProjectFolderPath}`
+        `Project folder already exists: ${absoluteProjectFolderPath}`,
       );
       return existingFolder;
     }
@@ -154,7 +154,7 @@ export class ProjectFolderService {
         absoluteProjectFolderPath.startsWith(existingFolder.path + path.sep)
       ) {
         throw new Error(
-          `Cannot add a subfolder of an existing project folder: ${existingFolder.path}`
+          `Cannot add a subfolder of an existing project folder: ${existingFolder.path}`,
         );
       }
     }
@@ -165,7 +165,7 @@ export class ProjectFolderService {
         existingFolder.path.startsWith(absoluteProjectFolderPath + path.sep)
       ) {
         throw new Error(
-          `Cannot add a project folder that contains an existing project folder: ${existingFolder.path}`
+          `Cannot add a project folder that contains an existing project folder: ${existingFolder.path}`,
         );
       }
     }
@@ -186,7 +186,7 @@ export class ProjectFolderService {
 
     // Start watching the project folder
     await this.fileWatcherService.startWatchingFolder(
-      absoluteProjectFolderPath
+      absoluteProjectFolderPath,
     );
 
     // Emit settings updated event
@@ -199,14 +199,14 @@ export class ProjectFolderService {
     });
 
     this.logger.info(
-      `Project folder added successfully: ${absoluteProjectFolderPath}`
+      `Project folder added successfully: ${absoluteProjectFolderPath}`,
     );
     return projectFolder;
   }
 
   public async removeProjectFolder(
     projectFolderId: string,
-    correlationId?: string
+    correlationId?: string,
   ): Promise<void> {
     this.logger.info(`Removing project folder with ID: ${projectFolderId}`);
 
@@ -215,7 +215,7 @@ export class ProjectFolderService {
 
     // Find the project folder by ID
     const projectFolder = settings.projectFolders.find(
-      (folder) => folder.id === projectFolderId
+      (folder) => folder.id === projectFolderId,
     );
 
     if (!projectFolder) {
@@ -224,7 +224,7 @@ export class ProjectFolderService {
 
     // Remove project folder from settings
     settings.projectFolders = settings.projectFolders.filter(
-      (folder) => folder.id !== projectFolderId
+      (folder) => folder.id !== projectFolderId,
     );
 
     // Save updated settings
@@ -243,7 +243,7 @@ export class ProjectFolderService {
     });
 
     this.logger.info(
-      `Project folder removed successfully: ${projectFolder.path}`
+      `Project folder removed successfully: ${projectFolder.path}`,
     );
   }
 
@@ -253,7 +253,7 @@ export class ProjectFolderService {
   }
 
   public async startWatchingAllProjectFolders(
-    correlationId?: string
+    correlationId?: string,
   ): Promise<number> {
     this.logger.info("Starting to watch all project folders");
 
@@ -272,7 +272,7 @@ export class ProjectFolderService {
     }
 
     this.logger.info(
-      `Started watching ${projectFolders.length} project folders`
+      `Started watching ${projectFolders.length} project folders`,
     );
     return projectFolders.length;
   }
@@ -304,7 +304,7 @@ export class ProjectFolderService {
    * Get the project folder that contains the given absolute path
    */
   public async getProjectFolderForPath(
-    absolutePath: string
+    absolutePath: string,
   ): Promise<ProjectFolder | null> {
     if (!path.isAbsolute(absolutePath)) {
       throw new Error(`Path must be absolute, received: ${absolutePath}`);
@@ -328,31 +328,37 @@ export class ProjectFolderService {
   /**
    * Search for files in a specific project using fuzzy search
    */
-  private async getSearchableFiles(projectPath: string): Promise<FileSearchResult[]> {
+  private async getSearchableFiles(
+    projectPath: string,
+  ): Promise<FileSearchResult[]> {
     try {
       // Use ignore-walk to get files that are not gitignored
       const allowedFiles = await walk({
         path: projectPath,
-        ignoreFiles: ['.gitignore'],
+        ignoreFiles: [".gitignore"],
         includeEmpty: false,
-        follow: false
+        follow: false,
       });
-      
+
       return allowedFiles
-        .filter(file => 
+        .filter((file) =>
           // Only include searchable file types
-          /\.(ts|js|tsx|jsx|md|txt|json|py|html|css|yml|yaml|toml|rs|go|java|c|cpp|h|hpp|sh|sql)$/.test(file)
+          /\.(ts|js|tsx|jsx|md|txt|json|py|html|css|yml|yaml|toml|rs|go|java|c|cpp|h|hpp|sh|sql)$/.test(
+            file,
+          ),
         )
-        .map(relativePath => {
+        .map((relativePath) => {
           const absolutePath = path.join(projectPath, relativePath);
           return {
             name: path.basename(relativePath),
             relativePath,
-            absolutePath
+            absolutePath,
           };
         });
     } catch (error) {
-      this.logger.error(`Error getting searchable files for ${projectPath}: ${error}`);
+      this.logger.error(
+        `Error getting searchable files for ${projectPath}: ${error}`,
+      );
       // Fallback to empty array if ignore-walk fails
       return [];
     }
@@ -361,14 +367,16 @@ export class ProjectFolderService {
   public async searchFilesInProject(
     query: string,
     projectId: string,
-    limit: number = 20
+    limit: number = 20,
   ): Promise<FileSearchResult[]> {
-    this.logger.info(`Searching files in project ${projectId} with query: ${query}`);
+    this.logger.info(
+      `Searching files in project ${projectId} with query: ${query}`,
+    );
 
     // Find the project folder by ID
     const settings = await this.userSettingsRepository.getSettings();
     const projectFolder = settings.projectFolders.find(
-      (folder) => folder.id === projectId
+      (folder) => folder.id === projectId,
     );
 
     if (!projectFolder) {
@@ -386,14 +394,14 @@ export class ProjectFolderService {
     // Prepare files for fuzzy search
     const targets = filteredFiles.map((file) => ({
       file,
-      prepared: fuzzysort.prepare(file.name)
+      prepared: fuzzysort.prepare(file.name),
     }));
 
     // Perform fuzzy search
     const results = fuzzysort.go(query, targets, {
-      key: 'prepared',
+      key: "prepared",
       limit,
-      threshold: -10000 // Allow lower quality matches
+      threshold: -10000, // Allow lower quality matches
     });
 
     // Convert results to FileSearchResult format
@@ -402,12 +410,12 @@ export class ProjectFolderService {
       relativePath: result.obj.file.relativePath,
       absolutePath: result.obj.file.absolutePath,
       score: result.score,
-      highlight: result.highlight('<mark>', '</mark>') || result.obj.file.name
+      highlight: result.highlight("<mark>", "</mark>") || result.obj.file.name,
     }));
   }
 
   private async validateProjectFolderPath(
-    absoluteProjectFolderPath: string
+    absoluteProjectFolderPath: string,
   ): Promise<boolean> {
     try {
       const stats = await fs.stat(absoluteProjectFolderPath);
@@ -420,7 +428,7 @@ export class ProjectFolderService {
 
   private async buildFolderTree(
     projectFolderPath: string,
-    targetPath: string
+    targetPath: string,
   ): Promise<FolderTreeNode> {
     const baseName = path.basename(targetPath);
 
@@ -445,13 +453,13 @@ export class ProjectFolderService {
         // Recursively build the tree for the child path
         const childNode = await this.buildFolderTree(
           projectFolderPath,
-          fullPath
+          fullPath,
         );
         children.push(childNode);
       } catch (error) {
         // Log and skip entries that can't be accessed
         this.logger.debug(
-          `Skipping inaccessible path: ${fullPath}. Error: ${error}`
+          `Skipping inaccessible path: ${fullPath}. Error: ${error}`,
         );
       }
     }
@@ -465,7 +473,10 @@ export class ProjectFolderService {
     };
   }
 
-  private flattenTreeToFiles(node: FolderTreeNode, projectPath: string): FileSearchResult[] {
+  private flattenTreeToFiles(
+    node: FolderTreeNode,
+    projectPath: string,
+  ): FileSearchResult[] {
     const files: FileSearchResult[] = [];
 
     if (!node.isDirectory) {
@@ -474,7 +485,7 @@ export class ProjectFolderService {
       files.push({
         name: node.name,
         relativePath,
-        absolutePath: node.path
+        absolutePath: node.path,
       });
     } else if (node.children) {
       // It's a directory, recursively process children
@@ -490,11 +501,11 @@ export class ProjectFolderService {
 export function createProjectFolderService(
   eventBus: IEventBus,
   userSettingsRepository: UserSettingsRepository,
-  fileWatcherService: FileWatcherService
+  fileWatcherService: FileWatcherService,
 ): ProjectFolderService {
   return new ProjectFolderService(
     eventBus,
     userSettingsRepository,
-    fileWatcherService
+    fileWatcherService,
   );
 }

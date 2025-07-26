@@ -78,7 +78,6 @@ export class ChatSession<TOOLS extends ToolSet = any> {
     this.userSettingsService = userSettingsService;
     this.logger = new Logger({ name: "ChatSession" });
     this.messageProcessor = new MessageProcessor(
-      projectFolderService,
       fileService,
       this.logger,
     );
