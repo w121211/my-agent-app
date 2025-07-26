@@ -1,0 +1,909 @@
+
+### 2. Types 標準化程度
+
+替換清單：
+```typescript
+// 可替換的 Types (使用 AI SDK v5)
+Role: "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR" 
+→ UIMessage["role"]: "system" | "user" | "assistant"
+
+部分 ChatStatus
+→ ChatStatus: "submitted" | "streaming" | "ready" | "error"
+
+ChatMessage 結構
+→ 基於 UIMessage 重新設計
+
+// 保留業務特定 Types
+ChatMode = "chat" | "agent"  ✅ 保留
+ChatFileStatus ✅ 保留  
+ChatMetadata ✅ 保留
+```
+
+---
+
+我對以上方案不滿，請讓我們重新思考如何重構 chat-engine types
+請參考 ai_sdk_index.d.ts ，仔細想想，如何重構 types
+* 我希望盡量利用 ai sdk v5 的 types，避免自定義
+* 請基於此原則：如果用到了外部 library的 function ，那就盡量 import ＆使用他的原生 type，不要再自定義
+* 例如：因為我們會用 ai sdk streamText，那就按照他的原生定義 declare function streamText<TOOLS extends ToolSet, OUTPUT = never, PARTIAL_OUTPUT = never>({ model, tools, toolChoice, system, prompt, messages, maxRetries, abortSignal, headers, stopWhen, experimental_output: output, experimental_telemetry: telemetry, prepareStep, providerOptions, experimental_activeTools, activeTools, experimental_repairToolCall: repairToolCall, experimental_transform: transform, includeRawChunks, onChunk, onError, onFinish, onAbort, onStepFinish, _internal: { now, generateId, currentDate, }, ...settings }: CallSettings & Prompt & {
+* …
+   * param messages: ModelMessage[] -> 基於此，我們就盡量按照原生定義，chat sesis message就使用原生 ModelMessage type
+* 請盡量仔細檢查每個 type，思考哪些可以直接使用原生 type、哪些要增加、強化...
+
+Notes
+* ChatService已經廢棄，後端 chat 系統遷移至 chat engine packages/events-core/src/services/chat-engine
+* Tool call 使用 packages/events-core/src/services/tool-call/tool-call-scheduler.ts
+* 不用考慮 backward compatibility
+* Big bang策略，直接重構，不用管fallback
+* 目前app在MVP開發階段，沒有使用者、也沒有向後支援需求，一切採用最速做法
+* 先不要管 API（tRPC），等到我們的 chat-engine 都弄好了才來重構 API
+* 只要專注在後端的 events/core/src/chat-engine，不要管前端或其他後端 modules
+
+Edit
+
+Reimagined chat-engine types using AI SDK v5 native structures
+27s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Looking at the AI SDK v5 types carefully, I can see several opportunities to align our chat-engine types with native AI SDK types. Let me analyze this systematically:
+
+Current Type Analysis vs AI SDK v5
+AI SDK Native Types We Should Use:
+
+ModelMessage - Core message type for AI interactions
+typescript
+// AI SDK native
+type ModelMessage = SystemModelMessage | UserModelMessage | AssistantModelMessage | ToolModelMessage;
+
+// Current custom type (should replace)
+interface ChatMessage {
+  id: string;
+  role: MessageRole; 
+  content: string;
+  // ...
+}
+LanguageModel - Model configuration
+typescript
+// AI SDK native
+type LanguageModel = string | LanguageModelV2;
+
+// Current custom (should simplify)
+interface ChatModelConfig {
+  provider: string;
+  modelId: string; 
+  // ...
+}
+Tool Call Types - AI SDK has comprehensive tool types
+typescript
+// AI SDK native  
+type ToolCallUnion<TOOLS extends ToolSet>
+type ToolResultUnion<TOOLS extends ToolSet>
+
+// Current custom (should replace)
+interface ToolCall {
+  id: string;
+  name: string;
+  // ...
+}
+Proposed Type Refactoring Strategy
+1. Message Layer Redesign
+Design Decision: Use AI SDK's ModelMessage as the core type, add persistence metadata separately.
+
+typescript
+// chat-engine/types.ts
+import type { 
+  ModelMessage,
+  LanguageModel,
+  ToolCallUnion,
+  ToolResultUnion,
+  FinishReason
+} from 'ai';
+
+// Use AI SDK native for core interactions
+export type ChatMessage = ModelMessage;
+
+// Persistence wrapper for file storage
+export interface PersistedChatMessage {
+  id: string;
+  timestamp: Date;
+  message: ModelMessage;  // Native AI SDK type
+  metadata?: ChatMessageMetadata;
+}
+Rationale: This separates concerns - AI interactions use pure AI SDK types, while persistence adds necessary business metadata.
+
+2. Model Configuration Simplification
+typescript
+// Replace ChatModelConfig with native types
+export type ChatModel = LanguageModel;  // Direct AI SDK type
+
+// Keep only business-specific metadata
+export interface ChatModelMetadata {
+  temperature?: number;
+  maxTokens?: number;
+  systemPrompt?: string;
+}
+3. Tool Integration Alignment
+typescript
+// Use AI SDK tool types directly
+export type ChatToolCall<TOOLS extends ToolSet> = ToolCallUnion<TOOLS>;
+export type ChatToolResult<TOOLS extends ToolSet> = ToolResultUnion<TOOLS>;
+
+// Business result wrapper
+export type ConversationResult<TOOLS extends ToolSet> =
+  | { status: "complete"; content: string; finishReason: FinishReason }
+  | { status: "waiting_confirmation"; toolCalls: ChatToolCall<TOOLS>[] }
+  | { status: "max_turns_reached" };
+4. Input/Output Flow Types
+typescript
+// Keep business-specific input abstractions
+export interface UserInput {
+  type: "user_message";
+  content: string;
+  attachments?: MessageAttachment[];
+}
+
+export interface ToolConfirmation<TOOLS extends ToolSet> {
+  type: "tool_results";
+  results: ChatToolResult<TOOLS>[];
+}
+
+export type TurnInput<TOOLS extends ToolSet> = 
+  | UserInput 
+  | ToolConfirmation<TOOLS>
+  | { type: "continue" };
+Impact on Chat Session Architecture
+ChatSession Message Handling
+Current Flow:
+
+typescript
+// Current: Custom types throughout
+messages: ChatMessage[] -> buildMessagesForAI() -> streamText()
+Proposed Flow:
+
+typescript
+// Proposed: Native types for AI, persistence wrapper for storage
+messages: ModelMessage[] -> streamText() directly
+persistedMessages: PersistedChatMessage[] -> file storage
+Why This Works Better:
+
+Zero conversion between chat storage and AI SDK calls
+Direct compatibility with streamText({ messages })
+Cleaner separation of AI logic vs business metadata
+File Persistence Structure
+typescript
+// chat-session-repository.ts
+export interface ChatFileData {
+  id: string;
+  absoluteFilePath: string;
+  
+  // Use AI SDK native for core data
+  messages: ModelMessage[];  // Direct AI SDK compatibility
+  model: LanguageModel;      // Direct AI SDK compatibility
+  
+  // Business-specific metadata
+  status: ChatStatus;
+  fileStatus: ChatFileStatus; 
+  currentTurn: number;
+  maxTurns: number;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: ChatMetadata;
+  
+  // Persistence-specific (non-AI) metadata
+  messageMetadata?: Record<string, ChatMessageMetadata>;
+}
+Key Benefits of This Approach
+Zero Impedance Mismatch: Direct messages array passes to streamText() without conversion
+Future-Proof: Automatic compatibility with AI SDK updates and new features
+Reduced Maintenance: Less custom type definitions to maintain
+Tool Integration: Native tool call types work seamlessly with tool-call-scheduler
+Performance: Eliminates type conversion overhead
+Migration Considerations
+What Changes:
+
+ChatMessage becomes ModelMessage
+ChatModelConfig becomes LanguageModel
+Tool types align with AI SDK tool system
+What Stays:
+
+Business states: ChatStatus, ChatFileStatus, ChatMode
+Business metadata: ChatMetadata, file references
+Business flow: TurnInput, ConversationResult
+Risk Mitigation:
+
+Keep business-specific abstractions for complex workflows
+Use composition pattern to add metadata without polluting AI types
+Maintain clear boundaries between AI interactions and business logic
+This design maximizes AI SDK native type usage while preserving necessary business abstractions. The key insight is to use native types for the "AI interaction core" and compose business metadata around them, rather than trying to merge everything into custom types.
+
+
+
+
+Retry
+// Use AI SDK native for core interactions
+export type ChatMessage = ModelMessage;
+
+不需要重新命名，如果原生用 ModelMessage ，就用 ModelMessage
+加註個 import … from … 來表明他是來自 ai sdk
+{ status: "waiting_confirmation"; toolCalls: ChatToolCall<TOOLS>[] }
+
+像這裡就直接用原生 type { status: "waiting_confirmation"; toolCalls: ToolCallUnion<TOOLS> }
+不要再多此一舉
+
+請按此原則重新檢視
+
+Edit
+
+Refined approach to type usage and import conventions
+3s
+
+
+
+
+
+你說得對，我過度包裝了。讓我按照"直接使用原生type，不要重新命名"的原則重新檢視：
+
+修正版 Type Refactoring
+直接使用 AI SDK 原生類型
+typescript
+// chat-engine/types.ts
+import type { 
+  ModelMessage,
+  LanguageModel,
+  ToolCallUnion,
+  ToolResultUnion,
+  FinishReason,
+  ToolSet
+} from 'ai';
+
+// ❌ 錯誤：不要重新命名
+// export type ChatMessage = ModelMessage;
+// export type ChatToolCall<TOOLS extends ToolSet> = ToolCallUnion<TOOLS>;
+
+// ✅ 正確：直接使用原生，只定義業務特定類型
+export type ChatStatus = "idle" | "processing" | "waiting_confirmation" | "max_turns_reached";
+export type ChatFileStatus = "ACTIVE" | "ARCHIVED"; 
+export type ChatMode = "chat" | "agent";
+文件持久化結構
+typescript
+// chat-session-repository.ts  
+import type { ModelMessage, LanguageModel } from 'ai';
+
+export interface ChatFileData {
+  id: string;
+  absoluteFilePath: string;
+  
+  // 直接使用 AI SDK 原生類型
+  messages: ModelMessage[];  // from 'ai'
+  model: LanguageModel;      // from 'ai'
+  
+  // 業務特定類型
+  status: ChatStatus;
+  fileStatus: ChatFileStatus; 
+  currentTurn: number;
+  maxTurns: number;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: ChatMetadata;
+}
+對話流程類型
+typescript
+// chat-session.ts
+import type { 
+  ModelMessage, 
+  ToolCallUnion, 
+  ToolResultUnion, 
+  FinishReason,
+  ToolSet 
+} from 'ai';
+
+export interface UserInput {
+  type: "user_message";
+  content: string;
+  attachments?: MessageAttachment[];
+}
+
+export interface ToolConfirmation<TOOLS extends ToolSet> {
+  type: "tool_results";
+  results: ToolResultUnion<TOOLS>[]; // 直接用原生
+}
+
+export type TurnInput<TOOLS extends ToolSet> = 
+  | UserInput 
+  | ToolConfirmation<TOOLS>
+  | { type: "continue" };
+
+export type ConversationResult<TOOLS extends ToolSet> =
+  | { status: "complete"; content: string; finishReason: FinishReason }
+  | { status: "waiting_confirmation"; toolCalls: ToolCallUnion<TOOLS>[] } // 直接用原生
+  | { status: "max_turns_reached" };
+ChatSession 使用方式
+typescript
+// chat-session.ts
+import { streamText } from 'ai';
+import type { ModelMessage, LanguageModel } from 'ai';
+
+export class ChatSession {
+  // 直接使用原生類型
+  messages: ModelMessage[] = [];  // from 'ai'
+  
+  private async runTurn<TOOLS extends ToolSet>(
+    input: TurnInput<TOOLS>
+  ): Promise<ConversationResult<TOOLS>> {
+    
+    // 直接傳入，無需轉換
+    const result = streamText({
+      model: this.model, // LanguageModel from 'ai'
+      messages: this.messages, // ModelMessage[] from 'ai'
+      // ...
+    });
+    
+    // 處理工具調用 - 直接使用原生類型
+    const toolCalls: ToolCallUnion<TOOLS>[] = [];
+    
+    for await (const part of result.fullStream) {
+      if (part.type === "tool-call") {
+        // part 已經是 ToolCallUnion<TOOLS> 類型
+        toolCalls.push(part);
+      }
+    }
+    
+    if (toolCalls.length > 0) {
+      return {
+        status: "waiting_confirmation",
+        toolCalls // 直接使用，無需轉換
+      };
+    }
+  }
+}
+徹底清理後的結果
+完全移除的重新命名：
+
+export type ChatMessage = ModelMessage → 直接用 ModelMessage
+export type ChatModel = LanguageModel → 直接用 LanguageModel
+export type ChatToolCall = ToolCallUnion → 直接用 ToolCallUnion<TOOLS>
+保留的業務類型：
+
+ChatStatus, ChatFileStatus, ChatMode - 業務特定狀態
+UserInput, TurnInput - 業務流程抽象
+ChatMetadata, ChatFileData - 持久化結構
+關鍵優勢：
+
+零轉換成本 - messages: ModelMessage[] 直接傳給 streamText()
+類型安全 - 編譯時確保與 AI SDK 兼容性
+維護簡化 - 減少自定義類型定義
+未來兼容 - AI SDK 更新自動獲得新功能
+這樣設計讓 chat-engine 成為 AI SDK 的薄業務層，而不是重新發明輪子。
+
+
+
+
+Retry
+在請仔細檢查
+
+Edit
+
+檢查並驗證 AI SDK 中可直接使用的原生類型
+15s
+
+
+
+
+
+
+
+
+讓我仔細檢查 ai_sdk_index.d.ts，找出所有可以直接使用的原生類型：
+
+發現的問題
+1. ChatStatus 衝突
+typescript
+// AI SDK 已經有 ChatStatus！
+type ChatStatus = "submitted" | "streaming" | "ready" | "error";
+
+// ❌ 我們不應該重新定義
+// export type ChatStatus = "idle" | "processing" | "waiting_confirmation" | "max_turns_reached";
+
+// ✅ 應該直接使用 AI SDK 的，或重新命名我們的
+2. 遺漏的 AI SDK 原生類型
+typescript
+// ai_sdk_index.d.ts 中還有這些我們可以直接使用的：
+import type {
+  ModelMessage,           // ✅ 已識別
+  LanguageModel,         // ✅ 已識別  
+  ToolCallUnion,         // ✅ 已識別
+  ToolResultUnion,       // ✅ 已識別
+  FinishReason,          // ✅ 已識別
+  ToolSet,               // ✅ 已識別
+  
+  // 🔍 遺漏的重要類型：
+  ChatStatus,            // AI SDK 原生 chat status
+  UIMessage,             // 完整的 UI message 系統
+  UIMessageChunk,        // streaming chunks
+  StreamTextResult,      // streaming 結果
+  TextStreamPart,        // stream parts
+  Tool,                  // tool 定義
+  CallSettings,          // AI 調用設置
+  Prompt,                // prompt 結構
+  StepResult,            // step 結果
+  Provider,              // provider 類型
+  GenerateTextResult,    // 生成結果
+} from 'ai';
+修正版本
+typescript
+// chat-engine/types.ts
+import type { 
+  ModelMessage,
+  LanguageModel,
+  ToolCallUnion,
+  ToolResultUnion,
+  FinishReason,
+  ToolSet,
+  ChatStatus,           // 直接使用 AI SDK 的！
+  UIMessage,
+  StreamTextResult,
+  TextStreamPart,
+  Tool,
+  CallSettings,
+  Provider
+} from 'ai';
+
+// ❌ 刪除重複定義
+// export type ChatStatus = "idle" | "processing" | "waiting_confirmation" | "max_turns_reached";
+
+// ✅ 只定義業務特定，且不與 AI SDK 衝突的類型
+export type ChatSessionStatus = "idle" | "processing" | "waiting_confirmation" | "max_turns_reached";
+export type ChatFileStatus = "ACTIVE" | "ARCHIVED"; 
+export type ChatMode = "chat" | "agent";
+完全清理後的 ChatSession
+typescript
+// chat-session.ts
+import { streamText } from 'ai';
+import type { 
+  ModelMessage, 
+  LanguageModel, 
+  ToolCallUnion, 
+  ToolResultUnion,
+  FinishReason,
+  ToolSet,
+  StreamTextResult,
+  TextStreamPart,
+  CallSettings
+} from 'ai';
+
+export class ChatSession {
+  messages: ModelMessage[] = [];  // 直接用原生
+  
+  async runTurn<TOOLS extends ToolSet>(
+    input: TurnInput<TOOLS>
+  ): Promise<ConversationResult<TOOLS>> {
+    
+    // 直接使用，參數類型完全匹配
+    const result: StreamTextResult<TOOLS, never> = streamText({
+      model: this.model,     // LanguageModel
+      messages: this.messages, // ModelMessage[]
+      // ... 其他 CallSettings
+    });
+    
+    // 直接處理原生 stream parts
+    for await (const part: TextStreamPart<TOOLS> of result.fullStream) {
+      if (part.type === "tool-call") {
+        // part 已經是正確的 ToolCallUnion<TOOLS> 類型
+        toolCalls.push(part);
+      }
+    }
+  }
+}
+文件持久化也需要檢查
+typescript
+// 可能可以直接使用 UIMessage 系統？
+export interface ChatFileData {
+  id: string;
+  absoluteFilePath: string;
+  
+  messages: ModelMessage[];     // from 'ai'
+  model: LanguageModel;        // from 'ai'
+  
+  // 重新命名避免衝突
+  sessionStatus: ChatSessionStatus;  // 不是 ChatStatus
+  fileStatus: ChatFileStatus;
+  currentTurn: number;
+  maxTurns: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+關鍵發現
+AI SDK 已有 ChatStatus - 我們不應該重新定義
+AI SDK 有完整 UI message 系統 - 可能可以直接使用 UIMessage
+AI SDK 有完整 streaming 系統 - StreamTextResult, TextStreamPart
+我們的很多"業務類型"可能 AI SDK 已經有了
+需要系統性檢查每個自定義類型是否 AI SDK 已經提供。
+
+
+
+
+Retry
+請系統性檢查每個自定義類型是否 AI SDK 已經提供
+
+Edit
+
+剖析自定義類型與 AI SDK 的對應關係和差異
+16s
+
+
+
+
+
+讓我系統性地檢查每個自定義類型與 AI SDK 的對應關係：
+
+## 完整類型對比分析
+
+### **1. Message 相關類型**
+
+| 自定義類型 | AI SDK 原生類型 | 結論 |
+|------------|----------------|------|
+| `MessageRole = "user" \| "assistant" \| "system"` | `ModelMessage["role"]` 內建 | ❌ **刪除** - 直接用 `ModelMessage["role"]` |
+| `ChatMessage` | `ModelMessage` | ❌ **刪除** - 直接用 `ModelMessage` |
+| `ChatMessageMetadata` | 無對應 | ✅ **保留** - 業務特定持久化需求 |
+
+### **2. Status 相關類型**
+
+| 自定義類型 | AI SDK 原生類型 | 結論 |
+|------------|----------------|------|
+| `ChatStatus = "idle" \| "processing" \| ...` | `ChatStatus = "submitted" \| "streaming" \| "ready" \| "error"` | ❌ **衝突！重新命名** → `ChatSessionStatus` |
+| `ChatFileStatus = "ACTIVE" \| "ARCHIVED"` | 無對應 | ✅ **保留** - 業務特定文件狀態 |
+
+### **3. Model 相關類型**
+
+| 自定義類型 | AI SDK 原生類型 | 結論 |
+|------------|----------------|------|
+| `ChatModelConfig` | `LanguageModel + CallSettings` | ❌ **刪除** - 拆分使用原生類型 |
+| `AvailableModel` | 無直接對應，但可用 `Provider` 系統 | ❓ **重新設計** - 基於 `Provider` |
+
+### **4. Tool 相關類型**
+
+| 自定義類型 | AI SDK 原生類型 | 結論 |
+|------------|----------------|------|
+| `ToolCall` | `ToolCallUnion<TOOLS>` | ❌ **刪除** - 直接用原生 |
+| `ToolResults` | `ToolResultUnion<TOOLS>` | ❌ **刪除** - 直接用原生 |
+
+### **5. 流程控制類型**
+
+| 自定義類型 | AI SDK 原生類型 | 結論 |
+|------------|----------------|------|
+| `UserInput` | 可用 `UserModelMessage` | ❓ **重新評估** - 可能可簡化 |
+| `TurnInput` | 無對應 | ✅ **保留** - 業務流程抽象 |
+| `ConversationResult` | 無對應 | ✅ **保留** - 業務結果包裝 |
+| `ContinueSignal` | 無對應 | ✅ **保留** - 業務特定 |
+
+### **6. UI/Stream 相關未利用類型**
+
+| AI SDK 提供但我們未使用 | 潛在用途 |
+|------------------------|---------|
+| `UIMessage` | 可能取代部分 message 結構 |
+| `UIMessageChunk` | streaming 時使用 |
+| `StreamTextResult<TOOLS>` | `streamText()` 返回類型 |
+| `TextStreamPart<TOOLS>` | stream 處理 |
+| `GenerateTextResult<TOOLS>` | `generateText()` 返回類型 |
+
+## 修正後的類型定義
+
+```typescript
+// chat-engine/types.ts
+import type { 
+  // 直接使用的原生類型
+  ModelMessage,
+  LanguageModel,
+  ToolCallUnion,
+  ToolResultUnion,
+  FinishReason,
+  ToolSet,
+  CallSettings,
+  StreamTextResult,
+  TextStreamPart,
+  Provider,
+  
+  // UI 系統 (考慮使用)
+  UIMessage,
+  UIMessageChunk,
+} from 'ai';
+
+// ❌ 完全刪除 - 直接用 AI SDK 原生
+// export type MessageRole = ...
+// export type ChatMessage = ...  
+// export type ToolCall = ...
+// export interface ChatModelConfig = ...
+
+// ✅ 重新命名避免衝突
+export type ChatSessionStatus = "idle" | "processing" | "waiting_confirmation" | "max_turns_reached";
+
+// ✅ 保留業務特定類型
+export type ChatFileStatus = "ACTIVE" | "ARCHIVED"; 
+export type ChatMode = "chat" | "agent";
+
+// ✅ 業務流程抽象 (考慮簡化)
+export interface UserInput {
+  type: "user_message";
+  content: string;
+  attachments?: MessageAttachment[];
+}
+
+export type TurnInput<TOOLS extends ToolSet> = 
+  | UserInput 
+  | { type: "tool_results"; results: ToolResultUnion<TOOLS>[] }  // 直接用原生
+  | { type: "continue" };
+
+export type ConversationResult<TOOLS extends ToolSet> =
+  | { status: "complete"; content: string; finishReason: FinishReason }
+  | { status: "waiting_confirmation"; toolCalls: ToolCallUnion<TOOLS>[] }  // 直接用原生
+  | { status: "max_turns_reached" };
+
+// ✅ 業務特定元數據
+export interface ChatMessageMetadata {
+  subtaskId?: string;
+  taskId?: string;
+  fileReferences?: Array<{ path: string; md5: string; }>;
+}
+
+export interface ChatMetadata {
+  title?: string;
+  summary?: string;
+  tags?: string[];
+  mode?: ChatMode;
+  model?: LanguageModel;  // 直接用原生
+  knowledge?: string[];
+  promptDraft?: string;
+}
+
+// ✅ 持久化結構
+export interface ChatFileData {
+  id: string;
+  absoluteFilePath: string;
+  
+  // 直接使用 AI SDK 原生類型
+  messages: ModelMessage[];
+  model: LanguageModel;
+  
+  // 業務特定狀態
+  sessionStatus: ChatSessionStatus;  // 重新命名
+  fileStatus: ChatFileStatus;
+  currentTurn: number;
+  maxTurns: number;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: ChatMetadata;
+}
+```
+
+## 進一步優化建議
+
+### **考慮使用 UIMessage 系統**
+```typescript
+// 是否可以用 AI SDK 的 UI message 系統？
+export interface ChatFileData {
+  // ...
+  messages: UIMessage[];  // instead of ModelMessage[]？
+  // ...
+}
+```
+
+### **Provider 系統重新設計**
+```typescript
+// 取代 AvailableModel
+export interface ModelRegistry {
+  provider: Provider;
+  availableModels: string[];
+}
+```
+
+## 總結
+
+**完全刪除 (8個)：**
+- `MessageRole`, `ChatMessage`, `ToolCall`, `ToolResults`, `ChatModelConfig` 等
+
+**重新命名 (1個)：**  
+- `ChatStatus` → `ChatSessionStatus`
+
+**保留業務類型 (7個)：**
+- `ChatFileStatus`, `ChatMode`, `TurnInput`, `ConversationResult`, `ChatMetadata` 等
+
+**未充分利用 AI SDK：**
+- UI Message 系統、Provider 系統、完整的 streaming 類型
+
+這樣大幅減少了自定義類型，提高了與 AI SDK 的兼容性。
+
+
+
+
+
+Retry
+我覺得用 UIMessage 不錯，除了 ChatFileData，ChatSession 是不是也可以直接使用？你的看法？
+interface ModelRegistry -> OK
+Edit
+
+
+
+Evaluated UIMessage for ChatSession, confirmed versatile and adaptable approach.
+16s
+
+
+
+
+
+
+
+
+
+1. UIMessage 在 ChatSession 的使用分析
+非常贊同使用 UIMessage！ 理由如下：
+
+UIMessage 的優勢
+typescript
+// AI SDK UIMessage 設計完美匹配我們需求
+interface UIMessage<METADATA = unknown, DATA_PARTS extends UIDataTypes = UIDataTypes, TOOLS extends UITools = UITools> {
+  id: string;                    // ✅ 我們需要的 persistence ID
+  role: "system" | "user" | "assistant";  // ✅ 完全匹配
+  metadata?: METADATA;           // ✅ 可放 ChatMessageMetadata  
+  parts: Array<UIMessagePart>;   // ✅ 比 content: string 更豐富
+}
+關鍵發現：AI SDK 提供轉換函數！
+typescript
+// AI SDK 原生提供
+declare function convertToModelMessages(
+  messages: Array<Omit<UIMessage, "id">>,
+  options?: { tools?: ToolSet; ignoreIncompleteToolCalls?: boolean; }
+): ModelMessage[];
+ChatSession 使用 UIMessage 的設計
+typescript
+// chat-session.ts
+import { streamText, convertToModelMessages } from 'ai';
+import type { UIMessage, ToolSet } from 'ai';
+
+export class ChatSession<TOOLS extends ToolSet = any> {
+  // ✅ 直接使用 UIMessage，統一性極佳
+  messages: UIMessage<ChatMessageMetadata>[] = [];
+  
+  async runTurn(input: TurnInput<TOOLS>): Promise<ConversationResult<TOOLS>> {
+    // 添加用戶消息 (UIMessage 格式)
+    const userMessage: UIMessage<ChatMessageMetadata> = {
+      id: uuidv4(),
+      role: "user", 
+      metadata: { timestamp: new Date() },
+      parts: [{ type: "text", text: input.content }]
+    };
+    this.messages.push(userMessage);
+    
+    // ✅ 轉換為 ModelMessage 給 AI SDK
+    const modelMessages = convertToModelMessages(this.messages, { 
+      tools: this.tools 
+    });
+    
+    const result = streamText({
+      model: this.model,
+      messages: modelMessages,  // 轉換後的格式
+      // ...
+    });
+    
+    // 處理 AI 回應，轉換回 UIMessage
+    const assistantMessage: UIMessage<ChatMessageMetadata> = {
+      id: uuidv4(),
+      role: "assistant",
+      metadata: { timestamp: new Date() },
+      parts: [{ type: "text", text: content }]
+    };
+    this.messages.push(assistantMessage);
+  }
+}
+文件持久化也統一
+typescript
+// chat-session-repository.ts
+export interface ChatFileData {
+  id: string;
+  absoluteFilePath: string;
+  
+  // ✅ 完全統一 - 前後端、持久化都用 UIMessage
+  messages: UIMessage<ChatMessageMetadata>[];
+  model: LanguageModel;
+  
+  sessionStatus: ChatSessionStatus;
+  // ...
+}
+2. ModelRegistry 設計
+typescript
+// chat-engine/types.ts
+import type { Provider } from 'ai';
+
+export interface ModelRegistry {
+  provider: Provider;
+  availableModels: string[];
+  metadata?: {
+    displayName: string;
+    capabilities: string[];
+    defaultModel?: string;
+  };
+}
+
+// 使用方式
+export interface ChatEngineConfig {
+  modelRegistries: ModelRegistry[];
+  defaultRegistry?: string;
+}
+統一後的完整 Types
+typescript
+// chat-engine/types.ts
+import type { 
+  UIMessage,
+  UIMessagePart,
+  LanguageModel,
+  ToolCallUnion,
+  ToolResultUnion,
+  FinishReason,
+  ToolSet,
+  Provider,
+  convertToModelMessages,  // import 轉換函數
+} from 'ai';
+
+// ✅ 業務元數據 (泛型參數)
+export interface ChatMessageMetadata {
+  timestamp: Date;
+  subtaskId?: string;
+  taskId?: string;
+  fileReferences?: Array<{ path: string; md5: string; }>;
+}
+
+// ✅ 直接使用 UIMessage，完美統一
+export type ChatMessage = UIMessage<ChatMessageMetadata>;
+
+// ✅ Model 註冊系統
+export interface ModelRegistry {
+  provider: Provider;
+  availableModels: string[];
+  metadata?: {
+    displayName: string;
+    capabilities: string[];
+    defaultModel?: string;
+  };
+}
+
+// ✅ 其他業務類型保持不變
+export type ChatSessionStatus = "idle" | "processing" | "waiting_confirmation" | "max_turns_reached";
+export type ChatFileStatus = "ACTIVE" | "ARCHIVED"; 
+export type ChatMode = "chat" | "agent";
+
+export interface ChatFileData {
+  id: string;
+  absoluteFilePath: string;
+  
+  messages: ChatMessage[];      // UIMessage<ChatMessageMetadata>[]
+  model: LanguageModel;
+  
+  sessionStatus: ChatSessionStatus;
+  fileStatus: ChatFileStatus;
+  currentTurn: number;
+  maxTurns: number;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: ChatMetadata;
+}
+關鍵優勢
+完全統一 - 前端 UI、後端邏輯、文件持久化都用 UIMessage
+零阻抗 - convertToModelMessages() 提供無痛轉換
+未來兼容 - 自動支援 file attachments、tool calls、reasoning 等
+類型安全 - 泛型 UIMessage<ChatMessageMetadata> 保證元數據類型
+減少維護 - 大幅減少自定義類型
+這個設計讓整個 chat engine 與 AI SDK 達到最佳集成度！
+
+

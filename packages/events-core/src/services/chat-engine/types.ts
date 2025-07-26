@@ -1,92 +1,120 @@
 // packages/events-core/src/services/chat-engine/types.ts
 
-// Standard AI SDK types for consistency
-export type MessageRole = "user" | "assistant" | "system";
-export type ChatStatus = "idle" | "processing" | "waiting_confirmation" | "max_turns_reached";
-export type ChatFileStatus = "ACTIVE" | "ARCHIVED"; 
-export type ChatMode = "chat" | "agent";
+import type {
+  UIMessage,
+  UIMessagePart,
+  LanguageModel,
+  ToolCallUnion,
+  ToolResultUnion,
+  FinishReason,
+  ToolSet,
+  Provider,
+  convertToModelMessages,
+  ModelMessage,
+} from "ai";
 
-export interface ChatModelConfig {
-  provider: string;
-  modelId: string;
-  temperature?: number;
-  maxTokens?: number;
-  topP?: number;
-  systemPrompt?: string;
-}
-
-export interface AvailableModel {
-  id: string;
-  provider: string;
-  modelId: string;
-  displayName: string;
-  capabilities: string[];
-}
-
-export interface UserInput {
-  type: "user_message";
-  content: string;
-  attachments?: Array<{ fileName: string; content: string }>;
-}
-
-export interface ToolResults {
-  type: "tool_results";
-  results: Array<{ id: string; result: any }>;
-}
-
-export interface ContinueSignal {
-  type: "continue";
-}
-
-export type TurnInput = UserInput | ToolResults | ContinueSignal;
-
-export interface ToolCall {
-  id: string;
-  name: string;
-  arguments: Record<string, any>;
-  needsConfirmation: boolean;
-}
-
-export type ConversationResult =
-  | { status: "complete"; content: string }
-  | { status: "waiting_confirmation"; toolCalls: ToolCall[] }
-  | { status: "max_turns_reached" };
-
+// Business-specific metadata for chat messages
 export interface ChatMessageMetadata {
+  timestamp: Date;
   subtaskId?: string;
   taskId?: string;
-  functionCalls?: Record<string, unknown>[];
-  isPrompt?: boolean;
   fileReferences?: Array<{
     path: string;
     md5: string;
   }>;
 }
 
-export interface ChatMessage {
-  id: string;
-  role: MessageRole;
-  content: string;
-  timestamp: Date;
-  metadata?: ChatMessageMetadata;
+// Direct use of AI SDK UIMessage with our metadata
+export type ChatMessage = UIMessage<ChatMessageMetadata>;
+
+// Business-specific session status (renamed to avoid conflict with AI SDK ChatStatus)
+export type ChatSessionStatus =
+  | "idle"
+  | "processing"
+  | "waiting_confirmation"
+  | "max_turns_reached";
+
+// Business-specific file status
+export type ChatFileStatus = "ACTIVE" | "ARCHIVED";
+
+// Business-specific chat modes
+export type ChatMode = "chat" | "agent";
+
+// Model registry for available AI models
+export interface ModelRegistry {
+  provider: Provider;
+  availableModels: string[];
+  metadata?: {
+    displayName: string;
+    capabilities: string[];
+    defaultModel?: string;
+  };
 }
 
+// Business metadata for chat sessions
 export interface ChatMetadata {
   title?: string;
   summary?: string;
   tags?: string[];
   mode?: ChatMode;
-  model?: string | ChatModelConfig;
+  model?: LanguageModel;
   knowledge?: string[];
   promptDraft?: string;
 }
 
-// Use ChatFileData instead of SerializableChat for clarity
+// User input abstraction for business flow
+export interface UserInput {
+  type: "user_message";
+  content: string;
+  attachments?: Array<{
+    fileName: string;
+    content: string;
+  }>;
+}
+
+// Tool confirmation using AI SDK native types
+export interface ToolConfirmation<TOOLS extends ToolSet> {
+  type: "tool_results";
+  results: ToolResultUnion<TOOLS>[];
+}
+
+// Continue signal for conversation flow
+export interface ContinueSignal {
+  type: "continue";
+}
+
+// Turn input types for conversation management
+export type TurnInput<TOOLS extends ToolSet = any> =
+  | UserInput
+  | ToolConfirmation<TOOLS>
+  | ContinueSignal;
+
+// Conversation result using AI SDK native types
+export type ConversationResult<TOOLS extends ToolSet = any> =
+  | {
+      status: "complete";
+      content: string;
+      finishReason: FinishReason;
+    }
+  | {
+      status: "waiting_confirmation";
+      toolCalls: ToolCallUnion<TOOLS>[];
+    }
+  | {
+      status: "max_turns_reached";
+    };
+
+// File persistence structure using AI SDK native types
 export interface ChatFileData {
   id: string;
   absoluteFilePath: string;
-  messages: ChatMessage[];
-  status: ChatStatus;
+
+  // AI SDK native types
+  messages: ChatMessage[]; // UIMessage<ChatMessageMetadata>[]
+  model: LanguageModel;
+
+  // Business-specific state
+  sessionStatus: ChatSessionStatus;
   fileStatus: ChatFileStatus;
   currentTurn: number;
   maxTurns: number;

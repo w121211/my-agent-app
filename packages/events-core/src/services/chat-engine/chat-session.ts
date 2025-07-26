@@ -1,20 +1,28 @@
 // packages/events-core/src/services/chat-engine/chat-session.ts
+
 import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { Logger, type ILogObj } from "tslog";
-import type { ProviderRegistryProvider } from "ai";
-import { streamText } from "ai";
+import { streamText, convertToModelMessages } from "ai";
+import type {
+  LanguageModel,
+  ToolSet,
+  ToolCallUnion,
+  StreamTextResult,
+  TextStreamPart,
+  FinishReason,
+  UIMessage,
+} from "ai";
 import type { IEventBus } from "../../event-bus.js";
-import type { 
-  ChatModelConfig, 
-  ChatStatus, 
-  ChatFileStatus, 
-  TurnInput,
-  ToolCall,
-  ConversationResult,
+import type {
   ChatMessage,
+  ChatMessageMetadata,
+  ChatSessionStatus,
+  ChatFileStatus,
+  ChatFileData,
   ChatMetadata,
-  ChatFileData
+  TurnInput,
+  ConversationResult,
 } from "./types.js";
 import type { UserSettingsService } from "../user-settings-service.js";
 import { ToolCallScheduler } from "../tool-call/tool-call-scheduler.js";
@@ -22,12 +30,11 @@ import { MessageProcessor } from "./message-processor.js";
 import type { FileService } from "../file-service.js";
 import type { ProjectFolderService } from "../project-folder-service.js";
 
-// ChatSession class with turn management
-export class ChatSession {
+export class ChatSession<TOOLS extends ToolSet = any> {
   id: string;
   absoluteFilePath: string;
-  messages: ChatMessage[] = [];
-  status: ChatStatus = "idle";
+  messages: ChatMessage[] = []; // UIMessage<ChatMessageMetadata>[]
+  sessionStatus: ChatSessionStatus = "idle";
   fileStatus: ChatFileStatus = "ACTIVE";
   currentTurn: number = 0;
   maxTurns: number = 20;
@@ -37,7 +44,7 @@ export class ChatSession {
 
   private eventBus: IEventBus;
   private currentAbortController: AbortController | null = null;
-  private providerRegistry: ProviderRegistryProvider;
+  private model: LanguageModel;
   private toolCallScheduler: ToolCallScheduler;
   private logger: Logger<ILogObj>;
   private userSettingsService: UserSettingsService;
@@ -45,12 +52,9 @@ export class ChatSession {
   private projectPath: string;
 
   constructor(
-    data: Omit<
-      ChatFileData,
-      "status" | "fileStatus" | "currentTurn" | "maxTurns"
-    >,
+    data: ChatFileData,
     eventBus: IEventBus,
-    providerRegistry: ProviderRegistryProvider,
+    model: LanguageModel,
     toolCallScheduler: ToolCallScheduler,
     userSettingsService: UserSettingsService,
     projectFolderService: ProjectFolderService,
@@ -60,41 +64,49 @@ export class ChatSession {
     this.id = data.id;
     this.absoluteFilePath = data.absoluteFilePath;
     this.messages = data.messages;
+    this.sessionStatus = data.sessionStatus;
+    this.fileStatus = data.fileStatus;
+    this.currentTurn = data.currentTurn;
+    this.maxTurns = data.maxTurns;
     this.createdAt = data.createdAt;
     this.updatedAt = data.updatedAt;
     this.metadata = data.metadata;
+
     this.eventBus = eventBus;
-    this.providerRegistry = providerRegistry;
+    this.model = data.model;
     this.toolCallScheduler = toolCallScheduler;
     this.userSettingsService = userSettingsService;
     this.logger = new Logger({ name: "ChatSession" });
-    this.messageProcessor = new MessageProcessor(projectFolderService, fileService, this.logger);
+    this.messageProcessor = new MessageProcessor(
+      projectFolderService,
+      fileService,
+      this.logger,
+    );
     this.projectPath = projectPath;
   }
 
   async runTurn(
-    input: TurnInput,
+    input: TurnInput<TOOLS>,
     options?: { signal?: AbortSignal },
-  ): Promise<ConversationResult> {
-    // Check if already aborted
-    if (options?.signal?.aborted) throw new Error("Operation aborted");
+  ): Promise<ConversationResult<TOOLS>> {
+    if (options?.signal?.aborted) {
+      throw new Error("Operation aborted");
+    }
 
-    // Check turn limits
     if (this.currentTurn >= this.maxTurns) {
-      this.status = "max_turns_reached";
+      this.sessionStatus = "max_turns_reached";
       return { status: "max_turns_reached" };
     }
 
-    // Create internal AbortController if no external signal
     this.currentAbortController = new AbortController();
     const effectiveSignal =
       options?.signal || this.currentAbortController.signal;
 
     try {
-      this.status = "processing";
+      this.sessionStatus = "processing";
       this.currentTurn++;
 
-      // Process file references in user input before adding to messages
+      // Process and add input to messages using UIMessage format
       await this.processAndAddInputToMessages(input);
 
       // Emit status change event
@@ -102,32 +114,25 @@ export class ChatSession {
         kind: "ChatUpdatedEvent",
         chatId: this.id,
         updateType: "STATUS_CHANGED",
-        update: { status: this.status },
-        chat: this.toSerializableChat(),
+        update: { status: this.sessionStatus },
+        chat: this.toFileData(),
         timestamp: new Date(),
       });
 
-      // Generate AI response using streamText directly
-      const modelConfig = this.getModelConfig();
-      if (!modelConfig) {
-        throw new Error("Model configuration not available");
-      }
+      // Convert UIMessages to ModelMessages for AI SDK
+      const modelMessages = convertToModelMessages(this.messages, {
+        ignoreIncompleteToolCalls: true,
+      });
 
-      const model = this.providerRegistry.languageModel(
-        `${modelConfig.provider}:${modelConfig.modelId}`,
-      );
-
-      const result = streamText({
-        model,
-        messages: this.buildMessagesForAI(),
-        temperature: modelConfig.temperature,
-        topP: modelConfig.topP,
-        system: modelConfig.systemPrompt,
+      // Generate AI response using streamText
+      const result: StreamTextResult<TOOLS, never> = streamText({
+        model: this.model,
+        messages: modelMessages,
         abortSignal: effectiveSignal,
       });
 
       let content = "";
-      const toolCalls: ToolCall[] = [];
+      const toolCalls: ToolCallUnion<TOOLS>[] = [];
 
       // Emit AI response started event
       await this.eventBus.emit({
@@ -135,48 +140,54 @@ export class ChatSession {
         chatId: this.id,
         updateType: "AI_RESPONSE_STARTED",
         update: { status: "processing" },
-        chat: this.toSerializableChat(),
+        chat: this.toFileData(),
         timestamp: new Date(),
       });
 
-      // Process AI SDK v5 stream
+      // Process AI SDK stream using native types
+      // for await (const part: TextStreamPart<TOOLS> of result.fullStream) {
       for await (const part of result.fullStream) {
-        if (effectiveSignal.aborted) throw new Error("Operation aborted");
+        if (effectiveSignal.aborted) {
+          throw new Error("Operation aborted");
+        }
 
         switch (part.type) {
           case "text":
             content += part.text;
-            
-            // Emit streaming chunk event
+
             await this.eventBus.emit({
               kind: "ChatUpdatedEvent",
               chatId: this.id,
               updateType: "AI_RESPONSE_STREAMING",
-              update: { 
+              update: {
                 chunk: part.text,
-                accumulatedContent: content 
+                accumulatedContent: content,
               },
-              chat: this.toSerializableChat(),
+              chat: this.toFileData(),
               timestamp: new Date(),
             });
             break;
+
           case "tool-call":
-            toolCalls.push({
-              id: part.toolCallId || uuidv4(),
-              name: part.toolName || "unknown",
-              arguments: part.input || {},
-              needsConfirmation: true,
-            });
+            // part is already ToolCallUnion<TOOLS> type
+            toolCalls.push(part);
             break;
         }
       }
 
-      // Add AI message to messages
+      // Add AI response as UIMessage
       const aiMessage: ChatMessage = {
         id: uuidv4(),
         role: "assistant",
-        content: content || "AI response",
-        timestamp: new Date(),
+        metadata: {
+          timestamp: new Date(),
+        },
+        parts: [
+          {
+            type: "text",
+            text: content || "AI response",
+          },
+        ],
       };
       this.messages.push(aiMessage);
 
@@ -186,13 +197,13 @@ export class ChatSession {
         chatId: this.id,
         updateType: "MESSAGE_ADDED",
         update: { message: aiMessage },
-        chat: this.toSerializableChat(),
+        chat: this.toFileData(),
         timestamp: new Date(),
       });
 
       // Handle tool calls if any
       if (toolCalls.length > 0) {
-        this.status = "waiting_confirmation";
+        this.sessionStatus = "waiting_confirmation";
         return {
           status: "waiting_confirmation",
           toolCalls,
@@ -204,20 +215,26 @@ export class ChatSession {
         kind: "ChatUpdatedEvent",
         chatId: this.id,
         updateType: "AI_RESPONSE_COMPLETED",
-        update: { 
+        update: {
           message: aiMessage,
-          finalContent: content 
+          finalContent: content,
         },
-        chat: this.toSerializableChat(),
+        chat: this.toFileData(),
         timestamp: new Date(),
       });
 
-      // Turn complete
-      this.status = "idle";
-      return { status: "complete", content };
+      // Get finish reason from result
+      const finishReason: FinishReason = await result.finishReason;
+
+      this.sessionStatus = "idle";
+      return {
+        status: "complete",
+        content,
+        finishReason,
+      };
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
-        this.status = "idle";
+        this.sessionStatus = "idle";
         throw new Error("Operation cancelled by user");
       }
       throw error;
@@ -225,13 +242,12 @@ export class ChatSession {
       this.currentAbortController = null;
       this.updatedAt = new Date();
 
-      // Emit final status change
       await this.eventBus.emit({
         kind: "ChatUpdatedEvent",
         chatId: this.id,
         updateType: "STATUS_CHANGED",
-        update: { status: this.status },
-        chat: this.toSerializableChat(),
+        update: { status: this.sessionStatus },
+        chat: this.toFileData(),
         timestamp: new Date(),
       });
     }
@@ -244,19 +260,16 @@ export class ChatSession {
   }
 
   async cleanup(): Promise<void> {
-    // Abort any running operations
     this.abort();
-
-    // Note: ToolCallScheduler doesn't have cleanup method yet
-    // Future enhancement: add cleanup to ToolCallScheduler
   }
 
-  toJSON(): ChatFileData {
+  toFileData(): ChatFileData {
     return {
       id: this.id,
       absoluteFilePath: this.absoluteFilePath,
       messages: this.messages,
-      status: this.status,
+      model: this.model,
+      sessionStatus: this.sessionStatus,
       fileStatus: this.fileStatus,
       currentTurn: this.currentTurn,
       maxTurns: this.maxTurns,
@@ -266,43 +279,60 @@ export class ChatSession {
     };
   }
 
-  private toSerializableChat(): ChatFileData {
-    return this.toJSON();
-  }
-
-  private async processAndAddInputToMessages(input: TurnInput): Promise<void> {
+  private async processAndAddInputToMessages(
+    input: TurnInput<TOOLS>,
+  ): Promise<void> {
     let message: ChatMessage;
 
     switch (input.type) {
       case "user_message": {
         // Process file references in user message content
-        const processedContent = await this.messageProcessor.processFileReferences(
-          input.content,
-          this.projectPath
-        );
-        
+        const processedContent =
+          await this.messageProcessor.processFileReferences(
+            input.content,
+            this.projectPath,
+          );
+
         // Extract file references for metadata
-        const fileReferences = this.messageProcessor.extractChatFileReferences(input.content);
-        
+        const fileReferences = this.messageProcessor.extractChatFileReferences(
+          input.content,
+        );
+
         message = {
           id: uuidv4(),
           role: "user",
-          content: processedContent,
-          timestamp: new Date(),
-          metadata: fileReferences.length > 0 ? { fileReferences } : undefined,
+          metadata: {
+            timestamp: new Date(),
+            fileReferences:
+              fileReferences.length > 0 ? fileReferences : undefined,
+          },
+          parts: [
+            {
+              type: "text",
+              text: processedContent,
+            },
+          ],
         };
         break;
       }
+
       case "tool_results":
         message = {
           id: uuidv4(),
           role: "system",
-          content: JSON.stringify(input.results),
-          timestamp: new Date(),
+          metadata: {
+            timestamp: new Date(),
+          },
+          parts: [
+            {
+              type: "text",
+              text: JSON.stringify(input.results),
+            },
+          ],
         };
         break;
+
       case "continue":
-        // TODO: Consider adding a mock user meessage "Please continue." to messages.
         // Don't add continue signals as messages
         return;
     }
@@ -316,53 +346,36 @@ export class ChatSession {
         chatId: this.id,
         updateType: "MESSAGE_ADDED",
         update: { message },
-        chat: this.toSerializableChat(),
+        chat: this.toFileData(),
         timestamp: new Date(),
       });
     }
   }
 
-  private buildMessagesForAI() {
-    return this.messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-  }
-
-  private getModelConfig(): ChatModelConfig | null {
-    if (this.metadata?.model && typeof this.metadata.model === "object") {
-      return this.metadata.model as ChatModelConfig;
-    }
-    return null;
-  }
-
-  static async fromJSON(
+  static async fromFileData(
     data: ChatFileData,
     eventBus: IEventBus,
-    providerRegistry: ProviderRegistryProvider,
     toolScheduler: ToolCallScheduler,
     userSettingsService: UserSettingsService,
     projectFolderService: ProjectFolderService,
     fileService: FileService,
-  ): Promise<ChatSession> {
+  ): Promise<ChatSession<any>> {
     // Determine project path by finding the project folder containing this chat file
-    const projectFolder = await projectFolderService.getProjectFolderForPath(data.absoluteFilePath);
-    const projectPath = projectFolder?.path || path.dirname(data.absoluteFilePath);
-    
-    const chatSession = new ChatSession(
+    const projectFolder = await projectFolderService.getProjectFolderForPath(
+      data.absoluteFilePath,
+    );
+    const projectPath =
+      projectFolder?.path || path.dirname(data.absoluteFilePath);
+
+    return new ChatSession(
       data,
       eventBus,
-      providerRegistry,
+      data.model, // Use the model from file data
       toolScheduler,
       userSettingsService,
       projectFolderService,
       fileService,
       projectPath,
     );
-    chatSession.status = data.status;
-    chatSession.fileStatus = data.fileStatus;
-    chatSession.currentTurn = data.currentTurn;
-    chatSession.maxTurns = data.maxTurns;
-    return chatSession;
   }
 }

@@ -1,8 +1,16 @@
 // packages/events-core/src/services/chat-engine/chat-session-repository.ts
+
 import { ILogObj, Logger } from "tslog";
 import path from "path";
 import { z } from "zod";
-import type { SerializableChat } from "./chat-session.js";
+import type { LanguageModel } from "ai";
+import type {
+  ChatFileData,
+  ChatMessage,
+  ChatSessionStatus,
+  ChatFileStatus,
+  ChatMetadata,
+} from "./types.js";
 import {
   writeJsonFile,
   readJsonFile,
@@ -10,34 +18,39 @@ import {
   listDirectory,
 } from "../../file-helpers.js";
 
-// Chat file data schema for validation
+// Zod schema for chat file validation
 const ChatFileDataSchema = z.object({
   _type: z.literal("chat"),
   id: z.string(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
-  messages: z.array(z.any()),
+  messages: z.array(z.any()), // UIMessage array
+  model: z.any(), // LanguageModel (can be string or complex object)
+  sessionStatus: z.enum([
+    "idle",
+    "processing",
+    "waiting_confirmation",
+    "max_turns_reached",
+  ]),
+  fileStatus: z.enum(["ACTIVE", "ARCHIVED"]),
+  currentTurn: z.number(),
+  maxTurns: z.number(),
   metadata: z.record(z.any()).optional(),
-  status: z
-    .enum(["idle", "processing", "waiting_confirmation", "max_turns_reached"])
-    .optional(),
-  fileStatus: z.enum(["ACTIVE", "ARCHIVED"]).optional(),
-  currentTurn: z.number().optional(),
-  maxTurns: z.number().optional(),
 });
 
-type ChatFileData = z.infer<typeof ChatFileDataSchema>;
+// File format for persistence
+type ChatFileFormat = z.infer<typeof ChatFileDataSchema>;
 
 export interface ChatSessionRepository {
   saveToFile(
     absoluteFilePath: string,
-    chatSession: SerializableChat,
+    chatSession: ChatFileData,
   ): Promise<void>;
-  loadFromFile(absoluteFilePath: string): Promise<SerializableChat>;
+  loadFromFile(absoluteFilePath: string): Promise<ChatFileData>;
   deleteFile(absoluteFilePath: string): Promise<void>;
   createNewFile(
     targetDirectory: string,
-    chatSession: Omit<SerializableChat, "absoluteFilePath">,
+    chatSession: Omit<ChatFileData, "absoluteFilePath">,
   ): Promise<string>;
 }
 
@@ -50,13 +63,13 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
 
   async saveToFile(
     absoluteFilePath: string,
-    chatSession: SerializableChat,
+    chatSession: ChatFileData,
   ): Promise<void> {
     const fileData = this.convertToFileFormat(chatSession);
     await writeJsonFile(absoluteFilePath, fileData);
   }
 
-  async loadFromFile(filePath: string): Promise<SerializableChat> {
+  async loadFromFile(filePath: string): Promise<ChatFileData> {
     const fileData = await readJsonFile<unknown>(filePath);
     const validatedData = ChatFileDataSchema.parse(fileData);
     return this.convertFromFileFormat(validatedData, filePath);
@@ -69,7 +82,7 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
 
   async createNewFile(
     targetDirectory: string,
-    chatSession: Omit<SerializableChat, "absoluteFilePath">,
+    chatSession: Omit<ChatFileData, "absoluteFilePath">,
   ): Promise<string> {
     await createDirectory(targetDirectory);
     const chatNumber = await this.getNextChatNumber(targetDirectory);
@@ -99,36 +112,38 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
     return chatNumbers.length > 0 ? Math.max(...chatNumbers) + 1 : 1;
   }
 
-  private convertToFileFormat(chatSession: SerializableChat): ChatFileData {
+  private convertToFileFormat(chatSession: ChatFileData): ChatFileFormat {
     return {
       _type: "chat",
       id: chatSession.id,
       createdAt: chatSession.createdAt,
       updatedAt: chatSession.updatedAt,
-      messages: chatSession.messages,
-      metadata: chatSession.metadata,
-      status: chatSession.status,
+      messages: chatSession.messages, // UIMessage array - preserve as-is
+      model: chatSession.model, // LanguageModel - preserve as-is
+      sessionStatus: chatSession.sessionStatus,
       fileStatus: chatSession.fileStatus,
       currentTurn: chatSession.currentTurn,
       maxTurns: chatSession.maxTurns,
+      metadata: chatSession.metadata,
     };
   }
 
   private convertFromFileFormat(
-    fileData: ChatFileData,
+    fileData: ChatFileFormat,
     filePath: string,
-  ): SerializableChat {
+  ): ChatFileData {
     return {
       id: fileData.id,
       absoluteFilePath: filePath,
-      messages: fileData.messages,
-      status: fileData.status || "idle",
-      fileStatus: fileData.fileStatus || "ACTIVE",
-      currentTurn: fileData.currentTurn || 0,
-      maxTurns: fileData.maxTurns || 20,
+      messages: fileData.messages as ChatMessage[], // UIMessage array
+      model: fileData.model as LanguageModel,
+      sessionStatus: fileData.sessionStatus,
+      fileStatus: fileData.fileStatus,
+      currentTurn: fileData.currentTurn,
+      maxTurns: fileData.maxTurns,
       createdAt: fileData.createdAt,
       updatedAt: fileData.updatedAt,
-      metadata: fileData.metadata,
+      metadata: fileData.metadata as ChatMetadata,
     };
   }
 }

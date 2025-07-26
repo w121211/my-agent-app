@@ -1,25 +1,20 @@
 // packages/events-core/src/services/chat-engine/chat-client.ts
+
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
+import type { LanguageModel, ToolSet } from "ai";
 import type { IEventBus } from "../../event-bus.js";
 import type { TaskService } from "../task-service.js";
 import type { ProjectFolderService } from "../project-folder-service.js";
-import {
-  ChatSession,
-  type SerializableChat,
-  type ChatMode,
-  type UserInput,
-  type ToolResults,
-  type ConversationResult,
-} from "./chat-session.js";
-import type { ChatModelConfig, AvailableModel } from "./types.js";
-import {
-  buildProviderRegistry,
-  parseModelConfig,
-  validateModelAvailability,
-  getAvailableModels,
-  type ProviderRegistry,
-} from "./ai-provider-utils.js";
+import { ChatSession } from "./chat-session.js";
+import type {
+  ChatFileData,
+  ChatMode,
+  ConversationResult,
+  ModelRegistry,
+  TurnInput,
+} from "./types.js";
+import { buildProviderRegistry } from "./ai-provider-utils.js";
 import { ToolRegistry } from "../tool-call/tool-registry.js";
 import { ToolCallScheduler } from "../tool-call/tool-call-scheduler.js";
 import { ApprovalMode } from "../tool-call/types.js";
@@ -28,7 +23,7 @@ import type { ChatSessionRepository } from "./chat-session-repository.js";
 
 interface CreateChatConfig {
   mode?: ChatMode;
-  model?: string | ChatModelConfig;
+  model?: LanguageModel;
   knowledge?: string[];
   prompt?: string;
   newTask?: boolean;
@@ -44,20 +39,18 @@ interface MessageAttachment {
   content: string;
 }
 
-// ChatClient class for lifecycle management with session pool
-export class ChatClient {
+export class ChatClient<TOOLS extends ToolSet = any> {
   private readonly logger: Logger<ILogObj>;
   private readonly eventBus: IEventBus;
   private readonly chatSessionRepository: ChatSessionRepository;
   private readonly taskService: TaskService;
   private readonly projectFolderService: ProjectFolderService;
   private readonly userSettingsService: UserSettingsService;
-  private readonly sessions: Map<string, ChatSession> = new Map(); // absoluteFilePath -> ChatSession
+  private readonly sessions: Map<string, ChatSession<TOOLS>> = new Map();
   private readonly sessionAccessTime: Map<string, number> = new Map();
   private readonly maxSessions: number = 10;
-  private providerRegistry: ProviderRegistry | null = null;
+  private modelRegistries: ModelRegistry[] = [];
   private globalToolRegistry: ToolRegistry | null = null;
-  // ToolCallScheduler is now owned by individual ChatSession instances
 
   constructor(
     eventBus: IEventBus,
@@ -79,30 +72,42 @@ export class ChatClient {
   private async initializeGlobalDependencies(): Promise<void> {
     try {
       const userSettings = await this.userSettingsService.getUserSettings();
-      this.providerRegistry = await buildProviderRegistry(userSettings);
+      const providerRegistry = await buildProviderRegistry(userSettings);
+
+      // Build model registries from provider registry
+      this.modelRegistries = [
+        {
+          provider: providerRegistry,
+          availableModels: ["anthropic:claude-3-sonnet", "openai:gpt-4"], // Example models
+          metadata: {
+            displayName: "Default Provider Registry",
+            capabilities: ["text", "tools"],
+            defaultModel: "anthropic:claude-3-sonnet",
+          },
+        },
+      ];
+
       this.globalToolRegistry = new ToolRegistry(this.eventBus, this.logger);
     } catch (error) {
       this.logger.error("Failed to initialize global dependencies", error);
     }
   }
 
-  // Core API methods with file-first design
   async sendMessage(
     absoluteFilePath: string,
     chatSessionId: string,
     message: string,
     attachments?: MessageAttachment[],
-  ): Promise<ConversationResult> {
+  ): Promise<ConversationResult<TOOLS>> {
     const session = await this.getOrLoadChatSession(absoluteFilePath);
 
-    // Verify ID consistency
     if (session.id !== chatSessionId) {
       throw new Error(
         `Session ID mismatch: expected ${session.id}, got ${chatSessionId}`,
       );
     }
 
-    const userInput: UserInput = {
+    const userInput: TurnInput<TOOLS> = {
       type: "user_message",
       content: message,
       attachments,
@@ -118,10 +123,9 @@ export class ChatClient {
     absoluteFilePath: string,
     chatSessionId: string,
     inputData?: Record<string, any>,
-  ): Promise<ConversationResult> {
+  ): Promise<ConversationResult<TOOLS>> {
     const session = await this.getOrLoadChatSession(absoluteFilePath);
 
-    // Verify ID consistency
     if (session.id !== chatSessionId) {
       throw new Error(
         `Session ID mismatch: expected ${session.id}, got ${chatSessionId}`,
@@ -130,9 +134,9 @@ export class ChatClient {
 
     // Reset session to allow rerun
     session.currentTurn = 0;
-    session.status = "idle";
+    session.sessionStatus = "idle";
 
-    const userInput: UserInput = {
+    const userInput: TurnInput<TOOLS> = {
       type: "user_message",
       content: inputData?.message || "Rerun previous conversation",
     };
@@ -148,30 +152,32 @@ export class ChatClient {
     chatSessionId: string,
     toolCallId: string,
     outcome: "approved" | "denied",
-  ): Promise<ConversationResult> {
+  ): Promise<ConversationResult<TOOLS>> {
     const session = await this.getOrLoadChatSession(absoluteFilePath);
 
-    // Verify ID consistency
     if (session.id !== chatSessionId) {
       throw new Error(
         `Session ID mismatch: expected ${session.id}, got ${chatSessionId}`,
       );
     }
 
-    if (session.status !== "waiting_confirmation") {
+    if (session.sessionStatus !== "waiting_confirmation") {
       throw new Error("Session is not waiting for tool confirmation");
     }
 
-    const toolResults: ToolResults = {
+    const toolResults: TurnInput<TOOLS> = {
       type: "tool_results",
       results: [
         {
-          id: toolCallId,
-          result:
+          type: "tool-result",
+          toolCallId,
+          toolName: "unknown",
+          input: {},
+          output:
             outcome === "approved"
               ? "Tool execution approved"
               : "Tool execution denied",
-        },
+        } as any, // Type assertion needed for ToolResultUnion
       ],
     };
 
@@ -216,11 +222,17 @@ export class ChatClient {
     }
 
     const now = new Date();
-    const chatSession: SerializableChat = {
+    const defaultModel: LanguageModel =
+      config?.model ||
+      this.modelRegistries[0]?.metadata?.defaultModel ||
+      "anthropic:claude-3-sonnet";
+
+    const chatSession: ChatFileData = {
       id: uuidv4(),
       absoluteFilePath: "", // Will be set by repository
-      messages: [],
-      status: "idle",
+      messages: [], // UIMessage array
+      model: defaultModel,
+      sessionStatus: "idle",
       fileStatus: "ACTIVE",
       currentTurn: 0,
       maxTurns: 20,
@@ -228,7 +240,7 @@ export class ChatClient {
       updatedAt: now,
       metadata: {
         mode: config?.mode || "chat",
-        model: config?.model || "default",
+        model: defaultModel,
         knowledge: config?.knowledge || [],
         title: "New Chat",
       },
@@ -240,15 +252,19 @@ export class ChatClient {
     );
     chatSession.absoluteFilePath = filePath;
 
-    // Create in-memory session with full dependencies
+    // Create in-memory session
     const toolScheduler = this.createToolScheduler();
-    const session = new ChatSession(
+    const session = await ChatSession.fromFileData(
       chatSession,
       this.eventBus,
-      this.providerRegistry!,
       toolScheduler,
       this.userSettingsService,
+      this.projectFolderService,
+      await import("../file-service.js").then(
+        (m) => new m.FileService(this.eventBus),
+      ),
     );
+
     this.sessions.set(filePath, session);
     this.sessionAccessTime.set(filePath, Date.now());
 
@@ -263,7 +279,9 @@ export class ChatClient {
     };
   }
 
-  async getOrLoadChatSession(absoluteFilePath: string): Promise<ChatSession> {
+  async getOrLoadChatSession(
+    absoluteFilePath: string,
+  ): Promise<ChatSession<TOOLS>> {
     // Check if already in memory
     if (this.sessions.has(absoluteFilePath)) {
       this.sessionAccessTime.set(absoluteFilePath, Date.now());
@@ -279,12 +297,16 @@ export class ChatClient {
     const chatData =
       await this.chatSessionRepository.loadFromFile(absoluteFilePath);
     const toolScheduler = this.createToolScheduler();
-    const session = new ChatSession(
+
+    const session = await ChatSession.fromFileData(
       chatData,
       this.eventBus,
-      this.providerRegistry!,
       toolScheduler,
       this.userSettingsService,
+      this.projectFolderService,
+      await import("../file-service.js").then(
+        (m) => new m.FileService(this.eventBus),
+      ),
     );
 
     // Add to session pool
@@ -296,7 +318,7 @@ export class ChatClient {
 
   async updateChat(
     absoluteFilePath: string,
-    updates: Partial<SerializableChat>,
+    updates: Partial<ChatFileData>,
   ): Promise<void> {
     const session = await this.getOrLoadChatSession(absoluteFilePath);
 
@@ -317,7 +339,6 @@ export class ChatClient {
 
     const session = this.sessions.get(absoluteFilePath);
     if (session) {
-      // Clean up session (now handles its own scheduler cleanup)
       await session.cleanup();
     }
 
@@ -325,25 +346,10 @@ export class ChatClient {
     this.sessionAccessTime.delete(absoluteFilePath);
   }
 
-  // AI mdoels methods
-  async getAvailableModels(): Promise<AvailableModel[]> {
-    const userSettings = await this.userSettingsService.getUserSettings();
-    return getAvailableModels(userSettings);
+  async getAvailableModels(): Promise<ModelRegistry[]> {
+    return this.modelRegistries;
   }
 
-  async validateModelConfig(modelConfig: ChatModelConfig): Promise<boolean> {
-    if (!this.providerRegistry) {
-      await this.initializeGlobalDependencies();
-    }
-
-    if (!this.providerRegistry) {
-      return false;
-    }
-
-    return validateModelAvailability(this.providerRegistry, modelConfig);
-  }
-
-  // Private helper methods
   private createToolScheduler(): ToolCallScheduler {
     if (!this.globalToolRegistry) {
       throw new Error("Global tool registry not initialized");
@@ -357,7 +363,7 @@ export class ChatClient {
       outputUpdateHandler: (toolCallId, chunk) => {
         this.eventBus.emit({
           kind: "TOOL_OUTPUT_UPDATE",
-          messageId: "", // Will be set by session
+          messageId: "",
           toolCallId,
           outputChunk: chunk,
           timestamp: new Date(),
@@ -371,7 +377,7 @@ export class ChatClient {
       onToolCallsUpdate: (toolCalls) => {
         this.eventBus.emit({
           kind: "TOOL_CALLS_UPDATE",
-          messageId: "", // Will be set by session
+          messageId: "",
           toolCalls,
           timestamp: new Date(),
         });
@@ -394,7 +400,6 @@ export class ChatClient {
       const session = this.sessions.get(sessionToEvict);
       if (session) {
         await this.persistSession(session);
-        // Clean up session (now handles its own scheduler cleanup)
         await session.cleanup();
       }
       this.sessions.delete(sessionToEvict);
@@ -402,8 +407,8 @@ export class ChatClient {
     }
   }
 
-  private async persistSession(session: ChatSession): Promise<void> {
-    const chatData = session.toJSON();
+  private async persistSession(session: ChatSession<TOOLS>): Promise<void> {
+    const chatData = session.toFileData();
     await this.chatSessionRepository.saveToFile(
       chatData.absoluteFilePath,
       chatData,

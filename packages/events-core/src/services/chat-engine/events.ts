@@ -1,12 +1,20 @@
 // packages/events-core/src/services/chat-engine/events.ts
-import type { BaseEvent } from "../../event-bus.js";
-import type { ChatMessage, ChatMetadata, SerializableChat, ChatStatus } from "./chat-session.js";
 
-// Updated event types
+import type { BaseEvent } from "../../event-bus.js";
+import type {
+  ChatMessage,
+  ChatMetadata,
+  ChatFileData,
+  ChatSessionStatus,
+} from "./types.js";
+
+// Chat update event types using AI SDK native types
 export type ChatUpdateType =
   | "MESSAGE_ADDED"
   | "METADATA_UPDATED"
-  | "AI_RESPONSE_ADDED"
+  | "AI_RESPONSE_STARTED"
+  | "AI_RESPONSE_STREAMING"
+  | "AI_RESPONSE_COMPLETED"
   | "STATUS_CHANGED";
 
 export interface ChatUpdatedEvent extends BaseEvent {
@@ -14,9 +22,12 @@ export interface ChatUpdatedEvent extends BaseEvent {
   chatId: string;
   updateType: ChatUpdateType;
   update: {
-    message?: ChatMessage;
+    message?: ChatMessage; // UIMessage<ChatMessageMetadata>
     metadata?: Partial<ChatMetadata>;
-    status?: ChatStatus;
+    status?: ChatSessionStatus;
+    chunk?: string;
+    accumulatedContent?: string;
+    finalContent?: string;
   };
-  chat: SerializableChat;
+  chat: ChatFileData; // Contains UIMessage array
 }

@@ -20,26 +20,34 @@ async function main() {
   try {
     // Step 1: Get all project folders
     console.log("📁 Getting project folders...");
-    const projectFolders = await client.projectFolder.getAllProjectFolders.query();
-    console.log(`Found ${projectFolders.length} project folders:`, projectFolders.map(p => p.name));
+    const projectFolders =
+      await client.projectFolder.getAllProjectFolders.query();
+    console.log(
+      `Found ${projectFolders.length} project folders:`,
+      projectFolders.map((p) => p.name),
+    );
 
     if (projectFolders.length === 0) {
-      console.log("❌ No project folders found. Please add a project folder first.");
+      console.log(
+        "❌ No project folders found. Please add a project folder first.",
+      );
       return;
     }
 
     const firstProject = projectFolders[0];
-    console.log(`\n🎯 Using project: ${firstProject.name} (${firstProject.path})\n`);
+    console.log(
+      `\n🎯 Using project: ${firstProject.name} (${firstProject.path})\n`,
+    );
 
     // Step 2: Test file search functionality
     console.log("🔍 Testing file search functionality...");
-    
+
     // Search for all files (empty query)
     console.log("\n📋 Searching for all files:");
     const allFiles = await client.projectFolder.searchFiles.query({
       query: "",
       projectId: firstProject.id,
-      limit: 10
+      limit: 10,
     });
     console.log(`Found ${allFiles.length} files:`);
     allFiles.forEach((file, index) => {
@@ -48,18 +56,20 @@ async function main() {
 
     // Search for specific file patterns
     const searchQueries = ["chat", "json", "ts", "md"];
-    
+
     for (const query of searchQueries) {
       console.log(`\n🔎 Searching for "${query}":`);
       const results = await client.projectFolder.searchFiles.query({
         query,
         projectId: firstProject.id,
-        limit: 5
+        limit: 5,
       });
-      
+
       if (results.length > 0) {
         results.forEach((file, index) => {
-          console.log(`  ${index + 1}. ${file.name} (score: ${file.score}) - ${file.relativePath}`);
+          console.log(
+            `  ${index + 1}. ${file.name} (score: ${file.score}) - ${file.relativePath}`,
+          );
           if (file.highlight) {
             console.log(`     Highlight: ${file.highlight}`);
           }
@@ -71,10 +81,10 @@ async function main() {
 
     // Step 3: Test chat creation and file references
     console.log("\n💬 Testing chat with file references...");
-    
+
     // Create a new chat
     const newChat = await client.chat.createEmptyChat.mutate({
-      targetDirectoryAbsolutePath: firstProject.path
+      targetDirectoryAbsolutePath: firstProject.path,
     });
     console.log(`Created chat: ${newChat.id}`);
 
@@ -90,26 +100,31 @@ async function main() {
     for (let i = 0; i < testMessages.length; i++) {
       const message = testMessages[i];
       console.log(`\n📝 Sending message ${i + 1}: "${message}"`);
-      
+
       try {
         const updatedChat = await client.chat.submitMessage.mutate({
           chatId: newChat.id,
-          message: message
+          message: message,
         });
-        
-        const lastMessage = updatedChat.messages[updatedChat.messages.length - 1];
+
+        const lastMessage =
+          updatedChat.messages[updatedChat.messages.length - 1];
         console.log(`✅ Message sent successfully`);
         console.log(`   Original: ${message}`);
         console.log(`   Stored: ${lastMessage.content}`);
-        
+
         // Show file references if any
-        if (lastMessage.metadata?.fileReferences && lastMessage.metadata.fileReferences.length > 0) {
-          console.log(`   File references found: ${lastMessage.metadata.fileReferences.length}`);
+        if (
+          lastMessage.metadata?.fileReferences &&
+          lastMessage.metadata.fileReferences.length > 0
+        ) {
+          console.log(
+            `   File references found: ${lastMessage.metadata.fileReferences.length}`,
+          );
           lastMessage.metadata.fileReferences.forEach((ref, index) => {
             console.log(`     ${index + 1}. ${ref.path}`);
           });
         }
-        
       } catch (error) {
         console.log(`❌ Error sending message: ${error}`);
       }
@@ -117,7 +132,7 @@ async function main() {
 
     // Step 4: Test edge cases
     console.log("\n🧪 Testing edge cases...");
-    
+
     const edgeCases = [
       "@", // Just @ symbol
       "@ ", // @ with space
@@ -132,7 +147,7 @@ async function main() {
       try {
         const result = await client.chat.submitMessage.mutate({
           chatId: newChat.id,
-          message: `Testing: ${edgeCase}`
+          message: `Testing: ${edgeCase}`,
         });
         console.log(`✅ Handled successfully`);
       } catch (error) {
@@ -142,7 +157,7 @@ async function main() {
 
     // Step 5: Demonstrate fuzzy search capabilities
     console.log("\n🎯 Testing fuzzy search capabilities...");
-    
+
     const fuzzyQueries = [
       { query: "pkg", expected: "package.json" },
       { query: "rdme", expected: "README" },
@@ -151,19 +166,24 @@ async function main() {
     ];
 
     for (const { query, expected } of fuzzyQueries) {
-      console.log(`\n🔍 Fuzzy search for "${query}" (expecting files with "${expected}"):`);
+      console.log(
+        `\n🔍 Fuzzy search for "${query}" (expecting files with "${expected}"):`,
+      );
       const results = await client.projectFolder.searchFiles.query({
         query,
         projectId: firstProject.id,
-        limit: 3
+        limit: 3,
       });
-      
+
       if (results.length > 0) {
         results.forEach((file, index) => {
-          const matchesExpected = file.name.toLowerCase().includes(expected.toLowerCase()) ||
-                                 file.relativePath.toLowerCase().includes(expected.toLowerCase());
+          const matchesExpected =
+            file.name.toLowerCase().includes(expected.toLowerCase()) ||
+            file.relativePath.toLowerCase().includes(expected.toLowerCase());
           const icon = matchesExpected ? "✅" : "📄";
-          console.log(`  ${icon} ${file.name} (score: ${file.score}) - ${file.relativePath}`);
+          console.log(
+            `  ${icon} ${file.name} (score: ${file.score}) - ${file.relativePath}`,
+          );
         });
       } else {
         console.log(`  No results found`);
@@ -174,10 +194,11 @@ async function main() {
     console.log("\n📊 Summary:");
     console.log(`- Tested file search in project: ${firstProject.name}`);
     console.log(`- Found ${allFiles.length} total files`);
-    console.log(`- Tested ${testMessages.length} chat messages with various file reference patterns`);
+    console.log(
+      `- Tested ${testMessages.length} chat messages with various file reference patterns`,
+    );
     console.log(`- Tested ${edgeCases.length} edge cases`);
     console.log(`- Tested ${fuzzyQueries.length} fuzzy search scenarios`);
-
   } catch (error) {
     console.error("❌ Demo failed:", error);
     if (error instanceof Error) {
@@ -187,7 +208,12 @@ async function main() {
 }
 
 // Add some helper functions for testing
-async function createTestFile(client: any, projectPath: string, fileName: string, content: string) {
+async function createTestFile(
+  client: any,
+  projectPath: string,
+  fileName: string,
+  content: string,
+) {
   // This would create a test file for demonstration
   // Implementation depends on file creation API
   console.log(`Would create test file: ${fileName} in ${projectPath}`);
