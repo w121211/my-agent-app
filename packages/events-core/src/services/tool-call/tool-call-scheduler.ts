@@ -1,5 +1,4 @@
 // packages/events-core/src/services/tool-call/tool-call-scheduler.ts
-
 import { Logger, type ILogObj } from "tslog";
 import type { IEventBus } from "../../event-bus.js";
 import {
@@ -18,10 +17,8 @@ import {
   type ToolCallConfirmationDetails,
   type ToolConfirmationOutcome,
   type ToolConfirmationPayload,
-  type Tool,
   type ToolRegistry,
   type ChatContext,
-  type ConfirmHandler,
   type OutputUpdateHandler,
   type AllToolCallsCompleteHandler,
   type ToolCallsUpdateHandler,

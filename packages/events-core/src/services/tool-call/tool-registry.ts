@@ -11,7 +11,6 @@ import type {
   MCPClient,
   MCPToolInfo,
   ToolCallConfirmationDetails,
-  ToolConfirmationOutcome,
 } from "./types.js";
 
 export class ToolRegistry implements IToolRegistry {

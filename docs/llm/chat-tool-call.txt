@@ -1,0 +1,2692 @@
+
+## Notes
+
+ChatService已經廢棄，後端 chat 系統遷移至 chat engine packages/events-core/src/services/chat-engine
+不用考慮 backward compatibility
+---
+
+讓我們一起檢視 source code: packages/events-core/src/services/tool-call
+純討論，不要修改
+
+tool call system 是怎樣運作？他的運作流程？
+有支援mcp？如何運作？
+Tool call 相關的 types 應該要直接從 ai.sdk import？
+你覺得整個 tool call 系統有哪些問題？
+  private outputUpdateHandler?: OutputUpdateHandler;
+  private onAllToolCallsComplete?: AllToolCallsCompleteHandler;
+  private onToolCallsUpdate?: ToolCallsUpdateHandler;
+
+我覺得可以不用 callback，而是跟 chat-engine 一樣，以 event 傳輸，你的看法？
+
+Edit
+
+Analyzed tool-call system architecture, challenges, and potential improvements.
+24s
+
+
+
+
+
+
+
+
+
+讓我仔細分析這個 tool-call 系統的架構和運作方式。
+
+Tool Call 系統運作流程
+從 ToolCallScheduler.execute() 方法來看，整個流程是這樣的：
+
+1. 初始化與驗證階段
+typescript
+// 1. 創建 ToolCall 對象（validating 狀態）
+const newToolCalls: ToolCall[] = requestsToProcess.map(reqInfo => ({
+  status: "validating",
+  request: reqInfo,
+  tool: toolRegistry.getTool(reqInfo.name),
+  startTime: Date.now()
+}))
+
+// 2. 處理每個工具的驗證和權限檢查
+for (const toolCall of newToolCalls) {
+  await this.processToolCallValidation(toolCall, messageId, signal)
+}
+2. 權限與安全檢查
+typescript
+// 根據 approvalMode 和工具危險等級決定流程
+if (this.approvalMode === ApprovalMode.YOLO) {
+  // 自動批准
+  this.setStatusInternal(messageId, reqInfo.callId, "scheduled")
+} else {
+  // 檢查是否需要用戶確認
+  const confirmationDetails = await toolInstance.shouldConfirmExecute(reqInfo.args)
+  if (confirmationDetails) {
+    // 需要確認 -> awaiting_approval 狀態
+    // 發送 TOOL_PERMISSION_REQUEST 事件
+  } else {
+    // 直接調度執行
+    this.setStatusInternal(messageId, reqInfo.callId, "scheduled")
+  }
+}
+3. 並行執行階段
+typescript
+// 所有 scheduled 狀態的工具並行執行
+await Promise.all(
+  scheduledCalls.map(toolCall => 
+    this.executeSingleToolCall(messageId, toolCall, signal)
+  )
+)
+MCP 支援架構
+MCP 整合透過 ToolRegistry.registerMCPServer() 實現：
+
+設計架構
+typescript
+// 1. 註冊 MCP 伺服器
+await toolRegistry.registerMCPServer({
+  name: "github-mcp",
+  url: "http://localhost:3001",
+  oauth: { enabled: true, clientId: "..." }
+})
+
+// 2. 創建 MCP 工具包裝器
+const mcpTool = this.createMCPToolWrapper(toolInfo, mcpClient, serverConfig)
+
+// 3. 統一 Tool 介面
+interface Tool {
+  shouldConfirmExecute(): Promise<ToolCallConfirmationDetails | null>
+  execute(args, options): Promise<unknown>
+  getMetadata(): ToolMetadata
+}
+目前實現狀況：MCP 客戶端是 mock 實現，但架構已經準備好了真實整合。
+
+關於 AI SDK Types
+你提到的很對！目前系統自定義了很多可能跟 AI SDK 重疊的類型：
+
+typescript
+// 現在的自定義類型
+export interface ToolCallRequestInfo {
+  callId: string
+  name: string  
+  args: Record<string, unknown>
+}
+
+// 應該考慮使用 AI SDK 標準類型
+import { ToolCall, ToolInvocation, ToolResult } from 'ai'
+設計建議：應該盡量使用 AI SDK 的標準類型，只在需要額外欄位時才擴展。這樣能確保與 AI SDK v5 的互操作性。
+
+系統設計問題分析
+1. Callback vs Event 架構不一致
+你說得很對！現在的 callback 架構創造了不必要的耦合：
+
+typescript
+// 現在的問題
+private outputUpdateHandler?: OutputUpdateHandler
+private onAllToolCallsComplete?: AllToolCallsCompleteHandler  
+private onToolCallsUpdate?: ToolCallsUpdateHandler
+為什麼這是問題：
+
+與系統其他部分的 event-driven 架構不一致
+創造緊耦合 - 調用者必須直接傳入 callback
+難以擴展 - 新的監聽者需要修改 scheduler 構造函數
+更好的設計：完全透過 EventBus 通訊，就像 chat-engine 一樣：
+
+typescript
+// 改用純 event 驅動
+this.eventBus.emit({
+  kind: "TOOL_OUTPUT_UPDATE",
+  messageId,
+  toolCallId,  
+  outputChunk: chunk,
+  timestamp: new Date()
+})
+2. 複雜的狀態管理
+7 種狀態的狀態機加上 setStatusInternal 的複雜邏輯：
+
+typescript
+// 狀態轉換邏輯很複雜
+switch (newStatus) {
+  case "success": return { /* 複雜的狀態對象構造 */ }
+  case "error": return { /* 另一種構造邏輯 */ }
+  // ... 更多狀態處理
+}
+設計建議：考慮使用更簡單的狀態機模式，或將狀態轉換邏輯分離到專門的狀態管理器。
+
+3. 架構不一致性
+Chat Engine：純 event-driven，清爽的 session 管理
+Tool Call：混合 callback + event，複雜的狀態管理
+統一性建議：Tool Call 系統應該採用與 Chat Engine 相同的設計模式，使用純 event 通訊和簡化的狀態管理。
+
+總結
+這個 tool-call 系統功能很完整，但架構上有改進空間：
+
+移除 callback，純用 event - 與系統其他部分保持一致
+使用 AI SDK 標準類型 - 減少重複定義，提升互操作性
+簡化狀態管理 - 減少複雜的狀態轉換邏輯
+完成 MCP 真實實現 - 目前還是 mock
+你對 callback vs event 的觀察很準確 - 這確實是系統設計不一致的地方，應該統一使用 EventBus 模式。
+
+你覺得這個分析如何？有其他你想討論的設計面向嗎？
+
+
+
+
+Retry
+ToolCallScheduler -> 改名? 有哪些建議的名字？
+你會如何簡化 tool call system？包含 ChatSession 要如何使用 tool call system？請給你的設計方案
+Edit
+
+Strategized tool call system renaming and architectural simplification.
+15s
+
+
+
+
+
+
+
+
+
+
+很好的問題！讓我針對這兩個設計問題提供分析和建議。
+
+1. ToolCallScheduler 改名建議
+現在的問題：Scheduler 暗示主要功能是調度，但實際上這個類負責整個工具調用生命週期管理。
+
+建議的名字：
+
+ToolCallManager ⭐ (推薦)
+清楚表達管理工具調用的職責
+符合系統中其他 Manager 類的命名慣例
+ToolCallService
+與系統中其他 Service 類一致
+表達服務化的設計理念
+ToolRunner
+簡潔，直接表達運行工具的核心功能
+避免過度正式的命名
+我傾向 ToolCallManager，因為它準確描述了類的職責範圍。
+
+2. 簡化 Tool Call System 設計方案
+當前架構問題分析
+typescript
+// 問題 1: 過多狀態
+type ToolCallStatus = "validating" | "scheduled" | "executing" | "success" | "error" | "cancelled" | "awaiting_approval"
+
+// 問題 2: 複雜的狀態轉換邏輯
+private setStatusInternal(messageId, targetCallId, newStatus, auxiliaryData?, extraData?) {
+  // 100+ 行的複雜邏輯
+}
+
+// 問題 3: Callback 架構不一致
+private outputUpdateHandler?: OutputUpdateHandler
+簡化設計方案
+核心簡化原則
+減少狀態複雜性 - 從 7 個狀態減少到 4 個核心狀態
+純 Event-Driven - 移除所有 callback，統一使用 EventBus
+自然的 ChatSession 集成 - 讓工具調用感覺像對話的自然延伸
+簡化後的狀態機
+typescript
+// 簡化到 4 個核心狀態
+type ToolCallStatus = 
+  | "pending"           // 初始狀態，包含驗證和權限檢查
+  | "executing"         // 正在執行
+  | "completed"         // 完成（成功或失敗都在這裡）
+  | "waiting_approval"  // 等待用戶確認
+
+// 結果在 completed 狀態中用 result 區分
+interface CompletedToolCall {
+  status: "completed"
+  result: { success: true, data: any } | { success: false, error: string }
+}
+Event-Driven 架構
+typescript
+// 移除所有 callback，純用事件
+class ToolCallManager {
+  constructor(eventBus: IEventBus, toolRegistry: ToolRegistry) {
+    // 不再接受 callback 參數
+  }
+
+  async execute(requests: ToolCallRequest[], context: ChatContext) {
+    // 直接透過 eventBus 發送所有更新
+    this.eventBus.emit({
+      kind: "TOOL_CALL_STARTED",
+      context,
+      toolCalls: requests.map(r => ({ ...r, status: "pending" }))
+    })
+    
+    // 處理邏輯...
+  }
+}
+ChatSession 與 Tool Call 集成設計
+自然的集成流程
+typescript
+// ChatSession 中的設計
+class ChatSession {
+  private toolCallManager: ToolCallManager
+
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    // 1. 生成 AI 回應
+    const aiResponse = await this.generateModelResponse()
+    
+    if (aiResponse.hasToolCalls) {
+      // 2. 直接委託給 ToolCallManager
+      await this.toolCallManager.execute(aiResponse.toolCalls, {
+        chatId: this.id,
+        messageId: this.getCurrentMessageId()
+      })
+      
+      // 3. 監聽工具執行完成事件
+      return this.waitForToolCompletion()
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+
+  private async waitForToolCompletion(): Promise<ConversationResult> {
+    // 透過 event 監聽工具執行結果
+    for await (const [event] of this.eventBus.toIterable("TOOL_CALL_COMPLETED")) {
+      if (event.context.chatId === this.id) {
+        // 根據工具執行結果決定下一步
+        return this.processToolResults(event.results)
+      }
+    }
+  }
+}
+事件驅動的權限處理
+typescript
+// 當需要用戶確認時
+class ChatSession {
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    // ... AI 回應處理
+    
+    // 監聽權限請求事件
+    this.eventBus.subscribe("TOOL_PERMISSION_REQUEST", (event) => {
+      if (event.context.chatId === this.id) {
+        // 返回 waiting_confirmation 狀態
+        return { 
+          status: 'waiting_confirmation', 
+          toolCalls: event.toolCalls 
+        }
+      }
+    })
+  }
+
+  // 用戶確認後
+  async confirmToolCall(toolCallId: string, outcome: "approved" | "denied") {
+    this.eventBus.emit({
+      kind: "TOOL_PERMISSION_RESPONSE",
+      toolCallId,
+      outcome,
+      context: { chatId: this.id }
+    })
+    
+    // 繼續等待工具執行完成
+    return this.waitForToolCompletion()
+  }
+}
+完整的簡化架構
+核心組件職責分離
+typescript
+// 1. ToolCallManager - 純粹的工具執行管理
+class ToolCallManager {
+  // 職責：管理工具執行生命週期，發送事件
+  async execute(requests, context) { /* 簡化的執行邏輯 */ }
+}
+
+// 2. ToolRegistry - 工具註冊和發現
+class ToolRegistry {
+  // 職責：管理可用工具，包括 MCP 整合
+  registerTool(tool) { /* ... */ }
+  getTool(name) { /* ... */ }
+}
+
+// 3. ChatSession - 對話管理
+class ChatSession {
+  // 職責：管理對話流程，協調工具調用
+  async runTurn(input) { /* 使用 ToolCallManager */ }
+}
+事件流設計
+typescript
+// 簡化的事件流
+"TOOL_CALL_STARTED" → "TOOL_PERMISSION_REQUEST"? → "TOOL_CALL_EXECUTING" → "TOOL_CALL_COMPLETED"
+                                   ↓
+                           "TOOL_PERMISSION_RESPONSE"
+與 AI SDK 類型統一
+typescript
+// 使用 AI SDK 標準類型
+import { ToolCall, ToolInvocation } from 'ai'
+
+// 只在需要時擴展
+interface EnhancedToolCall extends ToolCall {
+  status: ToolCallStatus
+  context: ChatContext
+}
+總結
+簡化的核心改進：
+
+命名：ToolCallScheduler → ToolCallManager
+狀態：7 個狀態 → 4 個核心狀態
+通訊：Callback → 純 Event-driven
+集成：複雜耦合 → ChatSession 自然委託
+類型：自定義 → AI SDK 標準類型
+這樣的設計讓 tool call 系統與 chat-engine 保持架構一致性，同時大幅簡化了複雜度。
+
+你覺得這個簡化方向如何？有哪些部分需要進一步討論？
+
+
+
+
+Retry
+當前 chat session 是如何使用 tool call scheduler？
+我不太喜歡用 event 的方式來連接 chat session <-> tool call scheduler，感覺反而會把原本簡單的東西變複雜
+
+Edit
+
+重新思考工具調用設計，提倡直接方法調用
+18s
+
+
+
+
+
+
+
+你說得對！讓我先看看當前的實現，然後重新思考這個設計。
+
+當前 Chat Session 使用 Tool Call 的方式
+查看 chat-session.ts，目前的狀況是：
+
+typescript
+// ChatSession 初始化時創建 ToolCallScheduler
+private initializeToolSystem(): void {
+  this.toolCallScheduler = new ToolCallScheduler({
+    toolRegistry: Promise.resolve(this.toolRegistry),
+    eventBus: this.eventBus,
+    logger: this.logger,
+    // 透過 callback 接收更新
+    outputUpdateHandler: (toolCallId, chunk) => { /* ... */ },
+    onAllToolCallsComplete: (completedCalls) => { /* ... */ },
+    onToolCallsUpdate: (toolCalls) => { /* ... */ }
+  });
+}
+
+// 但實際的工具執行還是 placeholder！
+private async executeTools(toolCalls: ToolCall[]): Promise<ToolResults> {
+  // TODO: Replace with actual tool execution
+  return {
+    type: 'tool_results',
+    results: toolCalls.map(call => ({
+      id: call.id,
+      result: `Placeholder result for ${call.name}`,
+    })),
+  };
+}
+發現：ChatSession 有初始化 ToolCallScheduler，但實際還沒有真正整合使用！
+
+你的觀點很對
+Event-driven 在這個場景確實會過度複雜化：
+
+typescript
+// Event 方式 - 複雜且間接
+await toolManager.execute(toolCalls)
+// 然後要監聽各種事件...
+this.eventBus.subscribe("TOOL_COMPLETED", ...)
+this.eventBus.subscribe("TOOL_NEEDS_APPROVAL", ...)
+// 狀態分散在多個事件監聽器中
+vs
+
+typescript
+// 直接方式 - 簡單直觀
+const result = await toolManager.execute(toolCalls)
+if (result.needsApproval) {
+  return { status: 'waiting_confirmation', toolCalls: result.pendingTools }
+}
+return { status: 'complete', toolResults: result.completed }
+更簡單的設計方案
+核心理念：直接調用 + 異常處理
+typescript
+class ChatSession {
+  private toolManager: ToolCallManager
+
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    const aiResponse = await this.generateModelResponse()
+    
+    if (aiResponse.hasToolCalls) {
+      try {
+        // 直接調用，等待結果
+        const toolResults = await this.toolManager.execute(
+          aiResponse.toolCalls,
+          { chatId: this.id, signal: this.abortSignal }
+        )
+        
+        // 繼續對話流程
+        return this.continueWithToolResults(toolResults)
+        
+      } catch (error) {
+        if (error instanceof ToolApprovalNeededError) {
+          // 需要用戶確認
+          return {
+            status: 'waiting_confirmation',
+            toolCalls: error.pendingToolCalls
+          }
+        }
+        throw error
+      }
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+}
+ToolCallManager 簡化設計
+typescript
+class ToolCallManager {
+  async execute(
+    toolCalls: ToolCall[], 
+    context: { chatId: string, signal?: AbortSignal }
+  ): Promise<ToolResult[]> {
+    
+    const results: ToolResult[] = []
+    const pendingApprovals: ToolCall[] = []
+    
+    for (const toolCall of toolCalls) {
+      const tool = this.toolRegistry.getTool(toolCall.name)
+      
+      // 檢查是否需要確認
+      const needsApproval = await tool.needsConfirmation(toolCall.args)
+      if (needsApproval) {
+        pendingApprovals.push(toolCall)
+        continue
+      }
+      
+      // 直接執行
+      const result = await tool.execute(toolCall.args, { signal: context.signal })
+      results.push({ toolCallId: toolCall.id, result })
+    }
+    
+    // 如果有需要確認的工具，拋出特殊異常
+    if (pendingApprovals.length > 0) {
+      throw new ToolApprovalNeededError(pendingApprovals, results)
+    }
+    
+    return results
+  }
+  
+  // 用戶確認後繼續執行
+  async continueWithApproval(
+    toolCalls: ToolCall[], 
+    approvals: Map<string, boolean>
+  ): Promise<ToolResult[]> {
+    // 只執行被批准的工具
+    const approvedCalls = toolCalls.filter(tc => approvals.get(tc.id))
+    // ... 執行邏輯
+  }
+}
+用戶確認流程
+typescript
+// ChatSession 處理用戶確認
+async confirmToolCall(toolCallId: string, approved: boolean): Promise<ConversationResult> {
+  if (this.status !== 'waiting_confirmation') {
+    throw new Error('No pending tool confirmations')
+  }
+  
+  // 直接調用繼續執行
+  const toolResults = await this.toolManager.continueWithApproval(
+    this.pendingToolCalls,
+    new Map([[toolCallId, approved]])
+  )
+  
+  return this.continueWithToolResults(toolResults)
+}
+比較兩種方案
+Event-Driven 方式
+❌ 狀態分散在多個事件監聽器
+❌ 異步流程難以追蹤
+❌ 錯誤處理複雜
+❌ 調試困難
+
+直接調用方式
+✅ 流程清晰，一目了然
+✅ 錯誤處理集中
+✅ 容易測試和調試
+✅ 符合一般程式設計直覺
+
+總結
+你的直覺是對的！直接方法調用 + 異常處理比 event-driven 更適合這個場景，因為：
+
+ChatSession ↔ ToolManager 是一對一的緊密合作關係，不是鬆耦合的發布訂閱場景
+工具執行是同步式的請求-回應模式，不需要複雜的事件協調
+錯誤和異常狀況（如需要確認）用異常機制處理更自然
+Event-driven 更適合跨模組的通知（如 UI 更新、日誌記錄），而不是核心業務邏輯的協調。
+
+這樣的設計既保持了簡潔性，又避免了過度設計的陷阱。你覺得這個方向如何？
+
+
+
+
+Retry
+const results: ToolResult[] = []
+    const pendingApprovals: ToolCall[] = []
+
+你現在是想把 tool calls 用 ToolCallManager 來儲存，但我想的是，可以由 chat session 來儲存，session 本來就是在儲存 chat state
+ToolCallScheduler 作為 stateless，只負責tool call的運行？
+這樣如何？
+
+Edit
+
+Reimagined tool call management with session-centric approach.
+10s
+
+
+
+
+
+
+
+
+
+
+你的想法非常正確！這樣的職責分離更清晰、更合理。
+
+重新設計：ChatSession 管理狀態，ToolCallManager 無狀態
+職責重新分配
+typescript
+// ChatSession - 負責狀態管理
+class ChatSession {
+  // 儲存工具調用相關狀態
+  private pendingToolCalls: ToolCall[] = []
+  private completedToolResults: ToolResult[] = []
+  private toolCallsAwaitingApproval: ToolCall[] = []
+  
+  // 其他現有狀態
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle'
+  // ...
+}
+
+// ToolCallManager - 純粹的執行引擎，無狀態
+class ToolCallManager {
+  // 不儲存任何狀態，純粹的 stateless service
+  async execute(toolCalls: ToolCall[]): Promise<ToolExecutionResult>
+  async executeSingle(toolCall: ToolCall): Promise<ToolResult>
+  // ...
+}
+具體流程設計
+typescript
+class ChatSession {
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    const aiResponse = await this.generateModelResponse()
+    
+    if (aiResponse.hasToolCalls) {
+      // 1. ChatSession 儲存待執行的工具調用
+      this.pendingToolCalls = aiResponse.toolCalls
+      
+      // 2. 委託給 stateless ToolCallManager 執行
+      const executionResult = await this.toolCallManager.execute(aiResponse.toolCalls)
+      
+      // 3. ChatSession 處理執行結果並更新狀態
+      return this.handleToolExecutionResult(executionResult)
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+  
+  private handleToolExecutionResult(result: ToolExecutionResult): ConversationResult {
+    // ChatSession 負責狀態更新
+    this.completedToolResults.push(...result.executed)
+    
+    if (result.needsApproval.length > 0) {
+      // 更新 session 狀態
+      this.toolCallsAwaitingApproval = result.needsApproval
+      this.status = 'waiting_confirmation'
+      
+      return {
+        status: 'waiting_confirmation',
+        toolCalls: result.needsApproval.map(tc => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+          needsConfirmation: true
+        }))
+      }
+    }
+    
+    // 所有工具都執行完成，繼續對話
+    return this.continueAfterToolExecution()
+  }
+}
+Stateless ToolCallManager 設計
+typescript
+interface ToolExecutionResult {
+  executed: ToolResult[]        // 成功執行的工具結果
+  needsApproval: ToolCall[]     // 需要用戶確認的工具
+  failed: ToolError[]           // 執行失敗的工具
+}
+
+class ToolCallManager {
+  // 完全 stateless，不儲存任何狀態
+  async execute(toolCalls: ToolCall[]): Promise<ToolExecutionResult> {
+    const executed: ToolResult[] = []
+    const needsApproval: ToolCall[] = []
+    const failed: ToolError[] = []
+    
+    // 處理每個工具調用
+    for (const toolCall of toolCalls) {
+      try {
+        const tool = this.toolRegistry.getTool(toolCall.name)
+        
+        // 檢查是否需要確認
+        if (await tool.needsConfirmation(toolCall.arguments)) {
+          needsApproval.push(toolCall)
+          continue
+        }
+        
+        // 執行工具
+        const result = await tool.execute(toolCall.arguments)
+        executed.push({ toolCallId: toolCall.id, result })
+        
+      } catch (error) {
+        failed.push({ toolCallId: toolCall.id, error })
+      }
+    }
+    
+    // 返回結果，不儲存狀態
+    return { executed, needsApproval, failed }
+  }
+  
+  // 單純執行已批准的工具，不管理狀態
+  async executeApproved(approvedToolCalls: ToolCall[]): Promise<ToolResult[]> {
+    // 同樣是 stateless 的純粹執行
+    const results: ToolResult[] = []
+    
+    for (const toolCall of approvedToolCalls) {
+      const tool = this.toolRegistry.getTool(toolCall.name)
+      const result = await tool.execute(toolCall.arguments)
+      results.push({ toolCallId: toolCall.id, result })
+    }
+    
+    return results
+  }
+}
+用戶確認流程
+typescript
+// ChatSession 處理用戶確認
+async confirmToolCall(toolCallId: string, approved: boolean): Promise<ConversationResult> {
+  if (this.status !== 'waiting_confirmation') {
+    throw new Error('No pending tool confirmations')
+  }
+  
+  // ChatSession 管理確認狀態
+  const toolCall = this.toolCallsAwaitingApproval.find(tc => tc.id === toolCallId)
+  if (!toolCall) {
+    throw new Error(`Tool call ${toolCallId} not found in pending approvals`)
+  }
+  
+  if (approved) {
+    // 委託給 stateless manager 執行
+    const results = await this.toolCallManager.executeApproved([toolCall])
+    
+    // ChatSession 更新狀態
+    this.completedToolResults.push(...results)
+  }
+  
+  // 從待確認列表移除
+  this.toolCallsAwaitingApproval = this.toolCallsAwaitingApproval.filter(tc => tc.id !== toolCallId)
+  
+  // 檢查是否還有待確認的工具
+  if (this.toolCallsAwaitingApproval.length === 0) {
+    this.status = 'idle'
+    return this.continueAfterToolExecution()
+  }
+  
+  // 還有其他工具等待確認
+  return {
+    status: 'waiting_confirmation',
+    toolCalls: this.toolCallsAwaitingApproval.map(tc => ({ /* ... */ }))
+  }
+}
+這樣設計的優點
+1. 清晰的職責分離
+ChatSession: 對話狀態管理者
+ToolCallManager: 純粹的工具執行引擎
+2. 符合現有架構
+ChatSession 本來就在管理 messages、status 等狀態
+工具調用狀態自然屬於對話狀態的一部分
+3. 易於測試和調試
+typescript
+// ToolCallManager 完全可預測，無副作用
+const result = await toolManager.execute(toolCalls)
+// 輸入相同，輸出必定相同
+
+// ChatSession 的狀態變化也很清楚
+console.log(session.pendingToolCalls)
+console.log(session.completedToolResults)
+4. 持久化自然
+typescript
+// ChatSession 序列化時包含工具狀態
+toJSON(): SerializableChat {
+  return {
+    // ...
+    pendingToolCalls: this.pendingToolCalls,
+    completedToolResults: this.completedToolResults,
+    toolCallsAwaitingApproval: this.toolCallsAwaitingApproval
+  }
+}
+這樣的設計既保持了簡潔性，又讓職責分工更清晰。ChatSession 作為狀態容器，ToolCallManager 作為無狀態的執行引擎，這是很好的架構決策！
+
+
+
+
+Retry
+目前的 tool-call-scheduler.ts 是 stateless 嗎？
+
+Edit
+
+判斷工具調用調度器不是無狀態的。
+13s
+
+
+
+
+
+
+
+不是，目前的 ToolCallScheduler 是 stateful 的。
+
+讓我指出它儲存的狀態：
+
+ToolCallScheduler 的狀態
+typescript
+export class ToolCallScheduler {
+  // 核心狀態儲存
+  private toolCalls: Map<string, ToolCall[]> = new Map() // messageId -> ToolCall[]
+  private pendingConfirmations: Map<string, WaitingToolCall> = new Map()
+  
+  // 其他配置狀態
+  private outputUpdateHandler?: OutputUpdateHandler
+  private onAllToolCallsComplete?: AllToolCallsCompleteHandler
+  private onToolCallsUpdate?: ToolCallsUpdateHandler
+}
+明顯的 Stateful 行為
+typescript
+// 1. 儲存工具調用狀態
+async execute(...) {
+  // 儲存到內部狀態
+  this.toolCalls.set(messageId, newToolCalls)
+  this.notifyToolCallsUpdate(messageId)
+}
+
+// 2. 查詢狀態的方法
+getToolCalls(messageId: string): ToolCall[] {
+  return this.toolCalls.get(messageId) || []
+}
+
+getPendingApprovals(): WaitingToolCall[] {
+  return Array.from(this.pendingConfirmations.values())
+}
+
+// 3. 狀態修改方法
+private setStatusInternal(messageId, targetCallId, newStatus, ...) {
+  const toolCalls = this.toolCalls.get(messageId) || []
+  // 修改狀態...
+  this.toolCalls.set(messageId, updatedToolCalls)
+}
+這證實了你的想法是對的
+現在的架構其實是雙重狀態管理：
+
+typescript
+// ChatSession 有自己的狀態
+class ChatSession {
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle' 
+  // ...
+}
+
+// ToolCallScheduler 也有自己的狀態
+class ToolCallScheduler {
+  private toolCalls: Map<string, ToolCall[]> = new Map()
+  private pendingConfirmations: Map<string, WaitingToolCall> = new Map()
+}
+這造成了：
+
+狀態分散 - 工具調用狀態分散在兩個地方
+同步問題 - 兩個狀態管理器可能不一致
+複雜性 - 需要協調兩套狀態系統
+你建議的改進
+typescript
+// ChatSession - 統一的狀態管理
+class ChatSession {
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle'
+  
+  // 工具調用狀態也由 ChatSession 管理
+  pendingToolCalls: ToolCall[] = []
+  completedToolResults: ToolResult[] = []
+  toolCallsAwaitingApproval: ToolCall[] = []
+}
+
+// ToolCallManager - 真正的 stateless
+class ToolCallManager {
+  // 純函數式的執行引擎，不儲存任何狀態
+  async execute(toolCalls: ToolCall[]): Promise<ToolExecutionResult> {
+    // 只負責執行，不儲存狀態
+  }
+}
+這樣的重構會大幅簡化架構：
+
+單一真相來源 - 所有狀態都在 ChatSession
+無狀態服務 - ToolCallManager 變成純粹的工具
+更容易測試 - stateless 組件更好測試
+更容易序列化 - 只需要序列化 ChatSession
+你的直覺很準確！當前的設計確實有狀態管理分散的問題。
+
+
+
+
+Retry
+async execute(toolCalls: ToolCall[]): Promise<ToolExecutionResult> {
+
+我們是不是可以直接在這裡給予 approves，例如 execute(toolCalls: ToolCall[], toolCallApprovals: ToolCallApproval[]?)？
+這樣 ChatSession 就只要保存 state，剩下的東西都交給 ToolCallManager 去做
+
+Edit
+
+Reimagined tool execution flow for clearer state management
+6s
+
+
+
+
+
+
+絕佳的想法！ 這樣設計讓 ToolCallManager 變成真正的 pure function，而 ChatSession 只專注於狀態管理。
+
+重新設計：Pure Function 的 ToolCallManager
+typescript
+interface ToolCallApproval {
+  toolCallId: string
+  approved: boolean
+  timestamp?: Date
+}
+
+interface ToolExecutionResult {
+  executed: ToolResult[]           // 這次執行完成的工具
+  stillNeedsApproval: ToolCall[]   // 仍需要用戶確認的工具  
+  failed: ToolError[]              // 執行失敗的工具
+}
+
+class ToolCallManager {
+  // 完全 stateless 的 pure function
+  async execute(
+    toolCalls: ToolCall[], 
+    approvals?: ToolCallApproval[]
+  ): Promise<ToolExecutionResult> {
+    
+    const approvalMap = new Map(
+      approvals?.map(a => [a.toolCallId, a.approved]) || []
+    )
+    
+    const executed: ToolResult[] = []
+    const stillNeedsApproval: ToolCall[] = []
+    const failed: ToolError[] = []
+    
+    for (const toolCall of toolCalls) {
+      try {
+        // 檢查是否已有approval決定
+        const hasApproval = approvalMap.has(toolCall.id)
+        const isApproved = approvalMap.get(toolCall.id)
+        
+        if (hasApproval && !isApproved) {
+          // 用戶拒絕了，跳過
+          continue
+        }
+        
+        const tool = this.toolRegistry.getTool(toolCall.name)
+        const needsConfirmation = await tool.needsConfirmation(toolCall.arguments)
+        
+        if (needsConfirmation && !hasApproval) {
+          // 需要確認但沒有approval
+          stillNeedsApproval.push(toolCall)
+          continue
+        }
+        
+        // 可以執行：要麼不需要確認，要麼已經被批准
+        const result = await tool.execute(toolCall.arguments)
+        executed.push({ toolCallId: toolCall.id, result })
+        
+      } catch (error) {
+        failed.push({ toolCallId: toolCall.id, error })
+      }
+    }
+    
+    return { executed, stillNeedsApproval, failed }
+  }
+}
+ChatSession 的簡化狀態管理
+typescript
+class ChatSession {
+  // 狀態管理
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle'
+  
+  // 工具調用相關狀態
+  private pendingToolCalls: ToolCall[] = []
+  private toolCallApprovals: ToolCallApproval[] = []
+  private completedToolResults: ToolResult[] = []
+  
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    const aiResponse = await this.generateModelResponse()
+    
+    if (aiResponse.hasToolCalls) {
+      // 儲存新的工具調用
+      this.pendingToolCalls = aiResponse.toolCalls
+      
+      // 一次性執行，傳入現有的approvals
+      const result = await this.toolCallManager.execute(
+        this.pendingToolCalls,
+        this.toolCallApprovals
+      )
+      
+      return this.handleToolResult(result)
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+  
+  private handleToolResult(result: ToolExecutionResult): ConversationResult {
+    // 更新狀態
+    this.completedToolResults.push(...result.executed)
+    this.pendingToolCalls = result.stillNeedsApproval
+    
+    if (result.stillNeedsApproval.length > 0) {
+      this.status = 'waiting_confirmation'
+      return {
+        status: 'waiting_confirmation',
+        toolCalls: result.stillNeedsApproval.map(tc => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+          needsConfirmation: true
+        }))
+      }
+    }
+    
+    // 所有工具都執行完成
+    this.status = 'idle'
+    return this.continueAfterToolExecution()
+  }
+}
+用戶確認的極簡流程
+typescript
+async confirmToolCall(toolCallId: string, approved: boolean): Promise<ConversationResult> {
+  // 1. 只需要更新approval狀態
+  this.toolCallApprovals.push({
+    toolCallId,
+    approved,
+    timestamp: new Date()
+  })
+  
+  // 2. 重新執行所有pending的工具調用
+  const result = await this.toolCallManager.execute(
+    this.pendingToolCalls,
+    this.toolCallApprovals  // 包含新的approval
+  )
+  
+  // 3. 處理結果
+  return this.handleToolResult(result)
+}
+這樣設計的優勢
+1. Pure Function 的威力
+typescript
+// ToolCallManager.execute() 變成完全可預測的 pure function
+const result1 = await manager.execute(toolCalls, approvals)
+const result2 = await manager.execute(toolCalls, approvals)
+// result1 === result2 (相同輸入，相同輸出)
+2. 狀態管理極簡
+typescript
+// ChatSession 只需要維護三個簡單的陣列
+private pendingToolCalls: ToolCall[] = []
+private toolCallApprovals: ToolCallApproval[] = []  
+private completedToolResults: ToolResult[] = []
+3. 邏輯統一
+typescript
+// 不管是初次執行還是確認後執行，都是同一個方法
+await this.toolCallManager.execute(toolCalls, approvals)
+4. 容易測試
+typescript
+// 測試變得超級簡單
+const manager = new ToolCallManager(mockRegistry)
+const result = await manager.execute(
+  [{ id: '1', name: 'test', arguments: {} }],
+  [{ toolCallId: '1', approved: true }]
+)
+expect(result.executed).toHaveLength(1)
+這個設計讓 ChatSession 純粹做狀態管理，ToolCallManager 純粹做邏輯處理，職責分離得非常清晰！而且確實比我之前提議的 event-driven 方式簡單得多。
+
+
+
+
+Retry
+請把我們討論的重新整理
+
+Edit
+
+重新整理 tool-call 系統架構和設計方案
+6s
+
+
+
+Tool Call 系統重構設計
+當前問題分析
+1. 架構不一致
+Chat Engine: 純 event-driven，清爽的 session 管理
+Tool Call: 混合 callback + event，複雜的狀態管理
+2. 雙重狀態管理
+typescript
+// 狀態分散在兩個地方
+class ChatSession {
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle'
+}
+
+class ToolCallScheduler {
+  private toolCalls: Map<string, ToolCall[]> = new Map()
+  private pendingConfirmations: Map<string, WaitingToolCall> = new Map()
+}
+3. 過度複雜的狀態機
+7 個狀態：validating | scheduled | executing | success | error | cancelled | awaiting_approval
+100+ 行的複雜狀態轉換邏輯
+Callback 架構與系統其他部分不一致
+4. 未完成的整合
+ChatSession 有初始化 ToolCallScheduler，但實際還沒真正使用
+executeTools() 方法還是 placeholder 實現
+重構設計方案
+核心設計原則
+ChatSession 統一狀態管理 - 所有狀態都由 ChatSession 管理
+ToolCallManager 作為 Pure Function - 完全 stateless 的執行引擎
+直接方法調用 - 避免過度複雜的 event-driven 架構
+簡化狀態機 - 減少不必要的中間狀態
+新架構設計
+1. ToolCallManager (Stateless Pure Function)
+typescript
+interface ToolCallApproval {
+  toolCallId: string
+  approved: boolean
+  timestamp?: Date
+}
+
+interface ToolExecutionResult {
+  executed: ToolResult[]           // 這次執行完成的工具
+  stillNeedsApproval: ToolCall[]   // 仍需要用戶確認的工具  
+  failed: ToolError[]              // 執行失敗的工具
+}
+
+class ToolCallManager {
+  // 完全 stateless 的 pure function
+  async execute(
+    toolCalls: ToolCall[], 
+    approvals?: ToolCallApproval[]
+  ): Promise<ToolExecutionResult> {
+    
+    const approvalMap = new Map(
+      approvals?.map(a => [a.toolCallId, a.approved]) || []
+    )
+    
+    const executed: ToolResult[] = []
+    const stillNeedsApproval: ToolCall[] = []
+    const failed: ToolError[] = []
+    
+    for (const toolCall of toolCalls) {
+      // 檢查approval狀態
+      const hasApproval = approvalMap.has(toolCall.id)
+      const isApproved = approvalMap.get(toolCall.id)
+      
+      if (hasApproval && !isApproved) {
+        continue // 用戶拒絕，跳過
+      }
+      
+      const tool = this.toolRegistry.getTool(toolCall.name)
+      const needsConfirmation = await tool.needsConfirmation(toolCall.arguments)
+      
+      if (needsConfirmation && !hasApproval) {
+        stillNeedsApproval.push(toolCall)
+        continue
+      }
+      
+      // 執行工具
+      try {
+        const result = await tool.execute(toolCall.arguments)
+        executed.push({ toolCallId: toolCall.id, result })
+      } catch (error) {
+        failed.push({ toolCallId: toolCall.id, error })
+      }
+    }
+    
+    return { executed, stillNeedsApproval, failed }
+  }
+}
+2. ChatSession (統一狀態管理)
+typescript
+class ChatSession {
+  // 原有狀態
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle'
+  
+  // 工具調用狀態（統一管理）
+  private pendingToolCalls: ToolCall[] = []
+  private toolCallApprovals: ToolCallApproval[] = []
+  private completedToolResults: ToolResult[] = []
+  
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    const aiResponse = await this.generateModelResponse()
+    
+    if (aiResponse.hasToolCalls) {
+      // 儲存新的工具調用
+      this.pendingToolCalls = aiResponse.toolCalls
+      
+      // 一次性執行，傳入現有的approvals
+      const result = await this.toolCallManager.execute(
+        this.pendingToolCalls,
+        this.toolCallApprovals
+      )
+      
+      return this.handleToolResult(result)
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+  
+  private handleToolResult(result: ToolExecutionResult): ConversationResult {
+    // 更新狀態
+    this.completedToolResults.push(...result.executed)
+    this.pendingToolCalls = result.stillNeedsApproval
+    
+    if (result.stillNeedsApproval.length > 0) {
+      this.status = 'waiting_confirmation'
+      return {
+        status: 'waiting_confirmation',
+        toolCalls: result.stillNeedsApproval.map(tc => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+          needsConfirmation: true
+        }))
+      }
+    }
+    
+    // 所有工具都執行完成
+    this.status = 'idle'
+    return this.continueAfterToolExecution()
+  }
+  
+  async confirmToolCall(toolCallId: string, approved: boolean): Promise<ConversationResult> {
+    // 1. 更新approval狀態
+    this.toolCallApprovals.push({
+      toolCallId,
+      approved,
+      timestamp: new Date()
+    })
+    
+    // 2. 重新執行所有pending的工具調用
+    const result = await this.toolCallManager.execute(
+      this.pendingToolCalls,
+      this.toolCallApprovals
+    )
+    
+    // 3. 處理結果
+    return this.handleToolResult(result)
+  }
+}
+重構優勢
+1. 架構一致性
+ChatSession 統一狀態管理，與現有架構一致
+移除雙重狀態管理的複雜性
+2. Pure Function 的威力
+typescript
+// ToolCallManager.execute() 完全可預測
+const result1 = await manager.execute(toolCalls, approvals)
+const result2 = await manager.execute(toolCalls, approvals) 
+// result1 === result2 (相同輸入，相同輸出)
+3. 簡化的狀態管理
+typescript
+// 只需要三個簡單的陣列
+private pendingToolCalls: ToolCall[] = []
+private toolCallApprovals: ToolCallApproval[] = []  
+private completedToolResults: ToolResult[] = []
+4. 統一的執行邏輯
+typescript
+// 初次執行和確認後執行都是同一個方法
+await this.toolCallManager.execute(toolCalls, approvals)
+5. 容易測試
+typescript
+// 測試變得超級簡單
+const manager = new ToolCallManager(mockRegistry)
+const result = await manager.execute(
+  [{ id: '1', name: 'test', arguments: {} }],
+  [{ toolCallId: '1', approved: true }]
+)
+expect(result.executed).toHaveLength(1)
+6. 自然的持久化
+typescript
+// ChatSession 序列化時包含所有狀態
+toJSON(): SerializableChat {
+  return {
+    // 原有字段...
+    pendingToolCalls: this.pendingToolCalls,
+    toolCallApprovals: this.toolCallApprovals,
+    completedToolResults: this.completedToolResults
+  }
+}
+其他改進
+1. 命名
+ToolCallScheduler → ToolCallManager
+
+2. 與 AI SDK 類型統一
+typescript
+import { ToolCall, ToolInvocation } from 'ai'
+
+// 只在需要時擴展
+interface EnhancedToolCall extends ToolCall {
+  // 額外字段...
+}
+3. MCP 整合
+保持現有的 MCP 架構，但簡化狀態管理部分
+
+總結
+這個重構方案的核心是：ChatSession 專注於狀態管理，ToolCallManager 專注於純粹的執行邏輯。透過在 execute() 方法中直接傳入 approvals，我們實現了真正的關注點分離，同時大幅簡化了整個系統的複雜度。
+
+
+
+
+Retry
+叫 ToolCallRunner 會不會比較適合？或是有其他建議的名稱
+因為他已經 stateless
+
+Edit
+
+評估命名選項，認為 ToolCallRunner 最適合 stateless 類別
+9s
+
+
+
+
+你的直覺很準確！ ToolCallRunner 確實比 ToolCallManager 更適合。
+
+命名分析
+為什麼 ToolCallRunner 更好
+typescript
+// Manager 暗示狀態管理職責
+class ToolCallManager {
+  // 讓人期待看到這些...
+  private state: SomeState
+  public getState() { }
+  public setState() { }
+  public reset() { }
+}
+
+// Runner 暗示純粹的執行職責  
+class ToolCallRunner {
+  // 符合期待：stateless 的執行引擎
+  async execute(input) { /* 純粹執行邏輯 */ }
+}
+其他候選名稱比較
+ToolCallRunner ⭐ (推薦)
+✅ 清楚表達「運行/執行」的職責
+✅ 暗示 stateless 的特性
+✅ 簡潔直觀
+ToolCallExecutor
+✅ 正式，明確表達執行職責
+✅ 在很多系統中是常見模式
+❓ 稍微正式，但也很好
+ToolCallEngine
+✅ 暗示處理引擎的概念
+❌ 可能暗示內部有複雜狀態機制
+ToolCallProcessor
+✅ 表達處理的職責
+❌ 沒有 Runner 那麼直觀
+ToolCallService
+❌ 太通用，沒有明確表達 stateless 特性
+最終建議
+我投票給 ToolCallRunner，原因：
+
+1. 語義精確
+typescript
+// 名稱直接反映功能
+const runner = new ToolCallRunner(toolRegistry)
+const result = await runner.execute(toolCalls, approvals)
+// 一看就知道：這是個執行工具的 runner
+2. 符合 Stateless 特性
+typescript
+// Runner 通常暗示無狀態的執行單元
+class ToolCallRunner {
+  // 不會讓人期待看到狀態管理方法
+  async execute() { /* 純粹執行邏輯 */ }
+}
+3. 與系統命名保持和諧
+typescript
+// 與其他類名的風格一致
+ChatSession    // 狀態管理
+TaskService    // 業務邏輯  
+ToolCallRunner // 純粹執行
+4. 未來擴展友好
+typescript
+// 如果未來需要不同的執行策略
+class ToolCallRunner { }
+class ParallelToolCallRunner extends ToolCallRunner { }
+class SequentialToolCallRunner extends ToolCallRunner { }
+所以最終架構會是：
+
+typescript
+class ChatSession {
+  private toolCallRunner: ToolCallRunner
+  
+  async runTurn(input: TurnInput) {
+    // ...
+    const result = await this.toolCallRunner.execute(toolCalls, approvals)
+    // ...
+  }
+}
+
+class ToolCallRunner {
+  async execute(
+    toolCalls: ToolCall[], 
+    approvals?: ToolCallApproval[]
+  ): Promise<ToolExecutionResult> {
+    // 純粹的執行邏輯
+  }
+}
+ToolCallRunner 確實是最佳選擇！👍
+
+
+
+
+Retry
+過度複雜的狀態機 7 個狀態：validating | scheduled | executing | success | error | cancelled | awaiting_approval 100+ 行的複雜狀態轉換邏輯
+我是覺得可以保留原本的狀態，這些狀態也確實有意義
+100+ 行的複雜狀態轉換邏輯 -> 主要是這個問題，為什麼需要複雜狀態轉換？為什麼他會搞得複雜？有沒有簡便的做法？
+
+Edit
+
+解析複雜狀態轉換，提出簡化設計方案
+17s
+
+
+
+
+你說得很對！狀態本身是有意義的，問題在於狀態轉換的實現方式過於複雜。
+
+為什麼目前的狀態轉換這麼複雜？
+問題根源：Discriminated Union 設計
+typescript
+// 每個狀態都是不同的 TypeScript type
+type ValidatingToolCall = {
+  status: "validating"
+  request: ToolCallRequestInfo
+  tool: Tool
+  startTime?: number
+}
+
+type ExecutingToolCall = {
+  status: "executing"  
+  request: ToolCallRequestInfo
+  tool: Tool
+  liveOutput?: string    // 只有執行狀態才有
+  startTime?: number
+}
+
+type SuccessfulToolCall = {
+  status: "success"
+  request: ToolCallRequestInfo
+  tool: Tool
+  response: ToolCallResponseInfo  // 只有成功狀態才有
+  durationMs?: number
+}
+
+// 更多狀態...
+複雜狀態轉換的原因
+typescript
+// 狀態轉換 = 重新構造整個對象
+private setStatusInternal(...) {
+  switch (newStatus) {
+    case "success":
+      return {
+        request: currentCall.request,
+        tool: toolInstance,
+        status: "success",
+        response: auxiliaryData,           // 新增字段
+        durationMs: extraData?.durationMs, // 新增字段
+        outcome,                           // 保留字段
+      } as SuccessfulToolCall             // 強制轉型
+
+    case "executing":
+      return {
+        request: currentCall.request,
+        tool: toolInstance, 
+        status: "executing",
+        liveOutput: "",                    // 新增字段
+        startTime: existingStartTime,      // 保留字段
+      } as ExecutingToolCall
+      
+    // 每個狀態都要重新構造...
+  }
+}
+問題：
+
+每次狀態轉換都要重新構造整個對象
+需要決定哪些字段保留、哪些新增
+TypeScript 類型轉換複雜
+容易遺漏字段或類型錯誤
+簡化方案：統一 ToolCall 結構
+保留狀態，簡化轉換
+typescript
+// 統一的 ToolCall 結構，所有字段都是 optional
+interface ToolCall {
+  // 基本信息
+  id: string
+  request: ToolCallRequestInfo
+  tool: Tool
+  
+  // 狀態
+  status: "validating" | "scheduled" | "executing" | "success" | "error" | "cancelled" | "awaiting_approval"
+  
+  // 時間追蹤
+  startTime?: number
+  endTime?: number
+  durationMs?: number
+  
+  // 執行相關
+  liveOutput?: string
+  response?: ToolCallResponseInfo
+  error?: string
+  
+  // 確認相關
+  confirmationDetails?: ToolCallConfirmationDetails
+  outcome?: ToolConfirmationOutcome
+}
+極簡的狀態轉換
+typescript
+class ToolCallRunner {
+  private updateToolCallStatus(
+    toolCall: ToolCall, 
+    newStatus: ToolCall["status"],
+    updates?: Partial<ToolCall>
+  ): ToolCall {
+    // 簡單的對象更新，不需要重構
+    return {
+      ...toolCall,
+      status: newStatus,
+      updatedAt: new Date(),
+      ...updates  // 只更新需要的字段
+    }
+  }
+  
+  // 使用範例
+  async executeTool(toolCall: ToolCall): Promise<ToolCall> {
+    // 開始執行
+    let updated = this.updateToolCallStatus(toolCall, "executing", {
+      startTime: Date.now()
+    })
+    
+    try {
+      const result = await toolCall.tool.execute(toolCall.request.args)
+      
+      // 執行成功
+      return this.updateToolCallStatus(updated, "success", {
+        response: { result, error: null },
+        endTime: Date.now(),
+        durationMs: Date.now() - updated.startTime!
+      })
+      
+    } catch (error) {
+      // 執行失敗
+      return this.updateToolCallStatus(updated, "error", {
+        error: error.message,
+        endTime: Date.now(),
+        durationMs: Date.now() - updated.startTime!
+      })
+    }
+  }
+}
+狀態檢查變得簡單
+typescript
+// 不需要複雜的 type guard
+function isExecuting(toolCall: ToolCall): boolean {
+  return toolCall.status === "executing"
+}
+
+function hasLiveOutput(toolCall: ToolCall): boolean {
+  return !!toolCall.liveOutput
+}
+
+function isCompleted(toolCall: ToolCall): boolean {
+  return ["success", "error", "cancelled"].includes(toolCall.status)
+}
+保留狀態語義的好處
+1. 清楚的執行階段
+typescript
+// 狀態轉換流程依然清楚
+"validating" → "scheduled" → "executing" → "success"
+            ↘             ↗              ↘ "error"  
+              "awaiting_approval"         ↘ "cancelled"
+2. 豐富的狀態信息
+typescript
+// 每個狀態都有明確的語義
+switch (toolCall.status) {
+  case "validating":
+    showSpinner("Checking permissions...")
+    break
+  case "awaiting_approval": 
+    showApprovalDialog(toolCall.confirmationDetails)
+    break
+  case "executing":
+    showProgress(toolCall.liveOutput)
+    break
+  case "success":
+    showResult(toolCall.response)
+    break
+}
+3. 更好的 UI/UX
+typescript
+// 不同狀態可以有不同的視覺呈現
+const getStatusColor = (status: ToolCall["status"]) => {
+  switch (status) {
+    case "validating": return "yellow"
+    case "scheduled": return "blue" 
+    case "executing": return "orange"
+    case "success": return "green"
+    case "error": return "red"
+    case "cancelled": return "gray"
+    case "awaiting_approval": return "purple"
+  }
+}
+總結
+保留 7 個狀態，但簡化狀態轉換邏輯：
+
+統一 ToolCall 結構 - 避免 discriminated union 的複雜性
+簡單的狀態更新 - 只修改需要的字段，不重構整個對象
+保留狀態語義 - 每個狀態依然有清楚的意義
+減少 TypeScript 複雜度 - 不需要複雜的類型轉換
+這樣既保持了狀態的表達能力，又大幅簡化了實現複雜度！
+
+
+
+
+Retry
+這樣還需要 updateToolCallStatus 嗎？
+為什麼不直接 return { args, ...rest }
+
+Edit
+
+重新評估方法，直接使用 spread operator 更簡潔
+7s
+
+
+
+
+
+
+
+你說得完全正確！ 我過度設計了。既然已經統一了 ToolCall 結構，直接用 spread operator 更簡潔直觀。
+
+直接更新 vs Helper 方法
+直接更新（推薦）
+typescript
+async executeTool(toolCall: ToolCall): Promise<ToolCall> {
+  // 開始執行
+  const executing = {
+    ...toolCall,
+    status: "executing" as const,
+    startTime: Date.now()
+  }
+  
+  try {
+    const result = await toolCall.tool.execute(toolCall.request.args)
+    
+    // 執行成功
+    return {
+      ...executing,
+      status: "success" as const,
+      response: { result, error: null },
+      endTime: Date.now(),
+      durationMs: Date.now() - executing.startTime!
+    }
+    
+  } catch (error) {
+    // 執行失敗  
+    return {
+      ...executing,
+      status: "error" as const,
+      error: error.message,
+      endTime: Date.now(),
+      durationMs: Date.now() - executing.startTime!
+    }
+  }
+}
+為什麼直接更新更好
+更簡潔直觀
+typescript
+// 直接看到在更新什麼
+return {
+  ...toolCall,
+  status: "success",
+  response: result
+}
+
+// vs 需要去理解 helper 方法做了什麼
+return this.updateToolCallStatus(toolCall, "success", { response: result })
+減少抽象層級
+typescript
+// 沒有不必要的中間層
+const updated = { ...toolCall, status: "executing" }
+
+// vs 多了一層抽象
+const updated = this.updateToolCallStatus(toolCall, "executing")
+TypeScript 類型推斷更好
+typescript
+// TypeScript 直接知道新對象的類型
+const success = {
+  ...toolCall,
+  status: "success" as const,
+  response: result
+}
+// success.status 的類型是 "success"
+
+// vs helper 方法可能需要額外的類型註解
+什麼時候才需要 Helper 方法？
+只在有共通邏輯時才考慮：
+
+typescript
+// 如果每次狀態更新都需要做這些事情
+private updateToolCallStatus(toolCall: ToolCall, newStatus: string, updates: Partial<ToolCall>) {
+  return {
+    ...toolCall,
+    ...updates,
+    status: newStatus,
+    updatedAt: new Date(),           // 統一時間戳
+    version: toolCall.version + 1    // 版本控制
+  }
+}
+
+// 或者需要狀態轉換驗證
+private updateToolCallStatus(toolCall: ToolCall, newStatus: string, updates: Partial<ToolCall>) {
+  this.validateStateTransition(toolCall.status, newStatus)  // 驗證合法性
+  this.logStateChange(toolCall.id, toolCall.status, newStatus)  // 日誌記錄
+  
+  return { ...toolCall, ...updates, status: newStatus }
+}
+但在我們的場景中，沒有這些需求，所以直接用 spread operator 就是最佳選擇！
+
+簡化後的完整範例
+typescript
+class ToolCallRunner {
+  async execute(toolCalls: ToolCall[], approvals?: ToolCallApproval[]): Promise<ToolExecutionResult> {
+    const executed: ToolResult[] = []
+    const stillNeedsApproval: ToolCall[] = []
+    const failed: ToolError[] = []
+    
+    for (const toolCall of toolCalls) {
+      // 直接更新狀態，簡潔明瞭
+      const validating = {
+        ...toolCall,
+        status: "validating" as const,
+        startTime: Date.now()
+      }
+      
+      // 檢查 approval 邏輯...
+      
+      const executing = {
+        ...validating,
+        status: "executing" as const
+      }
+      
+      try {
+        const result = await toolCall.tool.execute(toolCall.request.args)
+        
+        const success = {
+          ...executing,
+          status: "success" as const,
+          response: { result, error: null },
+          endTime: Date.now(),
+          durationMs: Date.now() - executing.startTime!
+        }
+        
+        executed.push({ toolCallId: success.id, result })
+        
+      } catch (error) {
+        const failed = {
+          ...executing,
+          status: "error" as const,
+          error: error.message,
+          endTime: Date.now(),
+          durationMs: Date.now() - executing.startTime!
+        }
+        
+        failed.push({ toolCallId: failed.id, error })
+      }
+    }
+    
+    return { executed, stillNeedsApproval, failed }
+  }
+}
+結論：你的直覺很對，直接用 { ...toolCall, status: "new_status" } 就夠了！簡單、直觀、高效。👍
+
+
+
+
+Retry
+okay 請再重新整理一次以上整個討論
+
+Edit
+
+
+
+Analyzed tool-call system and proposed redesign strategy.
+3s
+
+
+
+
+Tool Call 系統重構設計總結
+當前系統分析
+Tool Call 系統運作流程
+初始化與驗證：創建 ToolCall 對象（validating 狀態）
+權限檢查：根據 ApprovalMode 和工具危險等級決定是否需要用戶確認
+並行執行：所有 scheduled 狀態的工具並行執行
+狀態管理：複雜的 7 狀態狀態機管理
+MCP 支援架構
+透過 ToolRegistry.registerMCPServer() 註冊 MCP 伺服器
+創建 MCP 工具包裝器，統一 Tool 介面
+目前是 mock 實現，但架構已準備好真實整合
+核心問題識別
+1. 雙重狀態管理
+typescript
+// 狀態分散在兩個地方
+class ChatSession {
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle'
+}
+
+class ToolCallScheduler {  // ← 這是 stateful 的！
+  private toolCalls: Map<string, ToolCall[]> = new Map()
+  private pendingConfirmations: Map<string, WaitingToolCall> = new Map()
+}
+2. 架構不一致
+Chat Engine: 純 event-driven，清爽的 session 管理
+Tool Call: 混合 callback + event，複雜的狀態管理
+3. 過度複雜的狀態轉換
+typescript
+// 100+ 行的複雜邏輯
+private setStatusInternal(messageId, targetCallId, newStatus, auxiliaryData?, extraData?) {
+  switch (newStatus) {
+    case "success":
+      return {
+        request: currentCall.request,
+        tool: toolInstance,
+        status: "success",
+        response: auxiliaryData,           // 需要重新構造整個對象
+        durationMs: extraData?.durationMs,
+        outcome,
+      } as SuccessfulToolCall             // 複雜的類型轉換
+    // ... 更多狀態處理
+  }
+}
+問題根源：使用 Discriminated Union 設計，每次狀態轉換都要重新構造整個對象。
+
+重構設計方案
+核心設計決策
+ChatSession 統一狀態管理 - 所有狀態都由 ChatSession 管理
+ToolCallRunner 作為 Pure Function - 完全 stateless 的執行引擎
+直接方法調用 - 避免 event-driven 的過度複雜性
+簡化狀態轉換 - 統一 ToolCall 結構，直接更新字段
+新架構設計
+1. ToolCallRunner (Stateless Pure Function)
+typescript
+interface ToolCallApproval {
+  toolCallId: string
+  approved: boolean
+  timestamp?: Date
+}
+
+interface ToolExecutionResult {
+  executed: ToolResult[]           // 這次執行完成的工具
+  stillNeedsApproval: ToolCall[]   // 仍需要用戶確認的工具  
+  failed: ToolError[]              // 執行失敗的工具
+}
+
+class ToolCallRunner {
+  // 完全 stateless 的 pure function
+  async execute(
+    toolCalls: ToolCall[], 
+    approvals?: ToolCallApproval[]  // 關鍵創新：直接傳入 approvals
+  ): Promise<ToolExecutionResult> {
+    
+    const approvalMap = new Map(
+      approvals?.map(a => [a.toolCallId, a.approved]) || []
+    )
+    
+    const executed: ToolResult[] = []
+    const stillNeedsApproval: ToolCall[] = []
+    const failed: ToolError[] = []
+    
+    for (const toolCall of toolCalls) {
+      // 檢查approval狀態
+      const hasApproval = approvalMap.has(toolCall.id)
+      const isApproved = approvalMap.get(toolCall.id)
+      
+      if (hasApproval && !isApproved) {
+        continue // 用戶拒絕，跳過
+      }
+      
+      const tool = this.toolRegistry.getTool(toolCall.name)
+      const needsConfirmation = await tool.needsConfirmation(toolCall.arguments)
+      
+      if (needsConfirmation && !hasApproval) {
+        stillNeedsApproval.push(toolCall)
+        continue
+      }
+      
+      // 執行工具
+      const executing = {
+        ...toolCall,
+        status: "executing" as const,
+        startTime: Date.now()
+      }
+      
+      try {
+        const result = await tool.execute(toolCall.arguments)
+        
+        const success = {
+          ...executing,
+          status: "success" as const,
+          response: { result, error: null },
+          endTime: Date.now(),
+          durationMs: Date.now() - executing.startTime!
+        }
+        
+        executed.push({ toolCallId: success.id, result })
+        
+      } catch (error) {
+        const errorResult = {
+          ...executing,
+          status: "error" as const,
+          error: error.message,
+          endTime: Date.now(),
+          durationMs: Date.now() - executing.startTime!
+        }
+        
+        failed.push({ toolCallId: errorResult.id, error })
+      }
+    }
+    
+    return { executed, stillNeedsApproval, failed }
+  }
+}
+2. ChatSession (統一狀態管理)
+typescript
+class ChatSession {
+  // 原有狀態
+  messages: ChatMessage[] = []
+  status: ChatStatus = 'idle'
+  
+  // 工具調用狀態（統一管理）
+  private pendingToolCalls: ToolCall[] = []
+  private toolCallApprovals: ToolCallApproval[] = []
+  private completedToolResults: ToolResult[] = []
+  
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    const aiResponse = await this.generateModelResponse()
+    
+    if (aiResponse.hasToolCalls) {
+      // 儲存新的工具調用
+      this.pendingToolCalls = aiResponse.toolCalls
+      
+      // 一次性執行，傳入現有的approvals
+      const result = await this.toolCallRunner.execute(
+        this.pendingToolCalls,
+        this.toolCallApprovals
+      )
+      
+      return this.handleToolResult(result)
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+  
+  private handleToolResult(result: ToolExecutionResult): ConversationResult {
+    // 更新狀態
+    this.completedToolResults.push(...result.executed)
+    this.pendingToolCalls = result.stillNeedsApproval
+    
+    if (result.stillNeedsApproval.length > 0) {
+      this.status = 'waiting_confirmation'
+      return {
+        status: 'waiting_confirmation',
+        toolCalls: result.stillNeedsApproval.map(tc => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: tc.arguments,
+          needsConfirmation: true
+        }))
+      }
+    }
+    
+    // 所有工具都執行完成
+    this.status = 'idle'
+    return this.continueAfterToolExecution()
+  }
+  
+  async confirmToolCall(toolCallId: string, approved: boolean): Promise<ConversationResult> {
+    // 1. 更新approval狀態
+    this.toolCallApprovals.push({
+      toolCallId,
+      approved,
+      timestamp: new Date()
+    })
+    
+    // 2. 重新執行所有pending的工具調用（統一邏輯！）
+    const result = await this.toolCallRunner.execute(
+      this.pendingToolCalls,
+      this.toolCallApprovals
+    )
+    
+    // 3. 處理結果
+    return this.handleToolResult(result)
+  }
+}
+3. 簡化的狀態管理
+統一 ToolCall 結構
+typescript
+// 統一結構，避免 Discriminated Union 的複雜性
+interface ToolCall {
+  // 基本信息
+  id: string
+  request: ToolCallRequestInfo
+  tool: Tool
+  
+  // 狀態（保留原有的 7 個狀態，它們有意義）
+  status: "validating" | "scheduled" | "executing" | "success" | "error" | "cancelled" | "awaiting_approval"
+  
+  // 時間追蹤
+  startTime?: number
+  endTime?: number
+  durationMs?: number
+  
+  // 執行相關
+  liveOutput?: string
+  response?: ToolCallResponseInfo
+  error?: string
+  
+  // 確認相關
+  confirmationDetails?: ToolCallConfirmationDetails
+  outcome?: ToolConfirmationOutcome
+}
+極簡的狀態轉換
+typescript
+// 不需要複雜的 helper 方法，直接用 spread operator
+const executing = {
+  ...toolCall,
+  status: "executing" as const,
+  startTime: Date.now()
+}
+
+const success = {
+  ...executing,
+  status: "success" as const,
+  response: { result, error: null },
+  endTime: Date.now(),
+  durationMs: Date.now() - executing.startTime!
+}
+設計決策的關鍵洞察
+1. 為什麼選擇直接調用而非 Event-Driven？
+typescript
+// Event 方式 - 過度複雜
+await toolManager.execute(toolCalls)
+this.eventBus.subscribe("TOOL_COMPLETED", ...)
+this.eventBus.subscribe("TOOL_NEEDS_APPROVAL", ...)
+
+// 直接方式 - 簡單直觀
+const result = await toolRunner.execute(toolCalls, approvals)
+if (result.stillNeedsApproval.length > 0) {
+  return { status: 'waiting_confirmation', toolCalls: result.stillNeedsApproval }
+}
+理由：ChatSession ↔ ToolRunner 是一對一的緊密合作關係，不是鬆耦合的發布訂閱場景。
+
+2. 為什麼在 execute() 中直接傳入 approvals？
+typescript
+// 統一邏輯：初次執行和確認後執行都是同一個方法
+await this.toolCallRunner.execute(toolCalls, approvals)
+優勢：
+
+ChatSession 純粹做狀態管理
+ToolCallRunner 純粹做執行邏輯
+真正的 Pure Function - 相同輸入，相同輸出
+3. 為什麼命名為 ToolCallRunner？
+Manager 暗示狀態管理職責
+Runner 暗示 stateless 的執行引擎
+語義精確，符合實際功能
+重構優勢總結
+1. 架構一致性
+移除雙重狀態管理
+與 ChatEngine 保持一致的設計模式
+2. Pure Function 的威力
+typescript
+// 完全可預測
+const result1 = await runner.execute(toolCalls, approvals)
+const result2 = await runner.execute(toolCalls, approvals) 
+// result1 === result2
+3. 狀態管理簡化
+typescript
+// 只需要三個簡單的陣列
+private pendingToolCalls: ToolCall[] = []
+private toolCallApprovals: ToolCallApproval[] = []  
+private completedToolResults: ToolResult[] = []
+4. 測試友好
+typescript
+// 測試變得簡單
+const runner = new ToolCallRunner(mockRegistry)
+const result = await runner.execute(
+  [{ id: '1', name: 'test', arguments: {} }],
+  [{ toolCallId: '1', approved: true }]
+)
+expect(result.executed).toHaveLength(1)
+5. 自然的持久化
+typescript
+// ChatSession 序列化包含所有狀態
+toJSON(): SerializableChat {
+  return {
+    // 原有字段...
+    pendingToolCalls: this.pendingToolCalls,
+    toolCallApprovals: this.toolCallApprovals,
+    completedToolResults: this.completedToolResults
+  }
+}
+其他改進
+與 AI SDK 類型統一 - 使用 AI SDK 標準類型，只在需要時擴展
+保留 MCP 架構 - 維持現有 MCP 整合設計
+保留 7 個狀態 - 狀態本身有意義，只簡化轉換邏輯
+結論
+這個重構的核心是：ChatSession 專注於狀態管理，ToolCallRunner 專注於純粹的執行邏輯。透過在 execute() 方法中直接傳入 approvals，實現了真正的關注點分離，同時大幅簡化了系統複雜度。
+
+關鍵創新：狀態管理歸一化 + Pure Function 執行引擎 + 統一的調用模式
+
+
+
+
+Retry
+請再檢查確認
+
+class ToolCallRunner {
+  // 完全 stateless 的 pure function
+  async execute(
+
+如果完全 stateless，那完全可以獨立成一個 executeToolCall function
+但我記得 tool call 是要搭配 registry
+所以還是需要 class
+
+private handleToolResult(result: ToolExecutionResult): ConversationResult {
+
+因為 ui 是基於 chat session event stream來更新，tool call 應該也需要？
+如果是要做 tool call execution stream，感覺需要是  toolCallRunner.execute(…, eventBus)
+但考慮到 MVP ，直接等待 tool call 執行完成後再行從 session.eventBus.emit(…) 或許簡單一些？
+UI 就是透過 session status (例如 ‘tool_call_execution_start’)來顯示tool call正在執行中
+
+async confirmToolCall(toolCallId: string, approved: boolean): Promise<ConversationResult> {
+
+approval -> 改成 confirmation
+tool call confirmation 應該有3種，yes, yes always, no
+一旦 yes always，下次同樣的 tool 就不用再詢問，可以直接執行
+
+所以我覺得需要保存 toolCallConfirmations 在 session，每次的 tool call confirm 都是 by session，非 global -> 未來也許可以考慮 user settings 或是 project settings 增加 tool call settings，避免每次新的 session 都要重問，但目前不考慮
+
+我又想了一下，我覺得就算是在 toolRunner 給 eventBus 也可以
+我想到的是如果有 n 個 tool calls，使用者可能會需要知道現在正在執行第幾個，如果是都把 tool calls 丟給toolCallRunner，那只有 toolCallRunner 會知道現在執行到第幾個（包含執行的結果），session 只有在全部的 toolCalls 都執行完成後才會得到結果
+要及時反應這種狀態，或許還是需要 eventBus，就當成是 tool-call-event？
+
+Edit
+
+Refined tool call design with event stream and confirmation strategy.
+11s
+
+
+
+你的檢查非常仔細！這些都是重要的設計考量，讓我重新審視和調整。
+
+1. ToolCallRunner 確實需要 Class
+typescript
+// 你說得對，需要 registry，所以必須是 class
+class ToolCallRunner {
+  constructor(private toolRegistry: ToolRegistry) {}
+  
+  async execute(...) {
+    // 需要 this.toolRegistry.getTool(...)
+  }
+}
+
+// 不能是獨立 function，因為需要依賴
+// function executeToolCalls(...) {} // ❌ 缺少 registry
+2. Tool Call Execution Stream 的重新思考
+你說得很對！用戶體驗需要即時反饋：
+
+問題分析
+typescript
+// 現在的設計問題
+async execute(toolCalls: ToolCall[]): Promise<ToolExecutionResult> {
+  // 執行 n 個工具...
+  // Session 只有在全部完成後才知道結果
+  // 用戶看不到中間進度！
+}
+兩種解決方案比較
+方案 A：MVP 簡單版本
+typescript
+class ChatSession {
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    if (aiResponse.hasToolCalls) {
+      // 發送開始事件
+      this.status = 'processing_tools'
+      await this.eventBus.emit({
+        kind: 'ChatUpdatedEvent',
+        updateType: 'STATUS_CHANGED',
+        update: { status: 'processing_tools' }
+      })
+      
+      // 等待全部完成
+      const result = await this.toolCallRunner.execute(toolCalls, approvals)
+      
+      // 發送完成事件
+      return this.handleToolResult(result)
+    }
+  }
+}
+方案 B：Event Stream 版本 ⭐ (推薦)
+typescript
+class ToolCallRunner {
+  constructor(
+    private toolRegistry: ToolRegistry,
+    private eventBus: IEventBus  // 接收 eventBus
+  ) {}
+  
+  async execute(
+    toolCalls: ToolCall[], 
+    approvals?: ToolCallApproval[],
+    context?: { chatId: string, messageId: string }
+  ): Promise<ToolExecutionResult> {
+    
+    for (let i = 0; i < toolCalls.length; i++) {
+      const toolCall = toolCalls[i]
+      
+      // 發送開始執行事件
+      await this.eventBus.emit({
+        kind: 'ToolCallStarted',
+        chatId: context?.chatId,
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        progress: { current: i + 1, total: toolCalls.length }
+      })
+      
+      // 執行工具...
+      
+      // 發送完成事件
+      await this.eventBus.emit({
+        kind: 'ToolCallCompleted',
+        chatId: context?.chatId,
+        toolCallId: toolCall.id,
+        result: success ? result : error
+      })
+    }
+  }
+}
+我傾向方案 B，因為：
+
+更好的用戶體驗（即時進度）
+未來擴展性更好
+與系統 event-driven 架構一致
+3. Confirmation 設計改進
+三種確認選項
+typescript
+type ConfirmationOutcome = "yes" | "yes_always" | "no"
+
+interface ToolCallConfirmation {
+  toolCallId: string
+  outcome: ConfirmationOutcome
+  timestamp: Date
+}
+
+interface AlwaysAllowRule {
+  toolName: string
+  argsPattern?: Record<string, any>  // 可選：特定參數模式
+  createdAt: Date
+}
+Session 級別的 Confirmation 管理
+typescript
+class ChatSession {
+  // Confirmation 狀態（per session）
+  private toolCallConfirmations: ToolCallConfirmation[] = []
+  private alwaysAllowRules: AlwaysAllowRule[] = []  // "yes always" 的記錄
+  
+  async confirmToolCall(
+    toolCallId: string, 
+    outcome: ConfirmationOutcome
+  ): Promise<ConversationResult> {
+    
+    // 記錄確認決定
+    this.toolCallConfirmations.push({
+      toolCallId,
+      outcome,
+      timestamp: new Date()
+    })
+    
+    // 如果是 "yes always"，建立規則
+    if (outcome === "yes_always") {
+      const toolCall = this.pendingToolCalls.find(tc => tc.id === toolCallId)
+      if (toolCall) {
+        this.alwaysAllowRules.push({
+          toolName: toolCall.name,
+          createdAt: new Date()
+        })
+      }
+    }
+    
+    // 重新執行
+    const result = await this.toolCallRunner.execute(
+      this.pendingToolCalls,
+      this.buildApprovals()  // 包含 always allow 規則
+    )
+    
+    return this.handleToolResult(result)
+  }
+  
+  private buildApprovals(): ToolCallApproval[] {
+    const approvals: ToolCallApproval[] = []
+    
+    // 加入明確的確認決定
+    for (const confirmation of this.toolCallConfirmations) {
+      if (confirmation.outcome === "yes" || confirmation.outcome === "yes_always") {
+        approvals.push({
+          toolCallId: confirmation.toolCallId,
+          approved: true
+        })
+      }
+    }
+    
+    // 加入 "always allow" 規則的自動批准
+    for (const toolCall of this.pendingToolCalls) {
+      const hasAlwaysRule = this.alwaysAllowRules.some(rule => 
+        rule.toolName === toolCall.name
+      )
+      
+      if (hasAlwaysRule && !approvals.find(a => a.toolCallId === toolCall.id)) {
+        approvals.push({
+          toolCallId: toolCall.id,
+          approved: true
+        })
+      }
+    }
+    
+    return approvals
+  }
+}
+4. 重新整合的完整設計
+ToolCallRunner with EventBus
+typescript
+class ToolCallRunner {
+  constructor(
+    private toolRegistry: ToolRegistry,
+    private eventBus: IEventBus
+  ) {}
+  
+  async execute(
+    toolCalls: ToolCall[], 
+    approvals: ToolCallApproval[] = [],
+    context: { chatId: string, messageId: string }
+  ): Promise<ToolExecutionResult> {
+    
+    const executed: ToolResult[] = []
+    const stillNeedsApproval: ToolCall[] = []
+    const failed: ToolError[] = []
+    
+    const approvalMap = new Map(approvals.map(a => [a.toolCallId, a.approved]))
+    
+    for (let i = 0; i < toolCalls.length; i++) {
+      const toolCall = toolCalls[i]
+      
+      // 發送進度事件
+      await this.eventBus.emit({
+        kind: 'ToolCallProgress',
+        chatId: context.chatId,
+        progress: { current: i + 1, total: toolCalls.length },
+        currentTool: { id: toolCall.id, name: toolCall.name }
+      })
+      
+      // 檢查是否需要確認
+      const hasApproval = approvalMap.has(toolCall.id)
+      const isApproved = approvalMap.get(toolCall.id)
+      
+      if (hasApproval && !isApproved) {
+        continue
+      }
+      
+      const tool = this.toolRegistry.getTool(toolCall.name)
+      const needsConfirmation = await tool.needsConfirmation(toolCall.arguments)
+      
+      if (needsConfirmation && !hasApproval) {
+        stillNeedsApproval.push(toolCall)
+        continue
+      }
+      
+      // 執行工具
+      try {
+        await this.eventBus.emit({
+          kind: 'ToolCallStarted',
+          chatId: context.chatId,
+          toolCallId: toolCall.id,
+          toolName: toolCall.name
+        })
+        
+        const result = await tool.execute(toolCall.arguments)
+        
+        await this.eventBus.emit({
+          kind: 'ToolCallCompleted',
+          chatId: context.chatId,
+          toolCallId: toolCall.id,
+          result: { success: true, data: result }
+        })
+        
+        executed.push({ toolCallId: toolCall.id, result })
+        
+      } catch (error) {
+        await this.eventBus.emit({
+          kind: 'ToolCallCompleted',
+          chatId: context.chatId,
+          toolCallId: toolCall.id,
+          result: { success: false, error: error.message }
+        })
+        
+        failed.push({ toolCallId: toolCall.id, error })
+      }
+    }
+    
+    return { executed, stillNeedsApproval, failed }
+  }
+}
+ChatSession 的簡化
+typescript
+class ChatSession {
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    const aiResponse = await this.generateModelResponse()
+    
+    if (aiResponse.hasToolCalls) {
+      this.pendingToolCalls = aiResponse.toolCalls
+      
+      // 傳入 context 和 approvals
+      const result = await this.toolCallRunner.execute(
+        this.pendingToolCalls,
+        this.buildApprovals(),
+        { chatId: this.id, messageId: this.getCurrentMessageId() }
+      )
+      
+      return this.handleToolResult(result)
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+}
+總結
+重新檢查後的關鍵調整：
+
+ToolCallRunner 保持 class - 需要 registry 依賴
+EventBus 整合 - 提供即時進度反饋，更好的 UX
+三種確認選項 - yes/yes_always/no，session 級別管理
+Always Allow 規則 - 避免重複詢問相同工具
+這樣既保持了架構簡潔，又提供了良好的用戶體驗！
+
+
+
+
+Retry
+const result = await this.toolCallRunner.execute( this.pendingToolCalls, this.buildApprovals() *// 包含 always allow *規則 )
+
+直接 toolCallRunner.execute( pendingToolCalls, toolCallConfirmations) 
+交給 toolCallRunner 來去處理 confirmations 不是更好？ SRP
+
+private alwaysAllowRules: AlwaysAllowRule[] = [] *// "yes always" *的記錄
+
+改名，像是* toolAlwaysAllowed ? 我知道這個名字不好，我希望找事讓人知道這是 tool call confirmation 相關，請建議幾個
+這個應該可以透過  *toolCallRunner.execute -> return *toolAlwaysAllowed *
+總之就是把* tool 的部分放在 tool call ，session *只負責儲存
+
+Edit
+
+Refined tool call confirmation strategy with clear responsibilities
+12s
+
+
+
+
+
+
+你說得完全正確！ 這兩個觀點都很重要，讓我重新設計。
+
+1. SRP：職責分離重新設計
+ChatSession 只負責儲存，不處理邏輯
+typescript
+class ChatSession {
+  // 純儲存，不處理邏輯
+  private toolCallConfirmations: ToolCallConfirmation[] = []
+  private toolApprovalPolicies: ToolApprovalPolicy[] = []  // 新命名
+  
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    if (aiResponse.hasToolCalls) {
+      this.pendingToolCalls = aiResponse.toolCalls
+      
+      // 直接傳原始數據，讓 runner 處理邏輯
+      const result = await this.toolCallRunner.execute(
+        this.pendingToolCalls,
+        this.toolCallConfirmations,    // 原始確認記錄
+        this.toolApprovalPolicies,     // 原始 always allow 規則
+        { chatId: this.id, messageId: this.getCurrentMessageId() }
+      )
+      
+      // 儲存 runner 返回的新規則
+      if (result.newApprovalPolicies.length > 0) {
+        this.toolApprovalPolicies.push(...result.newApprovalPolicies)
+      }
+      
+      return this.handleToolResult(result)
+    }
+    
+    return { status: 'complete', content: aiResponse.content }
+  }
+  
+  // 確認邏輯也簡化了
+  async confirmToolCall(
+    toolCallId: string, 
+    outcome: ConfirmationOutcome
+  ): Promise<ConversationResult> {
+    
+    // 只負責儲存確認記錄
+    this.toolCallConfirmations.push({
+      toolCallId,
+      outcome,
+      timestamp: new Date()
+    })
+    
+    // 重新執行，讓 runner 處理邏輯
+    const result = await this.toolCallRunner.execute(
+      this.pendingToolCalls,
+      this.toolCallConfirmations,    // 包含新的確認
+      this.toolApprovalPolicies,
+      { chatId: this.id, messageId: this.getCurrentMessageId() }
+    )
+    
+    // 儲存新的 policies
+    if (result.newApprovalPolicies.length > 0) {
+      this.toolApprovalPolicies.push(...result.newApprovalPolicies)
+    }
+    
+    return this.handleToolResult(result)
+  }
+}
+ToolCallRunner 處理所有邏輯
+typescript
+interface ToolExecutionResult {
+  executed: ToolResult[]
+  stillNeedsApproval: ToolCall[]
+  failed: ToolError[]
+  newApprovalPolicies: ToolApprovalPolicy[]  // 新增：返回新的 always allow 規則
+}
+
+class ToolCallRunner {
+  async execute(
+    toolCalls: ToolCall[],
+    confirmations: ToolCallConfirmation[],
+    approvalPolicies: ToolApprovalPolicy[],
+    context: { chatId: string, messageId: string }
+  ): Promise<ToolExecutionResult> {
+    
+    const executed: ToolResult[] = []
+    const stillNeedsApproval: ToolCall[] = []
+    const failed: ToolError[] = []
+    const newApprovalPolicies: ToolApprovalPolicy[] = []
+    
+    // Runner 處理確認邏輯
+    const approvalMap = this.buildApprovalMap(confirmations, approvalPolicies)
+    
+    for (const toolCall of toolCalls) {
+      const approvalStatus = this.checkApprovalStatus(toolCall, approvalMap, approvalPolicies)
+      
+      if (approvalStatus.needsConfirmation) {
+        stillNeedsApproval.push(toolCall)
+        continue
+      }
+      
+      if (!approvalStatus.approved) {
+        continue // 被拒絕
+      }
+      
+      // 如果是新的 "yes always"，建立新規則
+      if (approvalStatus.createPolicy) {
+        newApprovalPolicies.push({
+          toolName: toolCall.name,
+          createdAt: new Date()
+        })
+      }
+      
+      // 執行工具...
+    }
+    
+    return { executed, stillNeedsApproval, failed, newApprovalPolicies }
+  }
+  
+  private buildApprovalMap(
+    confirmations: ToolCallConfirmation[],
+    policies: ToolApprovalPolicy[]
+  ): Map<string, ApprovalStatus> {
+    // 處理確認邏輯的複雜性
+    const map = new Map<string, ApprovalStatus>()
+    
+    // 處理明確的確認記錄
+    for (const confirmation of confirmations) {
+      map.set(confirmation.toolCallId, {
+        approved: confirmation.outcome === "yes" || confirmation.outcome === "yes_always",
+        createPolicy: confirmation.outcome === "yes_always"
+      })
+    }
+    
+    return map
+  }
+  
+  private checkApprovalStatus(
+    toolCall: ToolCall,
+    approvalMap: Map<string, ApprovalStatus>,
+    policies: ToolApprovalPolicy[]
+  ): { approved: boolean, needsConfirmation: boolean, createPolicy: boolean } {
+    
+    // 檢查是否有明確確認
+    const explicitApproval = approvalMap.get(toolCall.id)
+    if (explicitApproval) {
+      return {
+        approved: explicitApproval.approved,
+        needsConfirmation: false,
+        createPolicy: explicitApproval.createPolicy
+      }
+    }
+    
+    // 檢查是否符合 always allow 規則
+    const hasPolicy = policies.some(policy => policy.toolName === toolCall.name)
+    if (hasPolicy) {
+      return {
+        approved: true,
+        needsConfirmation: false,
+        createPolicy: false
+      }
+    }
+    
+    // 需要確認
+    return {
+      approved: false,
+      needsConfirmation: true,
+      createPolicy: false
+    }
+  }
+}
+2. 命名建議
+對於 alwaysAllowRules，我建議幾個選項：
+
+推薦選項
+toolApprovalPolicies ⭐ (最推薦)
+清楚表達是工具批准政策
+與 tool call confirmation 相關
+專業且明確
+toolConfirmationPolicies
+直接表達與 confirmation 的關係
+稍微長一點但很清楚
+autoApprovalRules
+強調自動批准的特性
+簡潔易懂
+對應的類型定義
+typescript
+interface ToolApprovalPolicy {
+  toolName: string
+  argsPattern?: Record<string, any>  // 未來可擴展：特定參數模式
+  createdAt: Date
+  description?: string  // 可選：用戶為什麼選擇 always allow
+}
+
+type ConfirmationOutcome = "yes" | "yes_always" | "no"
+
+interface ToolCallConfirmation {
+  toolCallId: string
+  outcome: ConfirmationOutcome
+  timestamp: Date
+}
+3. 完整的職責分離
+typescript
+// ChatSession：純粹的狀態容器
+class ChatSession {
+  // 儲存狀態
+  private toolCallConfirmations: ToolCallConfirmation[] = []
+  private toolApprovalPolicies: ToolApprovalPolicy[] = []
+  
+  // 不處理邏輯，只傳遞和儲存
+}
+
+// ToolCallRunner：純粹的邏輯處理器
+class ToolCallRunner {
+  // 處理所有 confirmation 和 approval 邏輯
+  // 決定哪些工具需要確認，哪些可以自動執行
+  // 建立新的 approval policies
+}
+這樣的設計完美遵循 SRP：
+
+ChatSession：對話狀態管理
+ToolCallRunner：工具執行邏輯
+你的建議讓架構變得更清晰、更符合設計原則！👍
+
+
+
+
+Retry
+
+
+
+
+
+
+

@@ -1,0 +1,1166 @@
+
+## Notes
+
+ChatService已經廢棄，後端 chat 系統遷移至 chat engine packages/events-core/src/services/chat-engine
+Tool call 使用 packages/events-core/src/services/tool-call/tool-call-scheduler.ts
+不用考慮 backward compatibility
+—
+
+Chat engine 
+- remove chat service, chat repository
+- types → import from AI SDK v5
+- message processor →
+    - file reference (@) for MVP, 要尊重 .gitignore
+- Chat vs ChatSession 命名混亂
+- Checks - demo
+
+Chat 主要使用情境
+
+1. User create a new chat file 1. Create chat file, chat session
+2. User open a chat file, given chat file’s path 1. Load chat file -> chat session 2. UI shows chat session
+3. User sends message/prompt 1. Update session, save to repository 2. Chat session run turn (model, tool calls, …), emit stream result 3. UI shows stream result
+4. User rerun a chat (Not implemented yet) 1. Load chat file -> session 2. Rerun a chat by iterate each user message of session’s messages (history)
+以上為我的 todo list，請針對每個 todo
+1. 理解我想要做什麼
+2. 檢視當前的source code，客觀分析、評論這個 todo
+
+Edit
+
+
+
+解析 Chat Engine 遷移和架構重構的關鍵任務
+17s
+
+
+
+
+
+
+
+
+
+
+
+
+讓我逐一分析你的 todo list，先理解目標，再檢視當前架構狀況：
+
+Todo 1: Remove chat service, chat repository
+你想做什麼： 清除舊的 ChatService 和 ChatRepository，完全遷移到新的 chat engine 架構。
+
+當前狀況分析：
+
+✅ root-router.ts 中已經註解掉 ChatService，改用 ChatEngine
+✅ 新的 chat engine 架構已建立：ChatClient + ChatSession + ChatSessionRepository
+⚠️ 舊檔案仍存在：chat-service.ts, chat-repository.ts
+⚠️ 舊的 event types 和 interfaces 可能還散落在其他地方
+建議： 這個 todo 接近完成，主要是清理工作。檢查是否有其他地方還在 import 舊的 ChatService/ChatRepository，然後直接刪除舊檔案即可。
+
+Todo 2: types → import from AI SDK v5
+你想做什麼： 減少自定義 types，盡量使用 AI SDK v5 提供的標準 types。
+
+當前狀況分析：
+
+✅ 已經在使用 AI SDK v5：import type { AssistantModelMessage, ProviderRegistryProvider } from "ai"
+⚠️ 仍有許多自定義 types 可能可以替換：
+typescript
+// 這些可能有 AI SDK 的等價物
+export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR"
+export type ChatMode = "chat" | "agent"
+export interface ChatMessage { ... }
+建議： 檢視 AI SDK v5 文檔，看哪些自定義 types 可以用標準 types 替換。特別是 message 格式和 role 定義。
+
+Todo 3: message processor → file reference (@) for MVP, 要尊重 .gitignore
+你想做什麼： 完善 @ 語法的檔案引用功能，並確保遵守 .gitignore 規則。
+
+當前狀況分析：
+
+✅ 基礎 @ 語法處理已存在：message-processing-utils.ts, chat-file-utils.ts
+❌ 缺少 .gitignore 支援 - 這是重要的安全功能
+⚠️ 現有的 file reference 處理較簡單，可能需要增強
+設計建議：
+
+typescript
+// 在 project folder 層級加入 .gitignore 檢查
+interface FileReferenceProcessor {
+  // 1. Parse @ syntax
+  // 2. Resolve file path 
+  // 3. Check .gitignore rules ← 新增這個
+  // 4. Load file content
+  // 5. Replace in message
+}
+Todo 4: Chat vs ChatSession 命名混亂
+你想做什麼： 釐清命名，避免概念混淆。
+
+當前狀況分析： 確實有命名問題：
+
+Chat (in old system) vs SerializableChat vs ChatSession
+ChatMessage 在新舊系統都有
+ChatStatus, ChatFileStatus 等重複定義
+設計建議：
+
+typescript
+// 建議的清晰命名架構：
+// 1. ChatSession - 記憶體中的 active session
+// 2. ChatFile - 儲存格式 (取代 SerializableChat)  
+// 3. ChatMessage - 統一的 message 格式
+// 4. ChatMetadata - chat 的 metadata
+Todo 5: Checks - demo
+你想做什麼： 加入驗證機制和 demo 功能。
+
+當前狀況分析：
+
+✅ 有 tool call demo：tool-call-demo
+❌ 缺少 chat engine 的 demo
+❌ 缺少輸入驗證和錯誤處理機制
+設計建議： 需要兩個層面的 checks：
+
+Runtime validation - 驗證 model config, file paths, permissions
+Demo script - 展示 chat engine 核心功能
+使用情境分析
+你列出的 4 個主要使用情境，當前實作狀況：
+
+Create new chat file ✅ - ChatClient.createChat() 已實作
+Open existing chat file ✅ - ChatClient.getOrLoadChatSession() 已實作
+Send message/prompt ✅ - ChatClient.sendMessage() 已實作
+Rerun chat ⚠️ - ChatClient.rerunChat() 存在但較簡化
+架構評估： 整體架構設計良好，ChatClient 作為 facade，ChatSession 處理 conversation logic，ChatSessionRepository 處理持久化。符合單一職責原則。
+
+主要改進點：
+
+完成舊系統清理 (Todo 1)
+實作 .gitignore 支援 (Todo 3)
+統一命名規範 (Todo 4)
+加強驗證和 demo (Todo 5)
+整體來說，你的 chat engine 架構已經相當完整，主要是完善細節和清理工作。
+
+
+
+
+Retry
+按照上面的 todos，請幫忙看有哪些是我遺漏的，需要做的工作？
+
+Edit
+
+剖析 Chat Engine 架構，找出遺漏的關鍵功能和整合問題。
+28s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+分析你的 todo list 後，我發現有幾個重要的遺漏項目需要補充：
+
+🔴 Critical Missing Items
+1. API 路由遷移不完整
+typescript
+// root-router.ts 中舊路由被註解掉，但新 API 結構不同
+// 這會破壞前端整合
+
+舊: chat.submitMessage({ chatId, message })
+新: chatEngine.sendMessage({ absoluteFilePath, chatSessionId, message })
+遺漏工作： 設計 API 兼容層或更新前端 API 調用
+
+2. Event 系統斷層
+當前新系統缺少關鍵事件發送：
+
+typescript
+// ChatSession.runTurn() 中只發送部分事件
+// 缺少: MESSAGE_ADDED, AI_RESPONSE_ADDED 等
+遺漏工作： 完整的 event emission 實作
+
+3. File Reference (@) 整合缺失
+typescript
+// chat-session.ts 中沒有整合 @ 語法處理
+// buildMessagesForAI() 直接用原始 content，沒有處理 @file 引用
+遺漏工作： 在 ChatSession 中整合 message processing
+
+🟡 Important Missing Features
+4. 核心 CRUD 功能缺失
+typescript
+// 當前只有 create 和 send，缺少：
+- getAllChats()           // 列出所有 chat files  
+- updateChatMetadata()    // 更新 title, tags
+- deleteChatFile()        // 刪除 chat file
+- duplicateChat()         // 複製 chat
+5. Agent vs Chat Mode 差異化
+typescript
+// metadata 中有 mode: 'chat' | 'agent'
+// 但 runTurn() 邏輯沒有區分處理
+遺漏工作： 實作 agent mode 的自循環邏輯
+
+6. Tool Call 整合不完整
+typescript
+// ChatSession 有 toolCallScheduler 但使用很簡化
+// 沒有真正調用 scheduler.execute()
+// 沒有處理 tool permission 和結果
+7. Draft Message 功能缺失
+typescript
+// 舊系統有 promptDraft 處理
+// 新系統沒有實作 draft 自動保存
+🟢 Quality & Robustness Issues
+8. Provider Registry 健壯性
+typescript
+// initializeGlobalDependencies() 失敗沒有 fallback
+// 沒有 provider 健康檢查機制
+9. 錯誤處理不足
+typescript
+// ChatSession.runTurn() 的錯誤處理過於簡單
+// 缺少 retry 機制、partial failure 處理
+10. Session 生命週期管理
+typescript
+// ChatClient 有 session pool 但缺少：
+- Session 超時清理
+- Memory leak 防護  
+- Graceful shutdown
+11. Validation 缺失
+typescript
+// 缺少 input validation：
+- Message 長度限制
+- File path 安全檢查
+- Model config 驗證
+📋 建議優先順序
+P0 (必須完成):
+
+API 路由兼容性處理
+Event 系統完整化
+File Reference (@) 整合
+P1 (重要功能): 4. 核心 CRUD 功能補全 5. Tool Call 真正整合 6. Agent mode 差異化
+
+P2 (品質提升): 7. 錯誤處理強化 8. Draft message 功能 9. Validation 機制
+
+**你的原始 todos 很好，但這些遺漏項目可能會影響系統的完整性和可用性。**特別是 P0 級別的項目，沒有完成的話新系統無法真正替代舊系統。
+
+
+
+
+Retry
+Okay 確實需要安排優先順序
+
+另外也請分析以下工作：
+1. 我們應該要從 ChatRepository 遷移到 ChatSessionRepository，有什麼需要注意的地方？ChatRepository 有哪些值得參考的設計？
+2. chat-file-utils 也要整合至 chat-engine，似乎有些功能重複，要想想如何整合
+3. 要用 ai sdk v5跑一個真實的 demo
+
+Edit
+
+Analyzed migration strategies and integration challenges for repositories.
+7s
+
+
+
+
+
+
+
+
+分析這三個工作項目，讓我逐一檢視：
+
+1. ChatRepository → ChatSessionRepository 遷移分析
+值得參考的 ChatRepository 設計
+優勢設計：
+
+typescript
+// 1. 智能快取機制
+private readonly chatCache: Map<string, Chat> = new Map(); 
+private readonly pathToIdMap: Map<string, string> = new Map();
+
+// 2. 目錄掃描能力
+async scanFolder(folderPath: string): Promise<void>
+
+// 3. 細粒度操作
+async addMessage(absoluteFilePath, message) 
+async updateMetadata(absoluteFilePath, metadata)
+遷移挑戰與建議
+挑戰 1: Cache vs No-Cache 架構差異
+
+typescript
+// 舊: Repository 層有 cache
+ChatRepository.findByPath() // 從 cache 返回
+
+// 新: Cache 在 ChatClient 層
+ChatClient.getOrLoadChatSession() // session pool 管理
+設計建議： 保持新架構，cache 在 ChatClient 更合理，因為：
+
+Repository 專注資料存取
+ChatClient 管理 session lifecycle
+挑戰 2: Directory Scanning 功能缺失
+
+typescript
+// ChatRepository 的 scanFolder 很重要
+// ChatSessionRepository 沒有這個功能
+需要補充：
+
+typescript
+interface ChatSessionRepository {
+  // 新增目錄掃描功能
+  scanDirectory(absolutePath: string): Promise<string[]> // 返回所有 .chat.json 路徑
+  listChatFiles(projectPath: string): Promise<ChatFileInfo[]>
+}
+挑戰 3: 細粒度 vs 粗粒度操作
+
+typescript
+// 舊: 細粒度
+addMessage(), updateMetadata()
+
+// 新: 粗粒度  
+saveToFile() // 整個 session
+權衡分析： 新設計更簡潔，但可能效率較低。建議保持粗粒度，因為：
+
+Chat files 通常不大
+簡化 concurrency 處理
+減少 partial update 的複雜性
+2. chat-file-utils 整合分析
+功能重複檢視
+chat-file-utils 核心功能：
+
+typescript
+// 1. @ 語法處理
+processMessageFileReferences(message, chat, projectService, fileService)
+
+// 2. 檔案載入
+loadFileContentsForChat(fileRefs, projectPath, fileService)
+
+// 3. 引用提取
+extractChatFileReferences(content)
+當前在 ChatSession 中缺失：
+
+typescript
+// ChatSession.buildMessagesForAI() 直接用原始 content
+// 沒有處理 @ 檔案引用
+整合設計建議
+方案 1: ChatSession 內建整合
+
+typescript
+class ChatSession {
+  private async processMessage(content: string): Promise<string> {
+    // 1. Extract @ references
+    // 2. Load file contents (respect .gitignore)
+    // 3. Replace @ syntax with file content
+    // 4. Return processed message
+  }
+  
+  private buildMessagesForAI(): AssistantModelMessage[] {
+    return this.messages.map(msg => ({
+      role: "assistant",
+      content: await this.processMessage(msg.content) // 處理 @ 語法
+    }));
+  }
+}
+方案 2: 獨立 MessageProcessor 服務
+
+typescript
+class MessageProcessor {
+  constructor(
+    private projectService: ProjectFolderService,
+    private fileService: FileService
+  ) {}
+  
+  async processFileReferences(message: string, projectPath: string): Promise<string>
+  async validateFileAccess(filePath: string): Promise<boolean> // .gitignore 檢查
+}
+
+// ChatSession 依賴 MessageProcessor
+建議選方案 2，因為：
+
+單一職責：ChatSession 專注對話邏輯
+可測試性更好
+可以獨立處理 .gitignore 邏輯
+.gitignore 支援設計
+typescript
+class GitignoreChecker {
+  private gitignoreCache: Map<string, string[]> = new Map();
+  
+  async isFileAllowed(filePath: string, projectPath: string): Promise<boolean> {
+    // 1. Find .gitignore files in path hierarchy
+    // 2. Parse gitignore patterns
+    // 3. Check if file matches any ignore pattern
+    // 4. Cache results for performance
+  }
+}
+3. AI SDK v5 真實 Demo 設計
+Demo 目標與架構
+Demo 要展示的核心功能：
+
+typescript
+// 1. 建立真實 chat session
+// 2. 發送 message 並獲得 AI 回應
+// 3. 處理 @ 檔案引用
+// 4. Tool call 整合
+// 5. Stream 回應展示
+Demo 實作架構
+基礎設定：
+
+typescript
+// demo/chat-engine-real-demo.ts
+async function setupDemo() {
+  // 1. 設定 user settings (OpenAI/Anthropic API key)
+  // 2. 設定 project folder
+  // 3. 建立測試檔案 (for @ reference)
+  // 4. 初始化 ChatClient
+}
+Demo 流程設計：
+
+typescript
+async function runChatEngineDemo() {
+  // Phase 1: Basic Chat
+  // 1. Create new chat
+  // 2. Send simple message "Hello, explain TypeScript in 2 sentences"
+  // 3. Show streaming response
+  
+  // Phase 2: File Reference  
+  // 4. Create test file with code snippet
+  // 5. Send message with @ reference "Explain this code: @test.ts"
+  // 6. Verify file content is loaded
+  
+  // Phase 3: Tool Calls (if available)
+  // 7. Send message that triggers tool use
+  // 8. Show permission prompt
+  // 9. Approve and see result
+  
+  // Phase 4: Session Management
+  // 10. Save and reload chat from file
+  // 11. Continue conversation
+}
+實作挑戰
+Challenge 1: Provider Setup
+
+typescript
+// 需要真實 API keys 才能測試
+// 要處理不同 provider 的設定差異
+Challenge 2: Tool Integration
+
+typescript
+// ChatSession 目前沒有真正使用 ToolCallScheduler
+// 需要實作完整的 tool call 流程
+Challenge 3: Error Handling
+
+typescript
+// 網路錯誤、API 限制、invalid 回應等
+// Demo 要展示 graceful error handling
+📋 工作優先順序建議
+Phase 1: 基礎整合
+
+MessageProcessor 服務設計與實作
+ChatSessionRepository 補齊 scanDirectory 功能
+ChatSession 整合 MessageProcessor
+Phase 2: 功能完善 4. .gitignore 支援實作 5. Tool call 真正整合到 ChatSession 6. Event emission 完整化
+
+Phase 3: Demo 與驗證 7. 基礎 AI SDK v5 demo (不含 tool calls) 8. File reference (@) demo 9. 完整功能 demo
+
+這樣的順序確保每個階段都有可驗證的成果，避免一次性改動過大。
+
+
+
+
+Retry
+請整理以上的討論
+列出所有工作，給予分析、優先度、可能的設計/做法（用自然語言描述，不要寫code），以及需要我來決定的事項等等
+
+Edit
+
+Systematically compiled and analyzed comprehensive project task list
+2s
+
+
+
+
+Chat Engine 遷移工作整理
+🔴 P0 - 必須完成 (阻塞性問題)
+1. API 路由兼容性處理
+分析： 舊 ChatService API 被註解，新 ChatEngine API 結構完全不同，會破壞前端整合
+設計方案：
+
+方案A：在 ChatEngine router 中模擬舊 API 格式
+方案B：更新前端改用新 API 結構
+方案C：建立 adapter 層做格式轉換
+需要決定： 選擇哪個方案？是否要維持向後兼容？
+
+2. Event 系統完整化
+分析： ChatSession 只發送部分事件，缺少 MESSAGE_ADDED, AI_RESPONSE_ADDED 等關鍵事件
+設計方案： 在 ChatSession.runTurn() 的關鍵節點發送對應事件，確保前端能收到完整的狀態更新
+
+需要決定： 事件格式是否要與舊系統保持一致？
+
+3. File Reference (@) 整合到 ChatSession
+分析： 現有的 @ 語法處理邏輯存在但沒有整合到新系統，ChatSession 直接使用原始 message 內容
+設計方案：
+
+方案A：ChatSession 內建 @ 處理邏輯
+方案B：建立獨立的 MessageProcessor 服務
+需要決定： 選擇內建還是獨立服務？
+
+🟡 P1 - 重要功能 (影響完整性)
+4. ChatRepository 到 ChatSessionRepository 遷移
+分析： 新系統缺少目錄掃描、cache 機制等重要功能
+設計方案：
+
+保持 ChatClient 層的 session cache
+在 ChatSessionRepository 補齊 scanDirectory 功能
+移除舊 ChatRepository 的細粒度操作，維持粗粒度設計
+需要決定： 是否需要保留細粒度操作（addMessage, updateMetadata）？
+
+5. .gitignore 支援實作
+分析： 安全性關鍵功能，@ 語法不應該載入被 gitignore 的檔案
+設計方案： 建立 GitignoreChecker 服務，解析 .gitignore 規則並快取結果
+
+需要決定： .gitignore 檢查的嚴格程度（只檢查專案根目錄 vs 完整路徑階層）？
+
+6. Tool Call 真正整合
+分析： ChatSession 有 ToolCallScheduler 但使用很簡化，沒有真正執行 tool calls
+設計方案：
+
+在 AI 回應中偵測 tool calls
+調用 ToolCallScheduler.execute()
+處理 permission 確認流程
+將結果整合回對話流程
+需要決定： Tool call 的 approval mode 預設值？
+
+7. 核心 CRUD 功能補全
+分析： 當前只有基本的建立和發送，缺少列表、更新、刪除等功能
+設計方案： 在 ChatClient 中補齊：
+
+getAllChats() - 掃描專案資料夾找出所有 chat files
+updateChatMetadata() - 更新標題、標籤等
+deleteChatFile() - 刪除檔案並清理 session
+duplicateChat() - 複製 chat file
+需要決定： 哪些功能是 MVP 必須的？
+
+8. Agent vs Chat Mode 差異化
+分析： metadata 中有 mode 欄位但邏輯沒有區分處理
+設計方案：
+
+Chat mode：等待使用者輸入才繼續
+Agent mode：AI 回應後自動繼續下一輪，直到達成目標或需要人工確認
+需要決定： Agent mode 的自循環邏輯細節？何時停止？
+
+🟢 P2 - 品質提升 (提升使用體驗)
+9. 舊系統清理 (原 Todo 1)
+分析： 清理工作，移除 chat-service.ts, chat-repository.ts 等舊檔案
+設計方案： 確認沒有其他地方 import 後直接刪除
+
+需要決定： 是否保留舊檔案作為參考？
+
+10. Types 標準化 (原 Todo 2)
+分析： 減少自定義 types，使用 AI SDK v5 標準 types
+設計方案： 檢視 AI SDK 文檔，替換可用的 types（特別是 message 格式和 role 定義）
+
+需要決定： 哪些自定義 types 要保留（業務特定的）？
+
+11. 命名規範統一 (原 Todo 4)
+分析： Chat, SerializableChat, ChatSession 等命名混亂
+設計方案：
+
+ChatSession：記憶體中的 active session
+ChatFile：儲存格式
+ChatMessage：統一的 message 格式
+需要決定： 確認統一命名規範？
+
+12. Draft Message 功能
+分析： 舊系統有 promptDraft 自動保存，新系統缺少
+設計方案： 在 ChatSession 中加入 draft 狀態，定期自動保存未發送的 message
+
+需要決定： Draft 保存頻率？儲存位置？
+
+13. Provider Registry 健壯性
+分析： 初始化失敗沒有 fallback，缺少健康檢查
+設計方案：
+
+加入 provider 健康檢查
+失敗時的 fallback 機制
+重試邏輯
+需要決定： Fallback 策略（降級到本地模型？錯誤提示？）
+
+14. 錯誤處理強化
+分析： ChatSession.runTurn() 錯誤處理過於簡單
+設計方案：
+
+不同錯誤類型的分類處理
+Retry 機制
+Partial failure 處理
+使用者友善的錯誤訊息
+需要決定： Retry 次數和策略？
+
+15. Session 生命週期管理
+分析： ChatClient 的 session pool 缺少完整的生命週期管理
+設計方案：
+
+Session 超時清理
+Memory leak 防護
+Graceful shutdown
+Session 統計和監控
+需要決定： Session 超時時間？Pool 大小限制？
+
+16. Input Validation 機制
+分析： 缺少輸入驗證，可能導致安全或穩定性問題
+設計方案：
+
+Message 長度限制
+File path 安全檢查
+Model config 驗證
+惡意輸入過濾
+需要決定： 驗證規則的嚴格程度？
+
+🔵 P3 - Demo 與驗證
+17. AI SDK v5 真實 Demo (原 Todo 5)
+分析： 需要真實 API 呼叫的 demo 來驗證整個系統
+設計方案：
+
+階段1：基礎對話 demo
+階段2：@ 檔案引用 demo
+階段3：Tool call demo
+階段4：Session 管理 demo
+需要決定： Demo 使用哪個 AI provider？需要真實 API key？
+
+📋 建議執行順序
+Sprint 1 (P0): API 兼容性 → Event 系統 → @ 語法整合
+Sprint 2 (P1-core): Repository 遷移 → Tool Call 整合 → CRUD 功能
+Sprint 3 (P1-feature): .gitignore 支援 → Agent mode → 舊系統清理
+Sprint 4 (P2+demo): 品質提升項目 → 真實 Demo
+
+🤔 關鍵決策點
+API 相容性策略 - 影響前端整合複雜度
+@ 語法架構設計 - 影響系統架構和維護性
+Agent mode 行為定義 - 影響產品功能範圍
+Tool call approval 策略 - 影響安全性和使用體驗
+錯誤處理和 fallback 策略 - 影響系統穩定性
+這些決策會影響後續實作方向，建議優先確認。
+
+
+
+
+Retry
+再請想想、檢查
+
+Edit
+
+剖析系統架構，發現多層技術挑戰和潛在風險。
+25s
+
+
+
+
+
+
+
+
+
+
+
+
+讓我重新檢視並補充遺漏的重要項目：
+
+🔴 新增 P0 項目 (之前遺漏的阻塞性問題)
+18. 數據格式相容性處理
+分析： 舊 ChatRepository 的 chat file 格式與新 ChatSessionRepository 可能不完全相容
+關鍵問題：
+
+舊格式的 metadata 結構
+message 的 timestamp 格式差異
+新增的 status, fileStatus, currentTurn 等欄位
+需要決定： 是否需要資料遷移腳本？如何處理格式衝突？
+
+19. Stream Response 處理架構
+分析： AI SDK v5 的 streaming 回應需要前端即時接收，但當前事件系統不支援 streaming
+關鍵問題： 如何將 AI 的 streaming 回應透過 tRPC 傳到前端？
+
+需要決定： 使用 tRPC subscription 還是其他 streaming 機制？
+
+🟡 新增 P1 項目 (重要的架構問題)
+20. 並發存取控制
+分析： 多個 ChatSession 同時修改同一個 chat file 會造成資料競爭
+設計方案：
+
+檔案層級的鎖定機制
+或者限制一個 file 只能有一個 active session
+需要決定： 選擇哪種並發控制策略？
+
+21. Context Window 管理
+分析： 長對話會超過模型的 context window 限制
+設計方案：
+
+自動摘要舊訊息
+滑動視窗機制
+智慧訊息選擇
+需要決定： 如何處理 context 溢出？保留多少歷史訊息？
+
+22. Model Configuration 管理
+分析： 每個 chat 可能用不同模型，需要動態切換
+關鍵問題：
+
+如何在對話中途切換模型？
+不同模型的參數如何管理？
+Model 不可用時的 fallback 策略？
+需要決定： 是否允許對話中途切換模型？
+
+🟢 新增 P2 項目 (品質和安全性)
+23. File System 安全性
+分析： @ 語法可能被濫用存取敏感檔案
+設計方案：
+
+路徑穿越攻擊防護
+檔案大小限制
+檔案類型白名單
+需要決定： 安全限制的嚴格程度？
+
+24. Rate Limiting 和資源管理
+分析： 需要防止 API 濫用和資源耗盡
+設計方案：
+
+每用戶 API 調用限制
+Memory 使用監控
+長時間運行的 session 清理
+需要決定： Rate limit 的具體數值？
+
+25. 錯誤恢復機制
+分析： Chat file 損壞、網路中斷等異常情況的處理
+設計方案：
+
+自動備份機制
+Partial state recovery
+重試和降級策略
+需要決定： 備份策略和恢復機制？
+
+26. AbortController 資源管理
+分析： ChatSession 中的 AbortController 可能造成 memory leak
+關鍵問題： 確保 cleanup 時正確釋放資源
+
+🔴 修正之前的分析錯誤
+API 兼容性問題程度修正
+重新檢視後發現問題比預期嚴重：
+
+舊: chat.submitMessage({ chatId, message })
+新: chatEngine.sendMessage({ absoluteFilePath, chatSessionId, message })
+這不只是 API 格式差異，是完全不同的識別機制。舊系統用 chatId，新系統用 file path + session ID。
+
+Tool Call 整合複雜度修正
+檢視 ChatSession 代碼後發現：目前完全沒有執行 tool calls，只是偵測並回傳。真正的整合需要：
+
+調用 ToolCallScheduler.execute()
+處理 async tool execution
+將結果注入回 conversation flow
+處理 permission confirmations
+這比原本評估的複雜很多。
+
+📋 重新評估的優先順序
+Critical Path (必須連續完成):
+
+數據格式相容性 + API 路由設計
+Stream Response 架構
+Event 系統整合
+Tool Call 真正整合
+Parallel Track (可並行):
+
+@ 語法整合 + .gitignore 支援
+Repository 遷移 + CRUD 功能
+並發控制 + Context Window 管理
+🚨 關鍵風險提醒
+Big Bang 風險： 太多系統同時更改，建議分階段切換
+向後相容性： 新系統可能無法讀取舊 chat files
+性能風險： Session pool + file I/O 可能造成 memory 問題
+複雜度風險： Tool call + streaming + concurrency 的組合複雜度很高
+🤔 新增的關鍵決策點
+切換策略： Big bang 還是漸進式遷移？
+資料遷移： 如何處理現有的 chat files？
+Streaming 架構： 如何實現前端即時接收 AI 回應？
+並發策略： 檔案鎖定還是 session 限制？
+安全邊界： @ 語法的存取限制程度？
+容錯程度： 系統失敗時的使用者體驗？
+特別重要： Stream Response 架構設計會影響整個前後端介面，建議優先確認技術方案。
+
+
+
+
+Retry
+針對每個 todo，如果是你，你會做什麼決定？
+請逐一列出，包含問題、你的決定
+
+Edit
+
+
+
+剖析技術決策，權衡 MVP 原則與開發效率
+6s
+
+
+
+我的技術決策建議
+🔴 P0 決策
+1. API 路由兼容性處理
+問題： 舊 API (chatId) vs 新 API (absoluteFilePath + sessionId)
+我的決定： 選擇方案B - 更新前端改用新 API
+理由：
+
+新架構基於檔案路徑更符合系統設計
+避免複雜的 adapter 層維護成本
+MVP 原則：簡單直接，不向後兼容
+2. Event 系統完整化
+問題： 事件格式是否與舊系統保持一致？
+我的決定： 保持新格式，不兼容舊事件
+理由：
+
+新事件結構更清晰 (chatSessionId + absoluteFilePath)
+避免 legacy 包袱
+前端一次性更新，長期維護更簡單
+3. File Reference (@) 整合
+問題： 內建 vs 獨立 MessageProcessor 服務？
+我的決定： 獨立 MessageProcessor 服務
+理由：
+
+單一職責原則
+更容易測試和除錯
+可以獨立處理 .gitignore 邏輯
+4. 數據格式相容性
+問題： 如何處理舊 chat files？
+我的決定： 寫一個一次性遷移腳本
+理由：
+
+清晰的切換點
+避免長期維護兩套格式
+可以在遷移時優化數據結構
+5. Stream Response 架構
+問題： tRPC subscription vs 其他機制？
+我的決定： 使用 tRPC subscription
+理由：
+
+與現有架構一致
+類型安全
+已有成功案例 (event subscriptions)
+🟡 P1 決策
+6. ChatRepository 遷移取捨
+問題： 是否保留細粒度操作？
+我的決定： 不保留，維持粗粒度設計
+理由：
+
+Chat files 通常不大，全量寫入可接受
+避免並發寫入的複雜性
+簡化架構
+7. .gitignore 支援程度
+問題： 檢查根目錄 vs 完整路徑階層？
+我的決定： 完整路徑階層檢查
+理由：
+
+安全性優先
+符合使用者預期
+實作成本不高
+8. Tool Call Approval Mode
+問題： 預設值選擇？
+我的決定： DEFAULT mode (需要確認危險操作)
+理由：
+
+安全第一
+符合使用者預期
+可以後續設定調整
+9. 核心 CRUD 功能範圍
+問題： 哪些是 MVP 必須？
+我的決定： getAllChats, updateMetadata, deleteChat 為必須；duplicateChat 延後
+理由：
+
+基本的檔案管理是必須功能
+duplicateChat 是 nice-to-have
+10. Agent vs Chat Mode 差異
+問題： Agent mode 自循環邏輯？
+我的決定： Agent mode 暫時與 Chat mode 相同，標記為 future enhancement
+理由：
+
+MVP 原則，先讓基礎功能穩定
+Agent mode 邏輯複雜，需要更多設計思考
+11. 並發存取控制
+問題： 檔案鎖定 vs session 限制？
+我的決定： 限制一個 file 只能有一個 active session
+理由：
+
+實作簡單
+避免資料競爭
+符合大多數使用場景
+12. Context Window 管理
+問題： 如何處理 context 溢出？
+我的決定： 簡單的滑動視窗 - 保留最近 N 條訊息
+理由：
+
+實作簡單
+可預測的行為
+摘要功能太複雜，不適合 MVP
+13. Model Configuration 管理
+問題： 是否允許對話中途切換模型？
+我的決定： 不允許，每個 chat 固定一個模型
+理由：
+
+避免複雜性
+保持對話一致性
+需要切換可以 duplicate chat
+🟢 P2 決策
+14. 命名規範
+問題： 確認統一命名？
+我的決定： ChatSession (runtime), ChatFileData (storage), ChatMessage (統一)
+理由： 明確區分運行時物件和儲存格式
+
+15. Draft Message 功能
+問題： 保存頻率和位置？
+我的決定： 每 2 秒自動保存到 metadata.promptDraft
+理由： 簡單實用，不需要額外儲存
+
+16. Provider Registry 健壯性
+問題： Fallback 策略？
+我的決定： 失敗時顯示錯誤，不自動 fallback
+理由：
+
+明確的錯誤狀態
+避免意外使用錯誤的模型
+使用者可以手動修正設定
+17. 錯誤處理策略
+問題： Retry 次數和策略？
+我的決定： 最多重試 3 次，指數退避
+理由： 平衡可靠性和響應速度
+
+18. Session 生命週期
+問題： 超時時間和 Pool 大小？
+我的決定： 30 分鐘超時，最多 10 個 active sessions
+理由： 合理的資源使用，適合個人使用場景
+
+19. Input Validation 嚴格程度
+問題： 驗證規則嚴格程度？
+我的決定： 基礎驗證：message 長度 < 50K 字元，路徑安全檢查
+理由： 防範基本問題，不過度限制
+
+20. File System 安全性
+問題： 安全限制程度？
+我的決定： 只允許專案資料夾內檔案，檔案大小 < 1MB，文字檔案優先
+理由： 平衡安全性和實用性
+
+21. Rate Limiting
+問題： Rate limit 數值？
+我的決定： 每分鐘最多 10 次 AI API 調用
+理由： 避免意外高費用，適合開發和測試
+
+22. 錯誤恢復機制
+問題： 備份策略？
+我的決定： 每次寫入前自動備份為 .backup 檔案
+理由： 簡單有效的資料保護
+
+23. Types 標準化程度
+問題： 哪些自定義 types 保留？
+我的決定： 保留業務特定的 (ChatMode, ChatStatus)，替換通用的 (Message, Role)
+理由： 減少依賴但保留業務語義
+
+🔵 P3 決策
+24. Demo 設計
+問題： 使用哪個 AI provider？
+我的決定： 優先支援 OpenAI (GPT-4)，需要使用者提供 API key
+理由：
+
+最成熟的 API
+文檔完整
+開發者熟悉度高
+📋 切換策略決策
+25. 遷移方式
+問題： Big bang vs 漸進式？
+我的決定： 漸進式遷移 - 先保留舊系統，新功能用新系統
+理由：
+
+降低風險
+可以逐步驗證新系統
+給使用者適應時間
+🎯 整體策略原則
+我的決策基於以下原則：
+
+MVP 優先 - 先讓基本功能可用
+安全第一 - 在安全和便利間選擇安全
+簡單實作 - 避免過度工程化
+漸進演進 - 可以後續迭代改進
+明確錯誤 - 失敗時要明確告知使用者
+這些決策確保能快速交付可用的 MVP，同時為未來擴展留下空間。
+
+
+
+
+Retry
+用Big bang，直接重構，不用管fallback
+目前app在MVP開發階段，沒有使用者、也沒有向後支援需求，一切採用最速做法
+先不要管 API（tRPC），等到我們的 chat-engine 都弄好了才來重構 API
+# P0
+
+### 23. Types 標準化程度
+問題： 哪些自定義 types 保留？  
+我的決定： 既然要用 ai sdk v5，就盡量按照 ai sdk 定義的來做，不要重複造輪子
+=> 改到 P0，type非常重要，會影響所有後續的code，要最一開始就搞定
+
+### 14. 命名規範
+問題： 確認統一命名？  
+我的決定： ChatSession (runtime), ChatFileData (storage), ChatMessage (統一)  
+理由： 明確區分運行時物件和儲存格式
+=> 改到 P0，既然早晚都要重構，那就一開始就按照新的來重構因為這東西越早改越好
+
+### 4. 數據格式相容性
+問題： 如何處理舊 chat files？  
+我的決定： 不用管舊 chat files，直接棄用
+
+### 7. .gitignore 支援程度
+問題： 檢查根目錄 vs 完整路徑階層？  
+我的決定： 直接套用現成的 library，難道我們現在沒有實現這部分嗎？
+
+# P2~P3
+
+### 15. Draft Message 功能
+問題： 保存頻率和位置？  
+我的決定： 
+=> 這個不是前端負責嗎？？？跟後端無關，不要管這個
+
+## 📋 切換策略決策
+
+### 25. 遷移方式
+問題： Big bang vs 漸進式？  
+**我的決定：
+=> 用Big bang，就直接重構，不用管fallback，目前都還在 app MVP開發階段，沒有向後支援的需求，採最速路徑
+
+Edit
+
+Strategized big-bang refactoring with MVP-focused, minimal-overhead approach.
+4s
+
+
+
+
+
+
+
+根據新策略重新整理的工作清單
+🔴 P0 - 必須完成 (重新調整)
+1. Types 標準化程度 (調整到 P0)
+問題： 哪些自定義 types 保留？
+你的決定： 既然要用 AI SDK v5，就盡量按照 AI SDK 定義的來做，不要重複造輪子
+執行方向：
+
+檢視 AI SDK v5 的 type definitions
+替換所有可以用 AI SDK 的 types (Message, Role, ModelConfig 等)
+只保留業務特定的 types (ChatMode, ChatFileStatus 等)
+2. 命名規範統一 (調整到 P0)
+問題： 確認統一命名？
+你的決定： ChatSession (runtime), ChatFileData (storage), ChatMessage (統一)
+執行方向：
+
+立即統一所有相關檔案的命名
+避免後續重構成本
+3. File Reference (@) 整合
+問題： 獨立 MessageProcessor 服務
+執行方向：
+
+建立 MessageProcessor 類別
+整合到 ChatSession.runTurn() 流程中
+4. .gitignore 支援
+問題： 檢查根目錄 vs 完整路徑階層？
+你的決定： 直接套用現成的 library
+執行方向：
+
+找現成的 .gitignore 解析 library (如 ignore npm package)
+整合到 MessageProcessor 中
+5. Stream Response 架構
+問題： 如何處理 AI streaming？
+執行方向：
+
+在 ChatSession 中實作 streaming 處理
+暫時不管前端，先讓後端 streaming 邏輯正確
+6. Event 系統整合
+問題： 確保新系統發送完整事件
+執行方向：
+
+在 ChatSession 關鍵節點發送事件
+採用新事件格式，不兼容舊系統
+🟡 P1 - 重要功能
+7. Tool Call 真正整合
+執行方向：
+
+在 ChatSession.runTurn() 中真正調用 ToolCallScheduler
+處理 tool results 並繼續對話流程
+8. 並發存取控制
+你的決定： 限制一個 file 只能有一個 active session
+執行方向： 在 ChatClient 中加入檔案鎖定邏輯
+
+9. Context Window 管理
+你的決定： 簡單的滑動視窗 - 保留最近 N 條訊息
+執行方向： 在 buildMessagesForAI() 中實作訊息截斷
+
+10. ChatSessionRepository 功能補齊
+執行方向：
+
+補齊 scanDirectory 功能
+移除對舊 ChatRepository 的依賴
+11. 核心 CRUD 功能
+你的決定： getAllChats, updateMetadata, deleteChat 為必須
+執行方向： 在 ChatClient 中實作這些方法
+
+🟢 P2 - 品質提升
+12. 舊系統清理
+你的決定： 不用管舊 chat files，直接棄用
+執行方向：
+
+直接刪除 chat-service.ts, chat-repository.ts
+清理所有相關 imports
+13. 錯誤處理強化
+你的決定： 最多重試 3 次，指數退避
+執行方向： 在 ChatSession 中加入重試邏輯
+
+14. Input Validation
+你的決定： message 長度 < 50K 字元，路徑安全檢查
+執行方向： 在 ChatClient 和 MessageProcessor 中加入驗證
+
+15. File System 安全性
+你的決定： 只允許專案資料夾內檔案，檔案大小 < 1MB
+執行方向： 在 MessageProcessor 中實作安全檢查
+
+🔵 P3 - Demo 與驗證
+16. AI SDK v5 真實 Demo
+你的決定： 使用 OpenAI (GPT-4)，需要使用者提供 API key
+執行方向：
+
+建立 demo script
+測試完整的對話流程
+❌ 移除或降級的項目
+API 路由兼容性 → 移除
+理由： 等 chat-engine 穩定後再重構 API
+
+Model Configuration 管理 → 降級到 P2
+理由： 每個 chat 固定一個模型，簡化實作
+
+Agent vs Chat Mode 差異化 → 降級到 P3
+理由： 暫時與 Chat mode 相同
+
+Draft Message 功能 → 移除
+理由： 前端負責，跟後端無關
+
+Rate Limiting → 移除
+理由： MVP 階段不需要
+
+Provider Registry 健壯性 → 降級到 P2
+理由： 先讓基本功能可用
+
+📋 最速執行順序
+Week 1: 基礎重構
+
+Types 標準化 (AI SDK v5)
+命名規範統一
+舊系統清理
+Week 2: 核心功能 4. MessageProcessor + .gitignore 支援 5. ChatSession streaming 整合 6. Event 系統整合
+
+Week 3: 完善功能 7. Tool Call 整合 8. 並發控制 9. CRUD 功能補齊
+
+Week 4: 測試與 Demo 10. Context Window 管理 11. 錯誤處理 12. 真實 Demo
+
+🎯 Big Bang 重構策略
+直接刪除舊檔案 - 不保留任何 fallback
+一次性重寫 - 不考慮向後兼容
+最簡實作 - 先讓功能可用，細節後續迭代
+延後 API 設計 - 專注於 chat-engine 內部邏輯
+這樣的策略確保能最快速度交付可用的 chat engine，避免被兼容性問題拖慢進度。
+
+

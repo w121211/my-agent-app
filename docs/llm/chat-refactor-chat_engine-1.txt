@@ -1,4 +1,3 @@
-<!--
 我看了一下 packages/events-core/src/services/chat-engine/chat-client.ts ，感覺有點複雜
 
 讓我們檢視思考幾種使用者情況
@@ -1151,6 +1150,3 @@ Retry
 
 
 
-
-
- -->
