@@ -23,12 +23,15 @@
     "chat-file-utils-demo": "tsx -e \"import('./src/services/chat-file-utils.js').then(m => console.log('✅ Chat file utils loaded successfully', Object.keys(m)))\"",
     "chat-file-utils-test": "tsx examples/chat-file-utils-test.ts",
     "file-search-test": "tsx examples/file-search-simple-test.ts",
-    "tool-call-demo": "tsx examples/tool-call-demo.ts"
+    "tool-call-demo": "tsx examples/tool-call-demo.ts",
+    "tool-registry-example": "tsx examples/tool-registry-ai-sdk-example.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "2.0.0-beta.8",
+    "@ai-sdk/gateway": "^1.0.0",
     "@ai-sdk/google": "2.0.0-beta.13",
     "@ai-sdk/openai": "2.0.0-beta.11",
+    "@ai-sdk/provider": "2.0.0-beta.1",
     "@openrouter/ai-sdk-provider": "^0.7.3",
     "@trpc/client": "^11.1.4",
     "@trpc/server": "^11.1.4",
@@ -42,7 +45,7 @@
     "tslog": "^4.9.3",
     "uuid": "^11.1.0",
     "ws": "^8.18.1",
-    "zod": "^3.24.2"
+    "zod": "^4.0.17"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

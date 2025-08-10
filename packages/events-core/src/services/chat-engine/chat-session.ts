@@ -1,69 +1,80 @@
 // packages/events-core/src/services/chat-engine/chat-session.ts
 
-import path from "node:path";
+import { gateway } from "@ai-sdk/gateway";
+import { streamText } from "ai";
 import { v4 as uuidv4 } from "uuid";
 import { Logger, type ILogObj } from "tslog";
-import { streamText, convertToModelMessages } from "ai";
 import type {
-  LanguageModel,
   ToolSet,
   ToolCallUnion,
   StreamTextResult,
-  TextStreamPart,
-  FinishReason,
-  UIMessage,
+  UserModelMessage,
 } from "ai";
+import { ToolConfirmationRequiredError } from "../tool-call/tool-call-confirmation.js";
+import {
+  MessageProcessor,
+  getUserModelMessageContentString,
+} from "./message-processor.js";
+import { ToolCallRunner } from "../tool-call/tool-call-runner.js";
 import type { IEventBus } from "../../event-bus.js";
 import type {
+  ToolExecutionResult,
+  ToolAlwaysAllowRule,
+} from "../tool-call/tool-call-runner.js";
+import type {
+  ToolCallConfirmation,
+  ToolCallConfirmationOutcome,
+} from "../tool-call/tool-call-confirmation.js";
+import type {
   ChatMessage,
-  ChatMessageMetadata,
   ChatSessionStatus,
-  ChatFileStatus,
-  ChatFileData,
-  ChatMetadata,
-  TurnInput,
-  ConversationResult,
-} from "./types.js";
-import type { UserSettingsService } from "../user-settings-service.js";
-import { ToolCallScheduler } from "../tool-call/tool-call-scheduler.js";
-import { MessageProcessor } from "./message-processor.js";
-import type { FileService } from "../file-service.js";
-import type { ProjectFolderService } from "../project-folder-service.js";
+  ChatSessionData,
+} from "./chat-session-repository.js";
+import type { ToolRegistry } from "../tool-call/tool-registry.js";
 
-export class ChatSession<TOOLS extends ToolSet = any> {
-  id: string;
-  absoluteFilePath: string;
-  messages: ChatMessage[] = []; // UIMessage<ChatMessageMetadata>[]
-  sessionStatus: ChatSessionStatus = "idle";
-  fileStatus: ChatFileStatus = "ACTIVE";
-  currentTurn: number = 0;
-  maxTurns: number = 20;
-  createdAt: Date;
-  updatedAt: Date;
-  metadata?: ChatMetadata;
+export interface TurnResult<TOOLS extends ToolSet = ToolSet> {
+  sessionStatus: ChatSessionStatus;
+  currentTurn: number;
+  streamResult?: StreamTextResult<TOOLS, never>;
+  toolCallsAwaitingConfirmation?: ToolCallUnion<TOOLS>[];
+  // toolExecutionResult?: ToolExecutionResult<TOOLS>;
+}
 
-  private eventBus: IEventBus;
+export class ChatSession<TOOLS extends ToolSet = ToolSet> {
+  id: ChatSessionData["id"];
+  absoluteFilePath: ChatSessionData["absoluteFilePath"];
+  messages: ChatSessionData["messages"] = [];
+  modelId: ChatSessionData["modelId"];
+  sessionStatus: ChatSessionData["sessionStatus"] = "idle";
+  fileStatus: ChatSessionData["fileStatus"] = "active";
+  currentTurn: ChatSessionData["currentTurn"] = 0;
+  maxTurns: ChatSessionData["maxTurns"] = 20;
+  toolSet?: TOOLS; // Session-scoped enabled tools, set once during first turn
+  createdAt: ChatSessionData["createdAt"];
+  updatedAt: ChatSessionData["updatedAt"];
+  metadata?: ChatSessionData["metadata"];
+
   private currentAbortController: AbortController | null = null;
-  private model: LanguageModel;
-  private toolCallScheduler: ToolCallScheduler;
-  private logger: Logger<ILogObj>;
-  private userSettingsService: UserSettingsService;
-  private messageProcessor: MessageProcessor;
-  private projectPath: string;
+  private logger: Logger<ILogObj> = new Logger({ name: "ChatSession" });
+  private toolCallRunner: ToolCallRunner<TOOLS>;
+
+  // Tool call state management
+  private toolCallsAwaitingConfirmation: Array<ToolCallUnion<TOOLS>> = [];
+  private toolCallConfirmations: Array<ToolCallConfirmation> = [];
+  private toolAlwaysAllowRules: Array<ToolAlwaysAllowRule> = [];
 
   constructor(
-    data: ChatFileData,
-    eventBus: IEventBus,
-    model: LanguageModel,
-    toolCallScheduler: ToolCallScheduler,
-    userSettingsService: UserSettingsService,
-    projectFolderService: ProjectFolderService,
-    fileService: FileService,
-    projectPath: string,
+    data: ChatSessionData,
+    toolRegistry: ToolRegistry,
+    private readonly eventBus: IEventBus,
+    private readonly messageProcessor: MessageProcessor,
+    // private readonly providerRegistry: ProviderRegistryProvider,
   ) {
     this.id = data.id;
     this.absoluteFilePath = data.absoluteFilePath;
     this.messages = data.messages;
+    this.modelId = data.modelId;
+    this.toolSet = data.toolSet as TOOLS;
     this.sessionStatus = data.sessionStatus;
     this.fileStatus = data.fileStatus;
     this.currentTurn = data.currentTurn;
@@ -72,29 +83,26 @@ export class ChatSession<TOOLS extends ToolSet = any> {
     this.updatedAt = data.updatedAt;
     this.metadata = data.metadata;
 
-    this.eventBus = eventBus;
-    this.model = data.model;
-    this.toolCallScheduler = toolCallScheduler;
-    this.userSettingsService = userSettingsService;
-    this.logger = new Logger({ name: "ChatSession" });
-    this.messageProcessor = new MessageProcessor(
-      fileService,
-      this.logger,
+    this.toolCallRunner = new ToolCallRunner<TOOLS>(
+      toolRegistry,
+      this.eventBus,
     );
-    this.projectPath = projectPath;
   }
 
   async runTurn(
-    input: TurnInput<TOOLS>,
-    options?: { signal?: AbortSignal },
-  ): Promise<ConversationResult<TOOLS>> {
+    input: UserModelMessage | ToolExecutionResult<TOOLS>,
+    options?: { signal?: AbortSignal; toolNames?: string[] },
+  ): Promise<TurnResult<TOOLS>> {
     if (options?.signal?.aborted) {
       throw new Error("Operation aborted");
     }
 
     if (this.currentTurn >= this.maxTurns) {
       this.sessionStatus = "max_turns_reached";
-      return { status: "max_turns_reached" };
+      return {
+        sessionStatus: this.sessionStatus,
+        currentTurn: this.currentTurn,
+      };
     }
 
     this.currentAbortController = new AbortController();
@@ -103,35 +111,108 @@ export class ChatSession<TOOLS extends ToolSet = any> {
 
     try {
       this.sessionStatus = "processing";
-      this.currentTurn++;
 
-      // Process and add input to messages using UIMessage format
-      await this.processAndAddInputToMessages(input);
+      // Set toolSet on first turn. If not specified, toolSet remains undefined (no tools)
+      if (
+        this.toolSet === undefined &&
+        options?.toolNames &&
+        options.toolNames.length > 0
+      ) {
+        if (this.currentTurn >= 1) {
+          throw new Error("Tool set must be defined on the first turn");
+        }
 
-      // Emit status change event
-      await this.eventBus.emit({
-        kind: "ChatUpdatedEvent",
-        chatId: this.id,
-        updateType: "STATUS_CHANGED",
-        update: { status: this.sessionStatus },
-        chat: this.toFileData(),
-        timestamp: new Date(),
-      });
+        // Use specific tool names to create toolSet
+        this.toolSet = this.toolCallRunner.toolRegistry.getToolSetByNames(
+          options.toolNames,
+        ) as TOOLS;
 
-      // Convert UIMessages to ModelMessages for AI SDK
-      const modelMessages = convertToModelMessages(this.messages, {
-        ignoreIncompleteToolCalls: true,
-      });
+        this.eventBus.emit({
+          kind: "ChatUpdatedEvent",
+          chatId: this.id,
+          updateType: "TOOL_SET_UPDATED",
+          update: { toolSet: this.toolSet },
+          chat: this.toJSON(),
+          timestamp: new Date(),
+        });
+      }
 
-      // Generate AI response using streamText
-      const result: StreamTextResult<TOOLS, never> = streamText({
-        model: this.model,
-        messages: modelMessages,
+      // 1. Processing input
+      if ("status" in input) {
+        // ToolExecutionResult
+        if (input.status !== "completed") {
+          throw new Error("Tool input's status must be 'completed'.");
+        }
+
+        if (input.executed.length === 0) {
+          throw new Error("No tool execution results found");
+        }
+
+        const message: ChatMessage = {
+          id: uuidv4(),
+          metadata: {
+            timestamp: new Date(),
+          },
+          message: {
+            role: "tool",
+            content: input.executed,
+          },
+        };
+
+        this.messages.push(message);
+
+        // Emit message added event
+        await this.eventBus.emit({
+          kind: "ChatUpdatedEvent",
+          chatId: this.id,
+          updateType: "MESSAGE_ADDED",
+          update: { message },
+          chat: this.toJSON(),
+          timestamp: new Date(),
+        });
+      } else {
+        // UserModelMessage
+        // Process user input message with file references
+        const textContent = getUserModelMessageContentString(input);
+
+        // Extract file references for metadata
+        const fileReferences =
+          this.messageProcessor.extractChatFileReferences(textContent);
+
+        // Convert to ChatMessage and add to messages
+        const message: ChatMessage = {
+          id: uuidv4(),
+          metadata: {
+            timestamp: new Date(),
+            fileReferences:
+              fileReferences.length > 0 ? fileReferences : undefined,
+          },
+          message: input,
+        };
+
+        this.messages.push(message);
+
+        // Emit message added event
+        await this.eventBus.emit({
+          kind: "ChatUpdatedEvent",
+          chatId: this.id,
+          updateType: "MESSAGE_ADDED",
+          update: { message },
+          chat: this.toJSON(),
+          timestamp: new Date(),
+        });
+      }
+
+      // 2. Generate AI response using streamText
+      const streamResult = streamText({
+        // model: this.providerRegistry.languageModel(this.modelId),
+        model: gateway(this.modelId),
+        messages: this.messages.map((msg) => msg.message),
+        tools: this.toolSet,
         abortSignal: effectiveSignal,
       });
 
-      let content = "";
-      const toolCalls: ToolCallUnion<TOOLS>[] = [];
+      this.currentTurn += 1;
 
       // Emit AI response started event
       await this.eventBus.emit({
@@ -139,75 +220,70 @@ export class ChatSession<TOOLS extends ToolSet = any> {
         chatId: this.id,
         updateType: "AI_RESPONSE_STARTED",
         update: { status: "processing" },
-        chat: this.toFileData(),
+        chat: this.toJSON(),
         timestamp: new Date(),
       });
 
       // Process AI SDK stream using native types
-      // for await (const part: TextStreamPart<TOOLS> of result.fullStream) {
-      for await (const part of result.fullStream) {
+      const toolCallsMap = new Map<string, ToolCallUnion<TOOLS>>();
+
+      for await (const part of streamResult.fullStream) {
         if (effectiveSignal.aborted) {
           throw new Error("Operation aborted");
         }
 
         switch (part.type) {
           case "text":
-            content += part.text;
-
             await this.eventBus.emit({
               kind: "ChatUpdatedEvent",
               chatId: this.id,
               updateType: "AI_RESPONSE_STREAMING",
               update: {
                 chunk: part.text,
-                accumulatedContent: content,
               },
-              chat: this.toFileData(),
+              chat: this.toJSON(),
               timestamp: new Date(),
             });
             break;
 
           case "tool-call":
-            // part is already ToolCallUnion<TOOLS> type
-            toolCalls.push(part);
+            toolCallsMap.set(part.toolCallId, part);
+            break;
+
+          case "tool-error":
+            if (part.error instanceof ToolConfirmationRequiredError) {
+              const toolCall = toolCallsMap.get(part.toolCallId);
+              if (toolCall === undefined) {
+                throw new Error(
+                  `Tool call ${part.toolCallId} not found in map for confirmation`,
+                );
+              }
+              this.toolCallsAwaitingConfirmation.push(toolCall);
+            }
             break;
         }
       }
 
-      // Add AI response as UIMessage
-      const aiMessage: ChatMessage = {
+      // 3. Add response messages that were generated during the call to the conversation history
+      const generatedMessages = (await streamResult.response).messages;
+      const stepsMessages: ChatMessage[] = generatedMessages.map((msg) => ({
         id: uuidv4(),
-        role: "assistant",
         metadata: {
           timestamp: new Date(),
         },
-        parts: [
-          {
-            type: "text",
-            text: content || "AI response",
-          },
-        ],
-      };
-      this.messages.push(aiMessage);
+        message: msg,
+      }));
+      this.messages.push(...stepsMessages);
 
       // Emit message added event
       await this.eventBus.emit({
         kind: "ChatUpdatedEvent",
         chatId: this.id,
-        updateType: "MESSAGE_ADDED",
-        update: { message: aiMessage },
-        chat: this.toFileData(),
+        updateType: "MESSAGES_ADDED",
+        update: { message: stepsMessages },
+        chat: this.toJSON(),
         timestamp: new Date(),
       });
-
-      // Handle tool calls if any
-      if (toolCalls.length > 0) {
-        this.sessionStatus = "waiting_confirmation";
-        return {
-          status: "waiting_confirmation",
-          toolCalls,
-        };
-      }
 
       // Emit AI response completed event
       await this.eventBus.emit({
@@ -215,21 +291,29 @@ export class ChatSession<TOOLS extends ToolSet = any> {
         chatId: this.id,
         updateType: "AI_RESPONSE_COMPLETED",
         update: {
-          message: aiMessage,
-          finalContent: content,
+          messages: stepsMessages,
         },
-        chat: this.toFileData(),
+        chat: this.toJSON(),
         timestamp: new Date(),
       });
 
-      // Get finish reason from result
-      const finishReason: FinishReason = await result.finishReason;
+      // Handle tool calls awaiting confirmation
+      if (this.toolCallsAwaitingConfirmation.length > 0) {
+        this.sessionStatus = "waiting_confirmation";
+        return {
+          sessionStatus: this.sessionStatus,
+          streamResult,
+          currentTurn: this.currentTurn,
+          toolCallsAwaitingConfirmation: this.toolCallsAwaitingConfirmation,
+        };
+      }
 
+      // No awaiting confirmation tool calls, just return the stream result
       this.sessionStatus = "idle";
       return {
-        status: "complete",
-        content,
-        finishReason,
+        sessionStatus: this.sessionStatus,
+        streamResult,
+        currentTurn: this.currentTurn,
       };
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {
@@ -246,10 +330,15 @@ export class ChatSession<TOOLS extends ToolSet = any> {
         chatId: this.id,
         updateType: "STATUS_CHANGED",
         update: { status: this.sessionStatus },
-        chat: this.toFileData(),
+        chat: this.toJSON(),
         timestamp: new Date(),
       });
     }
+  }
+
+  checkNextSpeaker(): "user" | "agent" {
+    // Mock implementation - always return 'user' for now
+    return "user";
   }
 
   abort(): void {
@@ -262,12 +351,61 @@ export class ChatSession<TOOLS extends ToolSet = any> {
     this.abort();
   }
 
-  toFileData(): ChatFileData {
+  async confirmToolCall(
+    toolCallId: string,
+    outcome: ToolCallConfirmationOutcome,
+  ): Promise<ToolExecutionResult<TOOLS>> {
+    const confirmation: ToolCallConfirmation = {
+      toolCallId,
+      outcome,
+      timestamp: new Date(),
+    };
+
+    if (outcome === "yes_always") {
+      const toolCall = this.toolCallsAwaitingConfirmation.find(
+        (tc) => tc.toolCallId === toolCallId,
+      );
+      if (toolCall) {
+        this.toolAlwaysAllowRules.push({
+          toolName: toolCall.toolName,
+          sourceConfirmation: confirmation,
+        });
+      }
+    }
+
+    this.toolCallConfirmations.push({
+      toolCallId,
+      outcome,
+      timestamp: new Date(),
+    });
+
+    const result = await this.toolCallRunner.execute(
+      this.toolCallsAwaitingConfirmation,
+      this.toolCallConfirmations,
+      this.toolAlwaysAllowRules,
+      {
+        chatSessionId: this.id,
+        messages: this.messages.map((e) => e.message),
+      },
+    );
+
+    // Clean up tool call state only when execution is completed
+    if (result.status === "completed") {
+      this.toolCallsAwaitingConfirmation = [];
+      this.toolCallConfirmations = [];
+    }
+
+    return result;
+  }
+
+  toJSON(): ChatSessionData {
     return {
+      _type: "chat",
       id: this.id,
       absoluteFilePath: this.absoluteFilePath,
       messages: this.messages,
-      model: this.model,
+      modelId: this.modelId,
+      toolSet: this.toolSet,
       sessionStatus: this.sessionStatus,
       fileStatus: this.fileStatus,
       currentTurn: this.currentTurn,
@@ -276,105 +414,5 @@ export class ChatSession<TOOLS extends ToolSet = any> {
       updatedAt: this.updatedAt,
       metadata: this.metadata,
     };
-  }
-
-  private async processAndAddInputToMessages(
-    input: TurnInput<TOOLS>,
-  ): Promise<void> {
-    let message: ChatMessage;
-
-    switch (input.type) {
-      case "user_message": {
-        // Process file references in user message content
-        const processedContent =
-          await this.messageProcessor.processFileReferences(
-            input.content,
-            this.projectPath,
-          );
-
-        // Extract file references for metadata
-        const fileReferences = this.messageProcessor.extractChatFileReferences(
-          input.content,
-        );
-
-        message = {
-          id: uuidv4(),
-          role: "user",
-          metadata: {
-            timestamp: new Date(),
-            fileReferences:
-              fileReferences.length > 0 ? fileReferences : undefined,
-          },
-          parts: [
-            {
-              type: "text",
-              text: processedContent,
-            },
-          ],
-        };
-        break;
-      }
-
-      case "tool_results":
-        message = {
-          id: uuidv4(),
-          role: "system",
-          metadata: {
-            timestamp: new Date(),
-          },
-          parts: [
-            {
-              type: "text",
-              text: JSON.stringify(input.results),
-            },
-          ],
-        };
-        break;
-
-      case "continue":
-        // Don't add continue signals as messages
-        return;
-    }
-
-    this.messages.push(message);
-
-    // Emit message added event for user messages
-    if (input.type === "user_message") {
-      await this.eventBus.emit({
-        kind: "ChatUpdatedEvent",
-        chatId: this.id,
-        updateType: "MESSAGE_ADDED",
-        update: { message },
-        chat: this.toFileData(),
-        timestamp: new Date(),
-      });
-    }
-  }
-
-  static async fromFileData(
-    data: ChatFileData,
-    eventBus: IEventBus,
-    toolScheduler: ToolCallScheduler,
-    userSettingsService: UserSettingsService,
-    projectFolderService: ProjectFolderService,
-    fileService: FileService,
-  ): Promise<ChatSession<any>> {
-    // Determine project path by finding the project folder containing this chat file
-    const projectFolder = await projectFolderService.getProjectFolderForPath(
-      data.absoluteFilePath,
-    );
-    const projectPath =
-      projectFolder?.path || path.dirname(data.absoluteFilePath);
-
-    return new ChatSession(
-      data,
-      eventBus,
-      data.model, // Use the model from file data
-      toolScheduler,
-      userSettingsService,
-      projectFolderService,
-      fileService,
-      projectPath,
-    );
   }
 }

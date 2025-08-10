@@ -4,14 +4,14 @@ import { createProviderRegistry, customProvider } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
 import { google } from "@ai-sdk/google";
-import type { LanguageModel, Provider, ProviderRegistryProvider } from "ai";
-import type { ModelRegistry } from "./types.js";
+import type { ProviderRegistryProvider } from "ai";
+import type { ProviderV2 } from "@ai-sdk/provider";
 import type { UserSettings } from "../user-settings-repository.js";
 
 export async function buildProviderRegistry(
   userSettings: UserSettings,
 ): Promise<ProviderRegistryProvider> {
-  const providers: Record<string, Provider> = {};
+  const providers: Record<string, ProviderV2> = {};
 
   // Add OpenAI provider if enabled
   if (userSettings.providers?.openai?.enabled) {
@@ -49,71 +49,71 @@ export async function buildProviderRegistry(
     });
   }
 
-  return createProviderRegistry(providers, { separator: ":" });
+  return createProviderRegistry(providers);
 }
 
-export function validateModelAvailability(
-  registry: ProviderRegistryProvider,
-  model: LanguageModel,
-): boolean {
-  try {
-    // If model is a string, check if it exists in registry
-    if (typeof model === "string") {
-      registry.languageModel(model);
-      return true;
-    }
-    // If model is LanguageModelV2 object, assume it's valid
-    return true;
-  } catch {
-    return false;
-  }
-}
+// export function validateModelAvailability(
+//   registry: ProviderRegistryProvider,
+//   model: LanguageModel,
+// ): boolean {
+//   try {
+//     // If model is a string, check if it exists in registry
+//     if (typeof model === "string") {
+//       registry.languageModel(model);
+//       return true;
+//     }
+//     // If model is LanguageModelV2 object, assume it's valid
+//     return true;
+//   } catch {
+//     return false;
+//   }
+// }
 
-export function buildModelRegistries(
-  userSettings: UserSettings,
-): ModelRegistry[] {
-  const registries: ModelRegistry[] = [];
+// export function buildModelRegistries(
+//   userSettings: UserSettings,
+// ): ModelRegistry[] {
+//   const registries: ModelRegistry[] = [];
 
-  if (userSettings.providers?.openai?.enabled) {
-    registries.push({
-      provider: openai,
-      availableModels: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
-      metadata: {
-        displayName: "OpenAI",
-        capabilities: ["text", "tools", "vision"],
-        defaultModel: "gpt-4",
-      },
-    });
-  }
+//   if (userSettings.providers?.openai?.enabled) {
+//     registries.push({
+//       provider: openai,
+//       availableModels: ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"],
+//       metadata: {
+//         displayName: "OpenAI",
+//         capabilities: ["text", "tools", "vision"],
+//         defaultModel: "gpt-4",
+//       },
+//     });
+//   }
 
-  if (userSettings.providers?.anthropic?.enabled) {
-    registries.push({
-      provider: anthropic,
-      availableModels: [
-        "claude-3-sonnet",
-        "claude-3-opus",
-        "claude-3-haiku",
-        "claude-3.5-sonnet",
-      ],
-      metadata: {
-        displayName: "Anthropic",
-        capabilities: ["text", "tools", "vision"],
-        defaultModel: "claude-3.5-sonnet",
-      },
-    });
-  }
+//   if (userSettings.providers?.anthropic?.enabled) {
+//     registries.push({
+//       provider: anthropic,
+//       availableModels: [
+//         "claude-3-sonnet",
+//         "claude-3-opus",
+//         "claude-3-haiku",
+//         "claude-3.5-sonnet",
+//       ],
+//       metadata: {
+//         displayName: "Anthropic",
+//         capabilities: ["text", "tools", "vision"],
+//         defaultModel: "claude-3.5-sonnet",
+//       },
+//     });
+//   }
 
-  if (userSettings.providers?.google?.enabled) {
-    registries.push({
-      provider: google,
-      availableModels: ["gemini-pro", "gemini-1.5-pro"],
-      metadata: {
-        displayName: "Google",
-        capabilities: ["text", "tools"],
-        defaultModel: "gemini-1.5-pro",
-      },
-    });
-  }
+//   if (userSettings.providers?.google?.enabled) {
+//     registries.push({
+//       provider: google,
+//       availableModels: ["gemini-pro", "gemini-1.5-pro"],
+//       metadata: {
+//         displayName: "Google",
+//         capabilities: ["text", "tools"],
+//         defaultModel: "gemini-1.5-pro",
+//       },
+//     });
+//   }
 
-  return registries;
-}
+//   return registries;
+// }

@@ -1,14 +1,100 @@
 // packages/events-core/src/services/chat-engine/message-processor.ts
 
 import path from "node:path";
-import type { ILogObj, Logger } from "tslog";
+import { v4 as uuidv4 } from "uuid";
+import { ILogObj, Logger } from "tslog";
+import type { ModelMessage, UIMessage, UserModelMessage } from "ai";
 import type { FileService } from "../file-service.js";
 
+// Utility functions to process ModelMessage
+
+export function getUserModelMessageContentString(
+  message: UserModelMessage,
+): string {
+  const content = message.content;
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join(" ");
+  }
+  throw new Error(
+    `Unsupported UserModelMessage content type: ${typeof content}`,
+  );
+}
+
+export function convertModelMessageContentToParts(
+  modelMessage: ModelMessage,
+): UIMessage["parts"] {
+  if (modelMessage.role === "user") {
+    const content = modelMessage.content;
+    if (typeof content === "string") {
+      return [{ type: "text", text: content }];
+    }
+    // Convert UserContent parts to UIMessage parts
+    return content.map((part) => {
+      switch (part.type) {
+        case "text":
+          return { type: "text", text: part.text };
+        case "image":
+          return {
+            type: "data-image",
+            id: uuidv4(),
+            data: part.image,
+          };
+        case "file":
+          return {
+            type: "data-file",
+            id: uuidv4(),
+            data: { content: part.data },
+          };
+        default:
+          throw new Error(
+            `Unsupported content part type: ${(part as { type: string }).type}`,
+          );
+      }
+    });
+  } else if (modelMessage.role === "assistant") {
+    const content = modelMessage.content;
+    if (typeof content === "string") {
+      return [{ type: "text", text: content }];
+    }
+    // Handle AssistantContent parts
+    return content.map((part) => {
+      switch (part.type) {
+        case "text":
+          return { type: "text", text: part.text };
+        case "tool-call":
+          return {
+            type: `tool-${part.toolName}` as const,
+            toolCallId: part.toolCallId,
+            state: "output-available" as const,
+            input: (part as unknown as { args: unknown }).args,
+            output: "pending",
+          };
+        default:
+          throw new Error(
+            `Unsupported assistant content part type: ${(part as { type: string }).type}`,
+          );
+      }
+    });
+  } else {
+    // For system and tool messages, assume text content
+    return [{ type: "text", text: String(modelMessage.content) }];
+  }
+}
+
+// Message processor class to handle file references and other message processing
+
 export class MessageProcessor {
-  constructor(
-    private fileService: FileService,
-    private logger: Logger<ILogObj>,
-  ) {}
+  private readonly logger: Logger<ILogObj> = new Logger({
+    name: "MessageProcessor",
+  });
+
+  constructor(private fileService: FileService) {}
 
   async processFileReferences(
     message: string,

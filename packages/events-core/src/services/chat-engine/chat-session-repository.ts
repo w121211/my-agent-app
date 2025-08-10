@@ -1,16 +1,11 @@
 // packages/events-core/src/services/chat-engine/chat-session-repository.ts
 
-import { ILogObj, Logger } from "tslog";
+import { promises as fs } from "fs";
 import path from "path";
+import { ILogObj, Logger } from "tslog";
 import { z } from "zod";
-import type { LanguageModel } from "ai";
-import type {
-  ChatFileData,
-  ChatMessage,
-  ChatSessionStatus,
-  ChatFileStatus,
-  ChatMetadata,
-} from "./types.js";
+import { modelMessageSchema } from "ai";
+import type { ModelMessage, ToolSet } from "ai";
 import {
   writeJsonFile,
   readJsonFile,
@@ -18,39 +13,118 @@ import {
   listDirectory,
 } from "../../file-helpers.js";
 
-// Zod schema for chat file validation
-const ChatFileDataSchema = z.object({
+export type ChatSessionStatus =
+  | "idle"
+  | "processing"
+  | "waiting_confirmation"
+  | "max_turns_reached";
+
+export type ChatFileStatus = "active" | "archived";
+
+export type ChatMode = "chat" | "agent";
+
+export interface ChatMetadata {
+  title?: string;
+  tags?: string[];
+  mode?: ChatMode;
+  knowledge?: string[];
+  promptDraft?: string;
+}
+
+export interface ChatMessageMetadata {
+  timestamp: Date;
+  subtaskId?: string;
+  taskId?: string;
+  fileReferences?: {
+    path: string;
+    md5: string;
+  }[];
+}
+
+export interface ChatMessage {
+  id: string;
+  message: ModelMessage;
+  metadata: ChatMessageMetadata;
+}
+
+export interface ChatSessionData {
+  _type: "chat";
+  id: string;
+  absoluteFilePath: string;
+  messages: ChatMessage[];
+  // modelId: `${string}:${string}`; // `providerId:modelId` format
+  modelId: `${string}/${string}`; // `providerId/modelId` format
+  sessionStatus: ChatSessionStatus;
+  fileStatus: ChatFileStatus;
+  currentTurn: number;
+  maxTurns: number;
+  toolSet?: ToolSet;
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: ChatMetadata;
+}
+
+// Zod schemas for validation and type inference
+const ChatMetadataSchema: z.ZodType<ChatMetadata> = z.object({
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  mode: z.enum(["chat", "agent"]).optional(),
+  knowledge: z.array(z.string()).optional(),
+  promptDraft: z.string().optional(),
+});
+
+const ChatMessageMetadataSchema: z.ZodType<ChatMessageMetadata> = z.object({
+  timestamp: z.coerce.date(),
+  subtaskId: z.string().optional(),
+  taskId: z.string().optional(),
+  fileReferences: z
+    .array(
+      z.object({
+        path: z.string(),
+        md5: z.string(),
+      }),
+    )
+    .optional(),
+});
+
+const ChatMessageSchema: z.ZodType<ChatMessage> = z.object({
+  id: z.string(),
+  message: modelMessageSchema,
+  metadata: ChatMessageMetadataSchema,
+});
+
+export const ChatSessionDataSchema: z.ZodType<ChatSessionData> = z.object({
   _type: z.literal("chat"),
   id: z.string(),
-  createdAt: z.coerce.date(),
-  updatedAt: z.coerce.date(),
-  messages: z.array(z.any()), // UIMessage array
-  model: z.any(), // LanguageModel (can be string or complex object)
+  absoluteFilePath: z.string(),
+  messages: z.array(ChatMessageSchema),
+  modelId: z.string().regex(/^.+\/.+$/) as z.ZodType<`${string}/${string}`>, // `providerId/modelId` format
+  toolSet: z.any().optional(), // ToolSet from AI SDK
   sessionStatus: z.enum([
     "idle",
     "processing",
     "waiting_confirmation",
     "max_turns_reached",
   ]),
-  fileStatus: z.enum(["ACTIVE", "ARCHIVED"]),
+  fileStatus: z.enum(["active", "archived"]),
   currentTurn: z.number(),
   maxTurns: z.number(),
-  metadata: z.record(z.any()).optional(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  metadata: ChatMetadataSchema.optional(),
 });
-
-// File format for persistence
-type ChatFileFormat = z.infer<typeof ChatFileDataSchema>;
 
 export interface ChatSessionRepository {
   saveToFile(
     absoluteFilePath: string,
-    chatSession: ChatFileData,
+    chatSession: ChatSessionData,
   ): Promise<void>;
-  loadFromFile(absoluteFilePath: string): Promise<ChatFileData>;
+  loadFromFile(absoluteFilePath: string): Promise<ChatSessionData>;
   deleteFile(absoluteFilePath: string): Promise<void>;
   createNewFile(
     targetDirectory: string,
-    chatSession: Omit<ChatFileData, "absoluteFilePath">,
+    chatSession: Omit<ChatSessionData, "absoluteFilePath">,
   ): Promise<string>;
 }
 
@@ -63,26 +137,24 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
 
   async saveToFile(
     absoluteFilePath: string,
-    chatSession: ChatFileData,
+    chatSession: ChatSessionData,
   ): Promise<void> {
-    const fileData = this.convertToFileFormat(chatSession);
-    await writeJsonFile(absoluteFilePath, fileData);
+    await writeJsonFile(absoluteFilePath, chatSession);
   }
 
-  async loadFromFile(filePath: string): Promise<ChatFileData> {
+  async loadFromFile(filePath: string): Promise<ChatSessionData> {
     const fileData = await readJsonFile<unknown>(filePath);
-    const validatedData = ChatFileDataSchema.parse(fileData);
-    return this.convertFromFileFormat(validatedData, filePath);
+    const validatedData = ChatSessionDataSchema.parse(fileData);
+    return validatedData;
   }
 
   async deleteFile(absoluteFilePath: string): Promise<void> {
-    const fs = await import("fs/promises");
     await fs.unlink(absoluteFilePath);
   }
 
   async createNewFile(
     targetDirectory: string,
-    chatSession: Omit<ChatFileData, "absoluteFilePath">,
+    chatSession: Omit<ChatSessionData, "absoluteFilePath">,
   ): Promise<string> {
     await createDirectory(targetDirectory);
     const chatNumber = await this.getNextChatNumber(targetDirectory);
@@ -93,8 +165,7 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
       absoluteFilePath: filePath,
     };
 
-    const fileData = this.convertToFileFormat(chatData);
-    await writeJsonFile(filePath, fileData);
+    await writeJsonFile(filePath, chatData);
 
     return filePath;
   }
@@ -110,40 +181,5 @@ export class ChatSessionRepositoryImpl implements ChatSessionRepository {
       .filter((num) => !isNaN(num));
 
     return chatNumbers.length > 0 ? Math.max(...chatNumbers) + 1 : 1;
-  }
-
-  private convertToFileFormat(chatSession: ChatFileData): ChatFileFormat {
-    return {
-      _type: "chat",
-      id: chatSession.id,
-      createdAt: chatSession.createdAt,
-      updatedAt: chatSession.updatedAt,
-      messages: chatSession.messages, // UIMessage array - preserve as-is
-      model: chatSession.model, // LanguageModel - preserve as-is
-      sessionStatus: chatSession.sessionStatus,
-      fileStatus: chatSession.fileStatus,
-      currentTurn: chatSession.currentTurn,
-      maxTurns: chatSession.maxTurns,
-      metadata: chatSession.metadata,
-    };
-  }
-
-  private convertFromFileFormat(
-    fileData: ChatFileFormat,
-    filePath: string,
-  ): ChatFileData {
-    return {
-      id: fileData.id,
-      absoluteFilePath: filePath,
-      messages: fileData.messages as ChatMessage[], // UIMessage array
-      model: fileData.model as LanguageModel,
-      sessionStatus: fileData.sessionStatus,
-      fileStatus: fileData.fileStatus,
-      currentTurn: fileData.currentTurn,
-      maxTurns: fileData.maxTurns,
-      createdAt: fileData.createdAt,
-      updatedAt: fileData.updatedAt,
-      metadata: fileData.metadata as ChatMetadata,
-    };
   }
 }

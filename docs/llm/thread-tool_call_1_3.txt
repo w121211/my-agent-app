@@ -1,0 +1,1661 @@
+
+
+--- title: Tool Calling description: Learn about tool calling and multi-step calls (using stopWhen) with AI SDK Core. --- # Tool Calling As covered under Foundations, [tools](/docs/foundations/tools) are objects that can be called by the model to perform a specific task. AI SDK Core tools contain
+
+pasted
+
+AI SDK v5 有提供 tool, mcp tool
+在盡可能利用AI SDK native methods, types 的前提下，思考如何重構too-call
+請以我們目前討論的 thread-tool_call_1_2.txt 為基礎
+讓我們先討論 packages/events-core/src/services/tool-call/types.ts ，請建議重構方案
+
+Edit
+
+重構 tool-call，利用 AI SDK v5 原生方法和類型
+4s
+
+
+
+
+
+Searched project for “thread-tool_call_1_2.txt tool call types architecture”
+2 results
+
+
+
+
+
+解析 tool call 架構，追蹤狀態和設計方案
+7s
+
+
+
+
+
+Searched project for “packages/events-core/src/services/tool-call/types.ts current tool call types definitions”
+6 results
+
+
+
+
+
+
+
+
+
+
+Analyzed AI SDK v5 tool-call types for comprehensive refactoring
+11s
+
+
+
+
+
+基于当前的 types.ts 文件分析和 AI SDK v5 的能力，我来提供一个系统性的重构方案：
+
+Tool-Call Types 重构策略分析
+当前类型的 AI SDK 对应关系
+让我系统性分析每个自定义类型是否能用 AI SDK 原生类型替换：
+
+🔄 可完全替换的类型
+typescript
+// ❌ 当前自定義
+interface Tool {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  shouldConfirmExecute(...): Promise<...>;
+  execute(...): Promise<unknown>;
+}
+
+// ✅ 改用 AI SDK 原生
+import type { Tool } from 'ai';
+typescript
+// ❌ 当前自定義  
+interface ToolCallRequestInfo {
+  callId: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+// ✅ 改用 AI SDK 原生
+import type { ToolCallUnion } from 'ai';
+// ToolCallUnion<TOOLS> 包含：toolCallId, toolName, input
+typescript
+// ❌ 当前自定義
+interface ToolCallResponseInfo {
+  callId: string;
+  result: unknown;
+  error: string | null;
+  timestamp: Date;
+}
+
+// ✅ 改用 AI SDK 原生
+import type { ToolResultUnion } from 'ai';
+// ToolResultUnion<TOOLS> 包含：toolCallId, toolName, result
+✅ 需要保留的業務類型
+typescript
+// ✅ 保留 - 業務特定的狀態機
+export type ToolCallStatus = 
+  | "validating" | "scheduled" | "executing" 
+  | "success" | "error" | "cancelled" | "awaiting_approval";
+
+// ✅ 保留 - 確認業務邏輯
+export type ConfirmationOutcome = "yes" | "yes_always" | "no";
+
+// ✅ 保留 - 執行上下文
+export interface ExecutionContext {
+  chatId: string;
+  messageId: string;
+  projectPath?: string;
+  userId?: string;
+}
+❓ 需要重新設計的類型
+當前的 discriminated union（ValidatingToolCall, ScheduledToolCall 等）過於複雜，可以簡化為統一結構。
+
+重構設計方案
+A. 極簡化的類型定義
+typescript
+// tool-call/types.ts
+import type {
+  Tool,                    // ❌ 取代自定義 Tool interface
+  ToolSet,                 // ❌ 直接使用
+  ToolCallUnion,          // ❌ 取代 ToolCallRequestInfo
+  ToolResultUnion,        // ❌ 取代 ToolCallResponseInfo
+  ToolChoice,             // 新增：工具選擇策略
+} from 'ai';
+
+// ✅ 保留業務特定狀態
+export type ToolCallStatus = 
+  | "validating" | "scheduled" | "executing" 
+  | "success" | "error" | "cancelled" | "awaiting_approval";
+
+export type ConfirmationOutcome = "yes" | "yes_always" | "no";
+
+// ❌ 替換複雜的 discriminated union 為統一結構
+export interface ToolCallExecution<TOOLS extends ToolSet> {
+  // 直接使用 AI SDK 原生類型
+  toolCall: ToolCallUnion<TOOLS>;           // 取代 ToolCallRequestInfo
+  
+  // 業務狀態管理
+  status: ToolCallStatus;
+  startTime?: number;
+  endTime?: number;
+  durationMs?: number;
+  
+  // 執行結果（AI SDK 原生）
+  result?: ToolResultUnion<TOOLS>;          // 取代 ToolCallResponseInfo
+  error?: string;
+  
+  // 確認流程
+  needsConfirmation?: boolean;
+  confirmationOutcome?: ConfirmationOutcome;
+  liveOutput?: string;                      // 用於 streaming
+}
+B. 批次確認執行的架構
+基於 AI SDK 原生類型的批次執行設計：
+
+typescript
+// 批次執行狀態管理
+export interface ToolCallBatch<TOOLS extends ToolSet> {
+  batchId: string;
+  messageId: string;
+  executions: ToolCallExecution<TOOLS>[];
+  
+  // 批次狀態
+  isComplete: boolean;
+  allApproved: boolean;
+  hasFailures: boolean;
+}
+
+// 確認記錄（用於建立 policies）
+export interface ToolCallConfirmation {
+  toolCallId: string;
+  outcome: ConfirmationOutcome;
+  timestamp: Date;
+  batchId: string;
+}
+
+// 自動批准政策（從確認歷史派生）
+export interface ToolApprovalPolicy {
+  toolName: string;
+  createdAt: Date;
+  sourceConfirmationId: string;
+}
+C. ToolCallRunner 接口簡化
+基於 AI SDK 原生類型的 runner 設計：
+
+typescript
+// 執行結果完全基於 AI SDK 原生類型
+export interface ToolExecutionResult<TOOLS extends ToolSet> {
+  executed: ToolResultUnion<TOOLS>[];           // AI SDK 原生
+  stillNeedsApproval: ToolCallUnion<TOOLS>[];   // AI SDK 原生
+  failed: Array<{
+    toolCall: ToolCallUnion<TOOLS>;            // AI SDK 原生
+    error: string;
+  }>;
+}
+
+// Runner 接口（完全 stateless）
+interface IToolCallRunner<TOOLS extends ToolSet> {
+  execute(
+    toolCalls: ToolCallUnion<TOOLS>[],          // AI SDK 原生輸入
+    confirmations: ToolCallConfirmation[],       // 完整確認歷史
+    context: ExecutionContext
+  ): Promise<ToolExecutionResult<TOOLS>>;
+}
+重構優勢分析
+1. 類型一致性最大化
+零阻抗轉換：streamText() 產生的 ToolCallUnion<TOOLS> 直接傳給 ToolCallRunner
+自動兼容：AI SDK 更新時自動獲得新功能
+類型安全：編譯時確保與 AI SDK 完全兼容
+2. 維護負擔最小化
+刪除 80% 自定義類型：不再維護重複的類型定義
+簡化狀態管理：從複雜 discriminated union 改為統一結構
+集中邏輯：所有確認邏輯封裝在 ToolCallRunner
+3. 批次確認安全機制
+守門員檢查：allCallsFinalOrScheduled 確保所有工具都獲得決定
+原子性執行：要嘛全部執行，要嘛全部等待
+狀態追蹤：清晰的批次狀態管理
+4. MVP 友好
+犧牲少量性能換取大幅簡化：每次重新計算 policies
+易於理解和修改：邏輯集中，職責清晰
+測試簡化：stateless runner，輸入完全確定
+設計取捨說明
+性能 vs 簡潔性：選擇每次重新計算 policies，避免狀態同步複雜性
+
+職責分離程度：ChatSession 變成純儲存容器，ToolCallRunner 包含所有 tool call 邏輯
+
+類型系統：最大化使用 AI SDK 原生類型，只保留必要的業務類型
+
+這個設計實現了「最大化 AI SDK 原生類型使用 + 最小化架構複雜度 + 支持批次確認執行」的目標，非常適合 MVP 階段的快速開發需求。
+
+
+
+
+Retry
+
+import type { ToolSet, ToolCallUnion, ToolResultUnion } from "ai"; import type { ToolRegistry } from "./tool-registry.js"; import type { IEventBus } from "../../event-bus.js"; export type ToolCallConfirmationOutcome = "yes" | "yes_always" | "no"; export interface ToolCallConfirmation { toolCallI
+
+pasted
+
+tool call types 可參考我們討論的最新設計（還在開發中
+
+Edit
+
+分析最新工具調用設計，評估重構方案和優化策略
+7s
+
+
+
+
+看到你已經開始實施我們討論的設計方案！這個實現很好地體現了我們的重構原則。讓我分析一下這個設計：
+
+設計分析 - 優秀的實現
+✅ AI SDK 原生類型使用得很好
+typescript
+import type { ToolSet, ToolCallUnion, ToolResultUnion } from "ai";
+這個完美體現了我們「最大化使用 AI SDK 原生類型」的原則：
+
+零阻抗轉換：直接使用 ToolCallUnion<TOOLS> 和 ToolResultUnion<TOOLS>
+類型安全：與 AI SDK 完全兼容
+未來兼容：AI SDK 更新時自動獲益
+✅ 批次確認安全機制正確實現
+typescript
+const allDecided = toolsWithStatus.every(
+  (t) => t.status !== "awaiting_approval",
+);
+
+if (!allDecided) {
+  return {
+    status: "waiting_confirmations",
+    pendingToolCalls: toolsWithStatus
+      .filter((t) => t.status === "awaiting_approval")
+      .map((t) => t.toolCall),
+  };
+}
+這個「守門員」檢查完美實現了我們討論的安全要求：所有工具都決定了才開始執行
+
+✅ 簡化的狀態管理
+不再使用複雜的 discriminated union，改用簡潔的統一結構：
+
+typescript
+export interface ToolWithStatus<TOOLS extends ToolSet> {
+  toolCall: ToolCallUnion<TOOLS>;    // AI SDK 原生
+  status: ToolExecutionStatus;       // 業務狀態
+  result?: ToolResultUnion<TOOLS>;   // AI SDK 原生
+}
+設計建議與優化
+A. Always Allow 規則的關聯設計
+當前設計很好，建議小調整來追蹤來源：
+
+typescript
+export interface ToolAlwaysAllowRule {
+  toolName: string;
+  sourceConfirmation: ToolCallConfirmation;  // ✅ 追蹤來源很好
+  createdAt: Date;  // 建議：添加創建時間
+}
+B. ToolCallRunner 的職責分離完美
+typescript
+// ✅ 完美的 stateless service 設計
+class ToolCallRunner<TOOLS extends ToolSet> {
+  constructor(
+    private toolRegistry: ToolRegistry,  // 依賴注入
+    private eventBus: IEventBus,
+  ) {}
+  
+  // ✅ 每次調用都是獨立的，完全基於輸入參數
+  async execute(
+    toolCalls: ToolCallUnion<TOOLS>[],     // AI SDK 原生
+    confirmations: ToolCallConfirmation[], // 完整歷史
+    alwaysAllowRules: ToolAlwaysAllowRule[], // 派生規則
+    context: ToolExecutionContext,
+  ): Promise<ToolExecutionResult<TOOLS>>
+}
+這個設計完美體現了我們討論的：
+
+ChatSession: 純儲存 + 委託
+ToolCallRunner: 包含所有 tool call 邏輯，但 stateless
+C. ToolExecutionResult 的類型設計優化
+當前的 discriminated union 設計很好，建議小調整：
+
+typescript
+export type ToolExecutionResult<TOOLS extends ToolSet> =
+  | {
+      status: "waiting_confirmations";
+      pendingToolCalls: ToolCallUnion<TOOLS>[];
+      // 建議：添加已決定的工具信息
+      decidedToolCalls?: ToolWithStatus<TOOLS>[];
+    }
+  | {
+      status: "completed";
+      executed: ToolResultUnion<TOOLS>[];
+      // 建議：添加失敗信息
+      failed?: Array<{ 
+        toolCall: ToolCallUnion<TOOLS>; 
+        error: string; 
+      }>;
+    };
+D. 與 ChatSession 的整合模式
+基於這個設計，ChatSession 的使用模式會是：
+
+typescript
+// chat-session.ts
+export class ChatSession<TOOLS extends ToolSet> {
+  // ✅ 極簡狀態管理
+  private toolCallConfirmations: ToolCallConfirmation[] = [];
+  private toolAlwaysAllowRules: ToolAlwaysAllowRule[] = [];
+  
+  async runTurn(input: TurnInput<TOOLS>) {
+    // 收集 AI 回應中的 tool calls
+    const toolCalls: ToolCallUnion<TOOLS>[] = []; // 從 streamText 收集
+    
+    // ✅ 委託給 runner，傳入完整狀態
+    const result = await this.toolCallRunner.execute(
+      toolCalls,
+      this.toolCallConfirmations,      // 完整確認歷史
+      this.toolAlwaysAllowRules,       // 當前規則
+      { chatId: this.id }
+    );
+    
+    if (result.status === "waiting_confirmations") {
+      // 等待用戶確認
+      return { needsConfirmation: true, pendingTools: result.pendingToolCalls };
+    }
+    
+    // 執行完成，更新對話歷史
+    return { executed: result.executed };
+  }
+  
+  // ✅ Session 處理確認邏輯
+  async confirmToolCall(toolCallId: string, outcome: ToolCallConfirmationOutcome) {
+    const confirmation: ToolCallConfirmation = {
+      toolCallId,
+      outcome,
+      timestamp: new Date()
+    };
+    
+    this.toolCallConfirmations.push(confirmation);
+    
+    // ✅ 處理 "yes_always" 邏輯
+    if (outcome === "yes_always") {
+      this.createAlwaysAllowRule(confirmation);
+    }
+  }
+}
+總體評價
+這個實現非常優秀，完美體現了我們討論的所有重構原則：
+
+AI SDK 原生類型最大化使用 ✅
+批次確認安全機制 ✅
+職責分離（Session 儲存 + Runner 邏輯） ✅
+類型簡化（統一結構取代複雜 discriminated union） ✅
+MVP 友好（簡潔 > 性能） ✅
+這個設計將成為一個優秀的 tool call 系統基礎，既保持了與 AI SDK 的完美整合，又提供了必要的業務邏輯支持。
+
+
+
+
+Retry
+接下來請針對 packages/events-core/src/services/tool-call/tool-registry.ts 給予重構方案
+最大化使用 ai sdk v5
+
+Edit
+
+分析工具注册重构，探索 AI SDK v5 集成方案
+4s
+
+
+
+
+
+Searched project for “packages/events-core/src/services/tool-call/tool-registry.ts”
+5 results
+
+
+
+
+
+
+
+
+
+重构工具注册，优化 AI SDK v5 集成方案
+7s
+
+
+
+
+
+
+基于 AI SDK v5 的 ToolRegistry 重构方案，我来分析当前设计并提供重构建议：
+
+当前设计分析
+❌ 需要替换的自定义類型
+typescript
+// 當前自定義 Tool interface
+export interface Tool {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  shouldConfirmExecute(...): Promise<...>;
+  execute(...): Promise<unknown>;
+}
+
+// ❌ 自定義 MCP 客戶端
+interface MCPClient {
+  listTools(): Promise<MCPToolInfo[]>;
+  callTool(...): Promise<unknown>;
+}
+✅ 可以保留的業務邏輯
+工具分類管理
+健康監控
+事件發送
+確認邏輯包裝
+AI SDK v5 重構方案
+A. 完全基於 AI SDK 原生類型的設計
+typescript
+// tool-registry.ts
+import type { 
+  Tool,                                    // ❌ 使用 AI SDK 原生 Tool
+  ToolSet,                                // ❌ 使用 AI SDK 原生 ToolSet
+  experimental_createMCPClient as createMCPClient  // ❌ 使用 AI SDK MCP 支援
+} from 'ai';
+import type { MCPClient } from 'ai/mcp';   // ❌ 使用 AI SDK MCP 類型
+
+// ✅ 保留業務特定類型
+export interface ToolRegistrationMetadata {
+  category: string;
+  source: 'built-in' | 'mcp';
+  serverName?: string;
+  registeredAt: Date;
+}
+
+export interface ToolHealthStatus {
+  isHealthy: boolean;
+  lastChecked: Date;
+  error?: string;
+}
+
+// ❌ 大幅簡化的 Registry 設計
+export class ToolRegistry {
+  // ✅ 直接管理 AI SDK 原生 ToolSet
+  private toolSet: ToolSet = {};
+  private toolMetadata: Map<string, ToolRegistrationMetadata> = new Map();
+  private toolHealth: Map<string, ToolHealthStatus> = new Map();
+  private mcpClients: Map<string, MCPClient> = new Map();
+  
+  constructor(
+    private eventBus: IEventBus,
+    private logger: Logger<ILogObj>
+  ) {}
+B. 工具註冊的極簡化設計
+typescript
+// ✅ 直接註冊 AI SDK 原生工具
+registerTool(tool: Tool<any, any>, metadata?: Partial<ToolRegistrationMetadata>): void {
+  const toolName = this.extractToolName(tool);
+  
+  // ❌ 直接添加到 ToolSet
+  this.toolSet[toolName] = tool;
+  
+  // ✅ 保留業務元數據
+  this.toolMetadata.set(toolName, {
+    category: metadata?.category || 'built-in',
+    source: 'built-in',
+    registeredAt: new Date(),
+    ...metadata
+  });
+  
+  this.logger.info("Tool registered", { toolName, category: metadata?.category });
+  
+  this.eventBus.emit({
+    kind: "TOOL_REGISTERED",
+    toolName,
+    toolType: "built-in",
+    timestamp: new Date(),
+  });
+}
+
+// ✅ 獲取完整的 ToolSet（供 AI SDK 使用）
+getToolSet(): ToolSet {
+  return this.toolSet;
+}
+
+// ✅ 獲取單個工具（向後兼容）
+getTool(name: string): Tool<any, any> | undefined {
+  return this.toolSet[name];
+}
+C. MCP 集成使用 AI SDK 原生支援
+typescript
+// ❌ 使用 AI SDK 的 MCP 支援
+async registerMCPServer(serverConfig: MCPServerConfig): Promise<void> {
+  this.logger.info("Registering MCP server with AI SDK", {
+    serverName: serverConfig.name,
+  });
+
+  try {
+    // ✅ 使用 AI SDK 原生 MCP 客戶端
+    const mcpClient = await createMCPClient({
+      transport: {
+        type: 'sse',  // 或 'stdio'，根據配置
+        url: serverConfig.url,
+        headers: serverConfig.oauth?.enabled ? {
+          Authorization: `Bearer ${await this.getOAuthToken(serverConfig)}`
+        } : undefined
+      }
+    });
+
+    // ❌ 直接獲取 AI SDK 格式的工具
+    const tools = await mcpClient.tools();  // 返回 ToolSet 格式
+    
+    // ✅ 批量註冊 MCP 工具
+    Object.entries(tools).forEach(([toolName, tool]) => {
+      // ❌ 直接添加到主 ToolSet
+      this.toolSet[toolName] = tool;
+      
+      // ✅ 記錄 MCP 來源
+      this.toolMetadata.set(toolName, {
+        category: serverConfig.category || 'mcp',
+        source: 'mcp',
+        serverName: serverConfig.name,
+        registeredAt: new Date()
+      });
+    });
+
+    this.mcpClients.set(serverConfig.name, mcpClient);
+    
+    this.logger.info("MCP server registered", {
+      serverName: serverConfig.name,
+      toolCount: Object.keys(tools).length
+    });
+
+    this.eventBus.emit({
+      kind: "MCP_SERVER_REGISTERED",
+      serverName: serverConfig.name,
+      toolCount: Object.keys(tools).length,
+      timestamp: new Date(),
+    });
+
+  } catch (error) {
+    this.logger.error("Failed to register MCP server", {
+      serverName: serverConfig.name,
+      error: error.message
+    });
+    throw error;
+  }
+}
+D. 業務邏輯包裝工具的策略
+對於需要確認邏輯的工具，使用 AI SDK 的擴展機制：
+
+typescript
+// ✅ 包裝 AI SDK 工具添加確認邏輯
+wrapToolWithConfirmation<T extends Tool<any, any>>(
+  tool: T, 
+  confirmationLogic: (input: any) => Promise<boolean>
+): Tool<any, any> {
+  // ❌ 使用 AI SDK 的 tool helper 創建包裝工具
+  return tool({
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    execute: async (input, options) => {
+      // ✅ 添加確認邏輯
+      const needsConfirmation = await confirmationLogic(input);
+      if (needsConfirmation) {
+        // 拋出特殊錯誤，讓上層處理確認邏輯
+        throw new ToolConfirmationRequired(tool.name, input);
+      }
+      
+      // 執行原始工具
+      return await tool.execute(input, options);
+    }
+  });
+}
+
+// ✅ 批量包裝危險工具
+registerDangerousTool(tool: Tool<any, any>, dangerLevel: 'low' | 'medium' | 'high'): void {
+  const wrappedTool = this.wrapToolWithConfirmation(
+    tool,
+    async (input) => this.assessDangerLevel(tool.name, input, dangerLevel)
+  );
+  
+  this.registerTool(wrappedTool, { 
+    category: 'dangerous',
+    dangerLevel 
+  });
+}
+E. 健康監控簡化
+typescript
+// ✅ 簡化的健康檢查
+async checkToolHealth(): Promise<ToolHealthReport> {
+  const healthResults = new Map<string, ToolHealthStatus>();
+  
+  // 檢查所有工具
+  for (const [toolName, tool] of Object.entries(this.toolSet)) {
+    try {
+      // ✅ 簡單的健康檢查 - 嘗試訪問工具屬性
+      const isAccessible = tool && tool.description && tool.inputSchema;
+      
+      healthResults.set(toolName, {
+        isHealthy: !!isAccessible,
+        lastChecked: new Date(),
+        error: isAccessible ? undefined : 'Tool properties not accessible'
+      });
+    } catch (error) {
+      healthResults.set(toolName, {
+        isHealthy: false,
+        lastChecked: new Date(),
+        error: error.message
+      });
+    }
+  }
+  
+  // 檢查 MCP 客戶端
+  const mcpHealth = await this.checkMCPClientHealth();
+  
+  return this.buildHealthReport(healthResults, mcpHealth);
+}
+
+private async checkMCPClientHealth(): Promise<Map<string, boolean>> {
+  const mcpHealth = new Map<string, boolean>();
+  
+  for (const [serverName, client] of this.mcpClients) {
+    try {
+      // ✅ 使用 AI SDK MCP 客戶端的健康檢查
+      await client.tools();  // 嘗試獲取工具列表
+      mcpHealth.set(serverName, true);
+    } catch (error) {
+      this.logger.warn("MCP server health check failed", {
+        serverName,
+        error: error.message
+      });
+      mcpHealth.set(serverName, false);
+    }
+  }
+  
+  return mcpHealth;
+}
+F. 與 ChatSession 的整合
+typescript
+// chat-session.ts
+export class ChatSession<TOOLS extends ToolSet> {
+  constructor(
+    private toolRegistry: ToolRegistry,  // 注入 registry
+    // ... 其他依賴
+  ) {}
+  
+  async runTurn(input: TurnInput) {
+    // ❌ 直接獲取 AI SDK 格式的 ToolSet
+    const tools = this.toolRegistry.getToolSet() as TOOLS;
+    
+    const result = streamText({
+      model: this.model,
+      messages: this.getModelMessages(),
+      tools,  // ❌ 直接使用，無需轉換
+    });
+    
+    // 處理工具調用...
+  }
+}
+重構優勢分析
+1. AI SDK 原生集成最大化
+零轉換成本：直接使用 AI SDK 的 ToolSet 格式
+MCP 原生支援：使用 experimental_createMCPClient
+工具包裝：使用 AI SDK 的 tool() helper
+2. 架構大幅簡化
+刪除自定義工具介面：減少 90% 的類型定義
+統一工具管理：所有工具都是 AI SDK 格式
+減少包裝層：直接操作 AI SDK 原生類型
+3. 業務邏輯保留
+確認機制：通過工具包裝實現
+分類管理：通過元數據實現
+健康監控：簡化但保留核心功能
+4. 未來兼容性
+AI SDK 更新自動受益：新功能自動可用
+MCP 標準支援：與 AI SDK 的 MCP 實現同步
+工具生態系統：可直接使用 AI SDK 工具庫
+這個重構將 ToolRegistry 從一個複雜的工具管理系統簡化為 AI SDK 的薄業務包裝層，大幅減少維護負擔同時提升與 AI SDK 的整合度。
+
+
+
+
+Retry
+const result = streamText({ model: this.model, messages: this.getModelMessages(), tools, // ❌ 直接使用，無需轉換 });
+
+如果是直接給予 tools ，ai sdk 會自己主動執行？
+
+Edit
+
+Analyzed AI SDK tool execution mechanism and constraints.
+6s
+
+
+
+
+
+
+
+非常好的問題！你說得對，這是設計中的關鍵問題。
+
+AI SDK 的工具執行行為
+如果直接傳 tools 給 streamText()，AI SDK 會自動執行工具，當：
+
+工具定義了 execute 函數
+LLM 決定呼叫該工具時
+typescript
+const result = streamText({
+  model: this.model,
+  messages: this.getModelMessages(),
+  tools: {
+    myTool: tool({
+      description: "...",
+      inputSchema: z.object({...}),
+      execute: async (input) => {
+        // ❌ 這會被 AI SDK 自動執行！
+        return "result";
+      }
+    })
+  }
+});
+但我們需要批次確認機制！
+我們的設計要求：
+
+批次確認：所有工具都確認後才執行
+用戶確認：危險工具需要確認
+所以需要重新設計工具執行流程。
+
+重新設計方案
+A. 分離工具定義與工具執行
+typescript
+// ✅ 只提供 schema，不提供 execute
+function createToolSchema<T extends Tool<any, any>>(tool: T) {
+  return tool({
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    // ❌ 故意不提供 execute - 讓 AI SDK 只生成 tool call
+  });
+}
+
+export class ToolRegistry {
+  // ✅ 分離：工具 schema vs 工具執行器
+  private toolSchemas: ToolSet = {};           // 給 AI SDK 用（無 execute）
+  private toolExecutors: Map<string, Tool<any, any>> = new Map();  // 實際執行
+  
+  registerTool(tool: Tool<any, any>) {
+    const toolName = this.extractToolName(tool);
+    
+    // ✅ 註冊 schema（無執行函數）
+    this.toolSchemas[toolName] = this.createToolSchema(tool);
+    
+    // ✅ 單獨保存執行器
+    this.toolExecutors.set(toolName, tool);
+  }
+  
+  // ✅ 給 ChatSession 用的 schemas
+  getToolSchemas(): ToolSet {
+    return this.toolSchemas;
+  }
+  
+  // ✅ 給 ToolCallRunner 用的執行器
+  getToolExecutor(name: string): Tool<any, any> | undefined {
+    return this.toolExecutors.get(name);
+  }
+}
+B. ChatSession 的工具流程控制
+typescript
+// chat-session.ts
+export class ChatSession<TOOLS extends ToolSet> {
+  async runTurn(input: TurnInput) {
+    // ✅ 只傳 schemas，AI SDK 不會自動執行
+    const toolSchemas = this.toolRegistry.getToolSchemas() as TOOLS;
+    
+    const result = streamText({
+      model: this.model,
+      messages: this.getModelMessages(),
+      tools: toolSchemas,  // ✅ 只有 schema，無 execute
+    });
+    
+    // ✅ 手動收集 tool calls
+    const toolCalls: ToolCallUnion<TOOLS>[] = [];
+    for await (const part of result.fullStream) {
+      if (part.type === "tool-call") {
+        toolCalls.push(part);  // ✅ 收集但不執行
+      }
+    }
+    
+    if (toolCalls.length > 0) {
+      // ✅ 委託給 ToolCallRunner 處理確認 + 執行
+      const executionResult = await this.toolCallRunner.execute(
+        toolCalls,
+        this.toolCallConfirmations,
+        this.toolAlwaysAllowRules,
+        { chatId: this.id }
+      );
+      
+      return executionResult;
+    }
+  }
+}
+C. ToolCallRunner 負責實際執行
+typescript
+// tool-call-runner.ts
+export class ToolCallRunner<TOOLS extends ToolSet> {
+  constructor(
+    private toolRegistry: ToolRegistry,  // 獲取執行器
+    private eventBus: IEventBus,
+  ) {}
+  
+  private async executeScheduledTools(
+    toolsWithStatus: ToolWithStatus<TOOLS>[],
+  ): Promise<ToolExecutionResult<TOOLS>> {
+    const executed: ToolResultUnion<TOOLS>[] = [];
+    
+    const scheduledTools = toolsWithStatus.filter(
+      (t) => t.status === "scheduled",
+    );
+
+    await Promise.all(
+      scheduledTools.map(async ({ toolCall }) => {
+        // ✅ 從 registry 獲取實際執行器
+        const toolExecutor = this.toolRegistry.getToolExecutor(toolCall.toolName);
+        if (!toolExecutor) {
+          throw new Error(`Tool executor not found: ${toolCall.toolName}`);
+        }
+        
+        // ✅ 手動執行工具
+        const result = await toolExecutor.execute(toolCall.input);
+
+        executed.push({
+          type: "tool-result",
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          input: toolCall.input,
+          output: result,
+        });
+      }),
+    );
+
+    return {
+      status: "completed",
+      executed,
+    };
+  }
+}
+替代方案：使用 stopWhen
+另一個選擇是使用 AI SDK 的 stopWhen 機制：
+
+typescript
+// 替代方案：控制執行流程
+const result = streamText({
+  model: this.model,
+  messages: this.getModelMessages(),
+  tools: this.toolRegistry.getToolSet(),
+  stopWhen: (reason) => {
+    // ✅ 當有 tool calls 時停止，不自動執行
+    return reason === 'tool-calls';
+  }
+});
+
+// 然後手動處理 tool calls
+const toolCalls = result.toolCalls;
+// 送到 ToolCallRunner 處理確認邏輯...
+推薦方案
+推薦使用方案 A（分離 schema 與執行），因為：
+
+控制度最高：完全控制何時執行工具
+確認機制完整：可以實現批次確認
+與 AI SDK 兼容：依然使用原生類型
+責任分離清晰：
+Registry：管理工具定義
+ChatSession：處理對話流程
+ToolCallRunner：處理工具執行
+這樣既保持了與 AI SDK 的最大兼容性，又實現了我們需要的批次確認機制。
+
+
+
+
+Retry
+Run tool 是交給 ToolCallRunner，不是 ChatSession，請參考 thread-tool_call_1_2.txt
+跟 ai sdk 原生 tool 相比，我們的 tool 多了一個 const needsConfirmation = await tool.shouldConfirmExecute?.(toolCall.input)，可以怎樣設計這個擴展的 tool？直接 extends ai sdk Tool class？還是完全不依賴比較好？
+我在想 scope，你的意見？ Global: single toolRegistry, initialize at startup given by the userSettings
+toollRegistry Chat session: setup a session with a new toolSet, which is derived from the registry with the selected tools (or default) for this session
+chatSession.toolSet
+chatSession.toolCallRunner
+Edit
+
+Analyzed tool execution, design, and scope for AI system.
+10s
+
+
+
+
+你說得非常對！讓我基於這些澄清重新設計：
+
+1. 執行責任歸屬修正
+你說得對，根據 thread-tool_call_1_2.txt：
+
+typescript
+// ✅ 正確的責任分工
+ChatSession: 收集 tool calls + 委託
+ToolCallRunner: 確認邏輯 + 實際執行
+2. Tool 擴展設計策略
+A. 組合模式 - 推薦方案
+typescript
+// ✅ 包裝 AI SDK Tool，添加確認邏輯
+import type { Tool as AISDKTool } from 'ai';
+
+export interface ExtendedTool<INPUT = any, OUTPUT = any> {
+  // ✅ 組合 AI SDK 原生 tool
+  aiTool: AISDKTool<INPUT, OUTPUT>;
+  
+  // ✅ 我們的擴展方法
+  shouldConfirmExecute?(
+    input: INPUT,
+    signal?: AbortSignal
+  ): Promise<ToolConfirmationDetails | null>;
+  
+  // ✅ 方便訪問的代理屬性
+  get name(): string;
+  get description(): string;
+  get inputSchema(): any;
+}
+
+// ✅ 實現組合包裝
+export class ExtendedToolImpl<INPUT, OUTPUT> implements ExtendedTool<INPUT, OUTPUT> {
+  constructor(
+    public readonly aiTool: AISDKTool<INPUT, OUTPUT>,
+    private confirmationLogic?: (input: INPUT) => Promise<ToolConfirmationDetails | null>
+  ) {}
+
+  // ✅ 代理到 AI SDK tool
+  get name(): string { return this.aiTool.name || 'unknown'; }
+  get description(): string { return this.aiTool.description || ''; }
+  get inputSchema(): any { return this.aiTool.inputSchema; }
+
+  // ✅ 我們的確認邏輯
+  async shouldConfirmExecute(
+    input: INPUT,
+    signal?: AbortSignal
+  ): Promise<ToolConfirmationDetails | null> {
+    return this.confirmationLogic ? await this.confirmationLogic(input) : null;
+  }
+
+  // ✅ 執行時直接調用 AI SDK tool
+  async execute(input: INPUT, options?: any): Promise<OUTPUT> {
+    return await this.aiTool.execute(input, options);
+  }
+}
+B. 工具創建 Helper
+typescript
+// ✅ 便利的工具創建函數
+export function createExtendedTool<INPUT, OUTPUT>(
+  aiTool: AISDKTool<INPUT, OUTPUT>,
+  options?: {
+    confirmationLogic?: (input: INPUT) => Promise<ToolConfirmationDetails | null>;
+    dangerLevel?: 'low' | 'medium' | 'high';
+  }
+): ExtendedTool<INPUT, OUTPUT> {
+  return new ExtendedToolImpl(
+    aiTool,
+    options?.confirmationLogic || (options?.dangerLevel ? 
+      (input) => createDefaultConfirmation(aiTool.name, input, options.dangerLevel!) : 
+      undefined
+    )
+  );
+}
+3. Scope 設計架構
+A. Global ToolRegistry
+typescript
+// ✅ 全局工具註冊中心
+export class GlobalToolRegistry {
+  private registeredTools: Map<string, ExtendedTool> = new Map();
+  private mcpClients: Map<string, MCPClient> = new Map();
+  
+  constructor(
+    private eventBus: IEventBus,
+    private logger: Logger<ILogObj>
+  ) {}
+
+  // ✅ 註冊擴展工具
+  registerTool(tool: ExtendedTool, metadata?: ToolRegistrationMetadata): void {
+    this.registeredTools.set(tool.name, tool);
+    
+    this.eventBus.emit({
+      kind: "TOOL_REGISTERED",
+      toolName: tool.name,
+      timestamp: new Date(),
+    });
+  }
+
+  // ✅ 從 AI SDK tool 創建並註冊
+  registerAITool<INPUT, OUTPUT>(
+    aiTool: AISDKTool<INPUT, OUTPUT>,
+    options?: {
+      confirmationLogic?: (input: INPUT) => Promise<ToolConfirmationDetails | null>;
+      dangerLevel?: 'low' | 'medium' | 'high';
+      metadata?: ToolRegistrationMetadata;
+    }
+  ): void {
+    const extendedTool = createExtendedTool(aiTool, options);
+    this.registerTool(extendedTool, options?.metadata);
+  }
+
+  // ✅ 註冊 MCP 服務器
+  async registerMCPServer(serverConfig: MCPServerConfig): Promise<void> {
+    const mcpClient = await createMCPClient({
+      transport: { type: 'sse', url: serverConfig.url }
+    });
+
+    // ✅ 獲取 AI SDK 格式的工具
+    const mcpTools = await mcpClient.tools();
+    
+    // ✅ 包裝成 ExtendedTool
+    Object.entries(mcpTools).forEach(([toolName, aiTool]) => {
+      const extendedTool = createExtendedTool(aiTool, {
+        // MCP 工具默認需要確認
+        dangerLevel: 'medium'
+      });
+      
+      this.registerTool(extendedTool, {
+        category: 'mcp',
+        source: 'mcp',
+        serverName: serverConfig.name
+      });
+    });
+
+    this.mcpClients.set(serverConfig.name, mcpClient);
+  }
+
+  // ✅ 獲取所有可用工具
+  getAllTools(): Map<string, ExtendedTool> {
+    return new Map(this.registeredTools);
+  }
+
+  // ✅ 按類別獲取工具
+  getToolsByCategory(category: string): ExtendedTool[] {
+    // 基於 metadata 過濾
+    return Array.from(this.registeredTools.values()).filter(
+      tool => this.getToolMetadata(tool.name)?.category === category
+    );
+  }
+}
+B. Session-Specific ToolSet
+typescript
+// ✅ Session 級別的工具集
+export class SessionToolSet<TOOLS extends ToolSet> {
+  private toolSchemas: TOOLS;           // 給 AI SDK 用
+  private extendedTools: Map<string, ExtendedTool>;  // 實際執行用
+
+  constructor(
+    selectedTools: ExtendedTool[],
+    private globalRegistry: GlobalToolRegistry
+  ) {
+    this.extendedTools = new Map();
+    this.toolSchemas = {} as TOOLS;
+
+    // ✅ 構建 session 工具集
+    selectedTools.forEach(extendedTool => {
+      // ✅ 保存擴展工具（用於執行）
+      this.extendedTools.set(extendedTool.name, extendedTool);
+      
+      // ✅ 提取 AI SDK schema（用於 LLM）
+      this.toolSchemas[extendedTool.name as keyof TOOLS] = {
+        description: extendedTool.description,
+        inputSchema: extendedTool.inputSchema,
+        // ❌ 故意不提供 execute - 手動控制執行
+      } as TOOLS[keyof TOOLS];
+    });
+  }
+
+  // ✅ 給 streamText 用的 schemas
+  getToolSchemas(): TOOLS {
+    return this.toolSchemas;
+  }
+
+  // ✅ 給 ToolCallRunner 用的執行器
+  getExtendedTool(name: string): ExtendedTool | undefined {
+    return this.extendedTools.get(name);
+  }
+
+  // ✅ 獲取所有工具名稱
+  getToolNames(): string[] {
+    return Array.from(this.extendedTools.keys());
+  }
+}
+C. ChatSession 整合
+typescript
+// ✅ ChatSession 使用 SessionToolSet
+export class ChatSession<TOOLS extends ToolSet> {
+  public readonly toolSet: SessionToolSet<TOOLS>;
+  public readonly toolCallRunner: ToolCallRunner<TOOLS>;
+  
+  constructor(
+    private globalRegistry: GlobalToolRegistry,
+    sessionConfig: {
+      selectedTools?: string[];  // 工具名稱列表
+      toolCategories?: string[]; // 或按類別選擇
+    }
+  ) {
+    // ✅ 從 global registry 選擇工具
+    const selectedTools = this.selectSessionTools(sessionConfig);
+    
+    // ✅ 創建 session 工具集
+    this.toolSet = new SessionToolSet(selectedTools, globalRegistry);
+    
+    // ✅ 創建 runner
+    this.toolCallRunner = new ToolCallRunner(this.toolSet, this.eventBus);
+  }
+
+  private selectSessionTools(config: any): ExtendedTool[] {
+    if (config.selectedTools) {
+      return config.selectedTools
+        .map(name => this.globalRegistry.getAllTools().get(name))
+        .filter(Boolean) as ExtendedTool[];
+    }
+    
+    if (config.toolCategories) {
+      return config.toolCategories
+        .flatMap(category => this.globalRegistry.getToolsByCategory(category));
+    }
+    
+    // 默認：所有工具
+    return Array.from(this.globalRegistry.getAllTools().values());
+  }
+
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    // ✅ 使用 session 工具集的 schemas
+    const result = streamText({
+      model: this.model,
+      messages: this.getModelMessages(),
+      tools: this.toolSet.getToolSchemas(),  // ❌ 只有 schema
+    });
+
+    // ✅ 收集 tool calls，委託給 runner
+    const toolCalls: ToolCallUnion<TOOLS>[] = [];
+    for await (const part of result.fullStream) {
+      if (part.type === "tool-call") {
+        toolCalls.push(part);
+      }
+    }
+
+    if (toolCalls.length > 0) {
+      // ✅ 委託給 ToolCallRunner
+      return await this.toolCallRunner.execute(
+        toolCalls,
+        this.toolCallConfirmations,
+        this.toolAlwaysAllowRules,
+        { chatId: this.id }
+      );
+    }
+  }
+}
+D. ToolCallRunner 更新
+typescript
+export class ToolCallRunner<TOOLS extends ToolSet> {
+  constructor(
+    private sessionToolSet: SessionToolSet<TOOLS>,  // ✅ 使用 session 工具集
+    private eventBus: IEventBus,
+  ) {}
+
+  private async initializeToolStatuses(
+    toolCalls: ToolCallUnion<TOOLS>[],
+    confirmations: ToolCallConfirmation[],
+    alwaysAllowRules: ToolAlwaysAllowRule[],
+  ): Promise<ToolWithStatus<TOOLS>[]> {
+    return Promise.all(
+      toolCalls.map(async (toolCall) => {
+        // ... 確認邏輯 ...
+
+        // ✅ 檢查是否需要確認
+        const extendedTool = this.sessionToolSet.getExtendedTool(toolCall.toolName);
+        const needsConfirmation = await extendedTool?.shouldConfirmExecute?.(
+          toolCall.input
+        );
+        
+        return {
+          toolCall,
+          status: needsConfirmation ? "awaiting_approval" : "scheduled",
+        };
+      }),
+    );
+  }
+
+  private async executeScheduledTools(
+    toolsWithStatus: ToolWithStatus<TOOLS>[],
+  ): Promise<ToolExecutionResult<TOOLS>> {
+    // ... 執行邏輯 ...
+    
+    await Promise.all(
+      scheduledTools.map(async ({ toolCall }) => {
+        // ✅ 獲取擴展工具並執行
+        const extendedTool = this.sessionToolSet.getExtendedTool(toolCall.toolName);
+        const result = await extendedTool?.execute(toolCall.input);
+        // ...
+      }),
+    );
+  }
+}
+總結優勢
+清晰的 Scope 分離：
+Global Registry：所有工具的中央管理
+Session ToolSet：每個會話的工具選擇
+ToolCallRunner：工具執行邏輯
+AI SDK 最大化利用：
+組合模式保持與 AI SDK Tool 的兼容
+直接使用 AI SDK 的 MCP 支持
+保持類型安全和未來兼容性
+靈活的工具管理：
+支持按需選擇工具
+支持工具分類
+支持會話級別的工具配置
+責任分離清晰：
+Registry：工具註冊和管理
+ToolSet：工具選擇和組織
+Runner：工具執行和確認邏輯
+這個設計既保持了與 AI SDK 的最大兼容性，又提供了我們需要的確認機制和靈活的工具管理。
+
+
+
+
+Retry
+組合模式okay 
+export interface ExtendedTool<INPUT = any, OUTPUT = any> {  
+// ✅ 方便訪問的代理屬性
+>>> 不需要，我們可以直接使用 `aiTool.name, ... 取得`
+get name(): string;
+get description(): string;
+get inputSchema(): any;
+}
+不需要 工具創建 Helper
+registerAITool -> 不需要
+Mcp -> 要用 ai sdk mcp tools，要給 import
+不需要 class SessionToolSet ，直接使用 native ToolSet
+ChatSession 可能也不需要存 toolSet？ ``` // In ChatSession constructor(toolRegistry, toolNames?: string[], ) { toolSet = toolRegistry.getToolSet(toolNames) }
+// In ToolCallRunner
+const extendedTool = this.toolRegistry.getExtendedTool(toolCall.toolName);  // return extended tool
+extendedTool.tool.execute(…)
+``
+6. extendedTool.tool.execute(…)` 感覺不太好，extended tool 還可以叫什麼？
+
+請分析討論
+
+Edit
+
+
+
+Refined design strategy to simplify AI tool architecture.
+7s
+
+
+
+
+你的簡化建議非常好！讓我重新設計一個更簡潔的版本：
+
+1. 簡化的 ExtendedTool 設計
+typescript
+// ✅ 極簡的組合設計
+export interface ExtendedTool<INPUT = any, OUTPUT = any> {
+  aiTool: AISDKTool<INPUT, OUTPUT>;  // ✅ 直接暴露，用 aiTool.name 訪問
+  
+  shouldConfirmExecute?(
+    input: INPUT,
+    signal?: AbortSignal
+  ): Promise<ToolConfirmationDetails | null>;
+}
+
+// ✅ 簡單的實現類
+export class ExtendedToolImpl<INPUT, OUTPUT> implements ExtendedTool<INPUT, OUTPUT> {
+  constructor(
+    public readonly aiTool: AISDKTool<INPUT, OUTPUT>,
+    private confirmationLogic?: (input: INPUT) => Promise<ToolConfirmationDetails | null>
+  ) {}
+
+  async shouldConfirmExecute(
+    input: INPUT,
+    signal?: AbortSignal
+  ): Promise<ToolConfirmationDetails | null> {
+    return this.confirmationLogic ? await this.confirmationLogic(input) : null;
+  }
+}
+2. 簡化的 GlobalToolRegistry
+typescript
+import { experimental_createMCPClient as createMCPClient } from 'ai';
+
+export class GlobalToolRegistry {
+  private extendedTools: Map<string, ExtendedTool> = new Map();
+  private toolMetadata: Map<string, ToolRegistrationMetadata> = new Map();
+  
+  constructor(
+    private eventBus: IEventBus,
+    private logger: Logger<ILogObj>
+  ) {}
+
+  // ✅ 直接註冊 ExtendedTool
+  registerTool(extendedTool: ExtendedTool, metadata?: ToolRegistrationMetadata): void {
+    const toolName = extendedTool.aiTool.name || 'unknown';
+    this.extendedTools.set(toolName, extendedTool);
+    this.toolMetadata.set(toolName, {
+      category: 'built-in',
+      source: 'built-in',
+      registeredAt: new Date(),
+      ...metadata
+    });
+  }
+
+  // ✅ 使用 AI SDK MCP
+  async registerMCPServer(serverConfig: MCPServerConfig): Promise<void> {
+    const mcpClient = await createMCPClient({
+      transport: {
+        type: 'sse',
+        url: serverConfig.url,
+        headers: serverConfig.oauth?.enabled ? {
+          Authorization: `Bearer ${await this.getOAuthToken(serverConfig)}`
+        } : undefined
+      }
+    });
+
+    // ✅ 獲取 AI SDK 原生 MCP tools
+    const mcpTools = await mcpClient.tools();
+    
+    // ✅ 包裝成 ExtendedTool
+    Object.entries(mcpTools).forEach(([toolName, aiTool]) => {
+      const extendedTool = new ExtendedToolImpl(
+        aiTool,
+        // MCP 工具預設需要確認
+        async (input) => ({
+          message: `Execute MCP tool: ${toolName}`,
+          dangerLevel: 'medium' as const,
+          affectedResources: []
+        })
+      );
+      
+      this.registerTool(extendedTool, {
+        category: 'mcp',
+        source: 'mcp',
+        serverName: serverConfig.name
+      });
+    });
+  }
+
+  // ✅ 根據工具名稱獲取 ToolSet（給 ChatSession 用）
+  getToolSet(toolNames?: string[]): ToolSet {
+    const toolSet: ToolSet = {};
+    
+    const selectedNames = toolNames || Array.from(this.extendedTools.keys());
+    
+    selectedNames.forEach(name => {
+      const extendedTool = this.extendedTools.get(name);
+      if (extendedTool) {
+        // ✅ 只提供 schema，不提供 execute
+        toolSet[name] = {
+          description: extendedTool.aiTool.description,
+          inputSchema: extendedTool.aiTool.inputSchema,
+          // ❌ 故意不提供 execute
+        };
+      }
+    });
+    
+    return toolSet;
+  }
+
+  // ✅ 獲取 ExtendedTool（給 ToolCallRunner 用）
+  getExtendedTool(name: string): ExtendedTool | undefined {
+    return this.extendedTools.get(name);
+  }
+}
+3. 簡化的 ChatSession
+typescript
+export class ChatSession<TOOLS extends ToolSet> {
+  public readonly toolCallRunner: ToolCallRunner<TOOLS>;
+  
+  constructor(
+    private toolRegistry: GlobalToolRegistry,
+    toolNames?: string[],  // ✅ 選擇的工具名稱
+    // ... 其他參數
+  ) {
+    // ✅ 創建 runner，傳入 registry
+    this.toolCallRunner = new ToolCallRunner(this.toolRegistry, this.eventBus);
+  }
+
+  async runTurn(input: TurnInput): Promise<ConversationResult> {
+    // ✅ 動態獲取 ToolSet
+    const toolSet = this.toolRegistry.getToolSet(this.selectedToolNames) as TOOLS;
+    
+    const result = streamText({
+      model: this.model,
+      messages: this.getModelMessages(),
+      tools: toolSet,  // ✅ 只有 schema，無 execute
+    });
+
+    // ✅ 收集 tool calls
+    const toolCalls: ToolCallUnion<TOOLS>[] = [];
+    for await (const part of result.fullStream) {
+      if (part.type === "tool-call") {
+        toolCalls.push(part);
+      }
+    }
+
+    if (toolCalls.length > 0) {
+      // ✅ 委託給 runner
+      return await this.toolCallRunner.execute(
+        toolCalls,
+        this.toolCallConfirmations,
+        this.toolAlwaysAllowRules,
+        { chatId: this.id }
+      );
+    }
+  }
+}
+4. 簡化的 ToolCallRunner
+typescript
+export class ToolCallRunner<TOOLS extends ToolSet> {
+  constructor(
+    private toolRegistry: GlobalToolRegistry,  // ✅ 直接使用 registry
+    private eventBus: IEventBus,
+  ) {}
+
+  private async initializeToolStatuses(
+    toolCalls: ToolCallUnion<TOOLS>[],
+    confirmations: ToolCallConfirmation[],
+    alwaysAllowRules: ToolAlwaysAllowRule[],
+  ): Promise<ToolWithStatus<TOOLS>[]> {
+    return Promise.all(
+      toolCalls.map(async (toolCall) => {
+        // ... 確認檢查邏輯 ...
+
+        // ✅ 檢查是否需要確認
+        const extendedTool = this.toolRegistry.getExtendedTool(toolCall.toolName);
+        const needsConfirmation = await extendedTool?.shouldConfirmExecute?.(
+          toolCall.input
+        );
+        
+        return {
+          toolCall,
+          status: needsConfirmation ? "awaiting_approval" : "scheduled",
+        };
+      }),
+    );
+  }
+
+  private async executeScheduledTools(
+    toolsWithStatus: ToolWithStatus<TOOLS>[],
+  ): Promise<ToolExecutionResult<TOOLS>> {
+    const executed: ToolResultUnion<TOOLS>[] = [];
+    const scheduledTools = toolsWithStatus.filter(t => t.status === "scheduled");
+
+    await Promise.all(
+      scheduledTools.map(async ({ toolCall }) => {
+        const extendedTool = this.toolRegistry.getExtendedTool(toolCall.toolName);
+        if (!extendedTool) {
+          throw new Error(`Extended tool not found: ${toolCall.toolName}`);
+        }
+        
+        // ✅ 執行 AI SDK 原生工具
+        const result = await extendedTool.aiTool.execute(toolCall.input);
+
+        executed.push({
+          type: "tool-result",
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          input: toolCall.input,
+          output: result,
+        });
+      }),
+    );
+
+    return {
+      status: "completed",
+      executed,
+    };
+  }
+}
+5. 關於命名的討論
+你說 extendedTool.tool.execute(...) 感覺不好，確實如此。幾個選項：
+
+選項 A：aiTool（推薦）
+typescript
+const result = await extendedTool.aiTool.execute(toolCall.input);
+✅ 清楚表明這是 AI SDK 的原生工具
+
+選項 B：nativeTool
+typescript
+const result = await extendedTool.nativeTool.execute(toolCall.input);
+✅ 強調是原生工具
+
+選項 C：baseTool
+typescript
+const result = await extendedTool.baseTool.execute(toolCall.input);
+✅ 表明是基礎工具
+
+選項 D：直接在 ExtendedTool 上代理 execute
+typescript
+export class ExtendedToolImpl<INPUT, OUTPUT> implements ExtendedTool<INPUT, OUTPUT> {
+  // ✅ 代理執行方法
+  async execute(input: INPUT, options?: any): Promise<OUTPUT> {
+    return await this.aiTool.execute(input, options);
+  }
+}
+
+// 使用時：
+const result = await extendedTool.execute(toolCall.input);
+推薦選項 A (aiTool)，因為：
+
+明確表明是 AI SDK 原生工具
+與我們的設計意圖一致（組合不是繼承）
+不會造成混淆
+總結
+這個簡化版本：
+
+✅ 移除了不必要的代理屬性和 helper 函數
+✅ 直接使用 AI SDK 的 MCP 支持
+✅ 使用原生 ToolSet 而不是自定義類
+✅ ChatSession 不儲存 toolSet，動態獲取
+✅ 清晰的執行路徑：extendedTool.aiTool.execute()
+這樣既保持了與 AI SDK 的最大兼容性，又大幅簡化了架構複雜度。
+
+
+
+
+Retry
+我是想要改 ExtendedTool 這個名字，有建議嗎？
+
+Edit
+
+探索並建議多個工具命名方案，聚焦功能特性
+21s
+
+
+
+
+
+
+確實，ExtendedTool 這個名字不太好。讓我分析一下這個類型的核心特點來找更好的名字：
+
+核心特點分析
+組合 AI SDK 原生工具
+添加確認邏輯
+業務層的工具包裝
+命名建議
+選項 1: ToolWrapper
+typescript
+export interface ToolWrapper<INPUT = any, OUTPUT = any> {
+  aiTool: AISDKTool<INPUT, OUTPUT>;
+  shouldConfirmExecute?(...): Promise<...>;
+}
+
+// 使用：
+const wrapper = this.toolRegistry.getToolWrapper(toolCall.toolName);
+await wrapper.aiTool.execute(toolCall.input);
+✅ 簡潔明了，直接表達"包裝器"的概念 ✅ 通用性好，不限定具體功能
+
+選項 2: ConfirmableTool
+typescript
+export interface ConfirmableTool<INPUT = any, OUTPUT = any> {
+  aiTool: AISDKTool<INPUT, OUTPUT>;
+  shouldConfirmExecute?(...): Promise<...>;
+}
+
+// 使用：
+const confirmableTool = this.toolRegistry.getConfirmableTool(toolCall.toolName);
+await confirmableTool.aiTool.execute(toolCall.input);
+✅ 突出主要功能，強調"可確認"特性 ✅ 語義清晰，一看就知道用途
+
+選項 3: ManagedTool
+typescript
+export interface ManagedTool<INPUT = any, OUTPUT = any> {
+  aiTool: AISDKTool<INPUT, OUTPUT>;
+  shouldConfirmExecute?(...): Promise<...>;
+}
+
+// 使用：
+const managedTool = this.toolRegistry.getManagedTool(toolCall.toolName);
+await managedTool.aiTool.execute(toolCall.input);
+✅ 表達業務管理，表明是受業務邏輯管理的工具 ✅ 未來擴展性，可以添加更多管理功能
+
+選項 4: BusinessTool
+typescript
+export interface BusinessTool<INPUT = any, OUTPUT = any> {
+  aiTool: AISDKTool<INPUT, OUTPUT>;
+  shouldConfirmExecute?(...): Promise<...>;
+}
+
+// 使用：
+const businessTool = this.toolRegistry.getBusinessTool(toolCall.toolName);
+await businessTool.aiTool.execute(toolCall.input);
+✅ 層次分明，業務層 vs 技術層（AI SDK） ✅ 職責清晰，包含業務邏輯的工具
+
+選項 5: GuardedTool
+typescript
+export interface GuardedTool<INPUT = any, OUTPUT = any> {
+  aiTool: AISDKTool<INPUT, OUTPUT>;
+  shouldConfirmExecute?(...): Promise<...>;
+}
+
+// 使用：
+const guardedTool = this.toolRegistry.getGuardedTool(toolCall.toolName);
+await guardedTool.aiTool.execute(toolCall.input);
+✅ 安全導向，強調"受保護"的特性 ✅ 形象生動，容易理解
+
+推薦排序
+ToolWrapper - 最直接，通用性最好
+ConfirmableTool - 功能導向，語義最清晰
+ManagedTool - 業務導向，擴展性好
+對比使用場景
+typescript
+// 方案 1: ToolWrapper
+const wrapper = registry.getToolWrapper(name);
+const result = await wrapper.aiTool.execute(input);
+
+// 方案 2: ConfirmableTool  
+const confirmable = registry.getConfirmableTool(name);
+const result = await confirmable.aiTool.execute(input);
+
+// 方案 3: ManagedTool
+const managed = registry.getManagedTool(name);
+const result = await managed.aiTool.execute(input);
+我個人推薦 ToolWrapper，因為：
+
+最簡潔直觀
+不過度限定功能（未來可能添加其他包裝邏輯）
+與 aiTool 形成很好的對比：wrapper 是我們的，aiTool 是 AI SDK 的
+你覺得哪個比較好？
+
