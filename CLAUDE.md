@@ -49,6 +49,9 @@ pnpm example                    # Run basic example
 pnpm chat-engine-demo          # Demo chat engine
 pnpm content-generator-demo    # Demo content generator
 pnpm test-with-api            # Test with actual API
+pnpm tool-call-demo            # Demo tool call system
+pnpm tool-registry-example     # Demo tool registry with AI SDK
+pnpm file-references-demo      # Demo file reference system
 ```
 
 ## Architecture Overview
@@ -57,30 +60,39 @@ pnpm test-with-api            # Test with actual API
 
 **Event-Driven Architecture**: All system communication flows through a central EventBus using pub/sub patterns with strongly typed events for both client and server sides.
 
-**tRPC API Layer**: Type-safe end-to-end API with modular routers (chat, task, file, project, event, user-settings) and real-time capabilities via subscriptions.
+**tRPC API Layer**: Type-safe end-to-end API with modular routers (chatClient, task, file, projectFolder, event, userSettings) and real-time capabilities via subscriptions.
 
 **Repository Pattern**: Consistent data access layer with file-based persistence using human-readable JSON files for chats, tasks, and settings.
 
 ### Key Services
 
-- **ChatService**: Manages chat lifecycle, message handling, and AI interactions
-- **TaskService**: Handles task creation, status tracking, and directory management
+- **ChatSessionRepository**: Manages chat session lifecycle and message persistence
+- **TaskService**: Handles task creation, status tracking, and directory management with repository pattern
 - **FileService**: Manages file operations and artifact creation with watch capabilities
-- **ProjectFolderService**: Workspace management and project registration
+- **ProjectFolderService**: Workspace management and project registration with real-time folder watching
 - **FileWatcherService**: Real-time file system monitoring using chokidar
+- **ToolRegistry**: Manages tool registration and execution with AI SDK v5 integration
+- **UserSettingsService**: Handles user configuration and preferences
 
 ### Chat Engine Architecture
 
-The system includes dual chat implementations:
+The system uses AI SDK v5 for chat functionality:
 
-- **Basic Chat Engine**: Traditional chat with message management
-- **Enhanced Chat Engine**: AI SDK v5 integration with advanced features in `services/content-generator/`
+- **ChatClient Router**: Handles chat session management, message processing, and tool call coordination
+- **AI SDK Integration**: Native support for multiple providers (Anthropic, OpenAI, Google) with tool calling
+- **Content Generator**: Enhanced chat features with streaming and tool execution in `services/content-generator/`
+- **Tool Call System**: Integrated tool execution with approval workflows and real-time progress tracking
 
 ### Frontend Integration
 
-**Svelte App**: Uses direct tRPC client with reactive stores for state management, Vitest for testing, and Svelte 5 with runes. This is the active frontend application.
+**Svelte App**: Uses direct tRPC client with Svelte 5 runes-based reactive stores (`*.svelte.ts`) for state management. Includes comprehensive UI components:
 
-The frontend consumes TypeScript types from events-core package and connects via workspace protocol.
+- **Chat Interface**: Message display with tool call execution and approval workflows
+- **File Explorer**: Tree-based file browser with context menu and search capabilities
+- **Tool Call UI**: Real-time progress tracking, permission confirmations, and result display
+- **Project Management**: Workspace folder management and file watching
+
+The frontend consumes TypeScript types from events-core package via workspace protocol.
 
 ## Development Guidelines
 
@@ -90,7 +102,7 @@ Uses pnpm workspaces with `packageManager: "pnpm@9.0.0"` and Node.js >=18 requir
 
 ### Type Safety
 
-All inter-service communication is strongly typed through tRPC with SuperJSON for complex data serialization.
+All inter-service communication is strongly typed through tRPC with SuperJSON for complex data serialization. Event system uses discriminated unions for type-safe event handling with correlation IDs for request tracing.
 
 ### File System Integration
 
@@ -98,7 +110,12 @@ Services interact directly with the file system for persistence, with structured
 
 ### Event System Usage
 
-Use correlation IDs for request tracing and leverage async iterators for real-time event streaming with proper cleanup and cancellation.
+Central EventBus with strongly-typed events (`ClientEventUnion` | `ServerEventUnion`) including:
+
+- Task lifecycle events (creation, updates, completion)
+- File system events (watching, changes, artifacts)
+- Tool call events (registration, execution, approval)
+- Real-time subscriptions via tRPC with async iterators and proper cleanup
 
 ## Development Guidelines
 
@@ -180,6 +197,11 @@ Use correlation IDs for request tracing and leverage async iterators for real-ti
   - Tailwind CSS v4
   - Shadcn-svelte (for Svelte v5 & Tailwind v4)
   - Bootstrap icons (svelte-bootstrap-icons)
+- **Frontend Architecture:**
+  - The frontend employs a decoupled architecture to separate logic, state, and presentation.
+  - **Service Layer (`/services`):** This layer contains all business logic. Services are responsible for orchestrating API calls, handling complex operations, and acting as the primary interface for any action that modifies the application.
+  - **State Layer (`/stores`):** All application state is managed here using reactive Svelte stores. Stores are the single source of truth for UI data and should ideally only be mutated by the service layer to ensure predictable state management.
+  - **Component Layer (`/components`):** Svelte components are dedicated to presentation. Their role is to subscribe to stores for data and render the UI accordingly. User interactions within components trigger calls to the service layer to perform actions, rather than directly manipulating state.
 - **Svelte v5 best practices:**
   - **Use runes for reactivity** - Prefer `$state()`, `$derived()`, `$effect()`, and `$props()` over legacy syntax
   - **Event handlers as properties** - Use `onclick={handler}` instead of `on:click={handler}`
