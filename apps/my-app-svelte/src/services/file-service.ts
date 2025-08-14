@@ -1,7 +1,7 @@
 // apps/my-app-svelte/src/services/file-service.ts
 import { Logger } from "tslog";
 import { trpcClient } from "../lib/trpc-client";
-import { setLoading, showToast } from "../stores/ui-store";
+import { setLoading, showToast } from "../stores/ui-store.svelte";
 
 interface FileContent {
   content: string;

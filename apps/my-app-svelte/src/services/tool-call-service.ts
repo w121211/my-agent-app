@@ -2,7 +2,7 @@
 
 import { Logger } from "tslog"
 import { trpcClient } from "../lib/trpc-client"
-import { toolCallOperations } from "../stores/tool-call-store"
+import { toolCallOperations } from "../stores/tool-call-store.svelte"
 import type { 
   ToolCallRequestInfo, 
   ScheduleToolCallsRequest,

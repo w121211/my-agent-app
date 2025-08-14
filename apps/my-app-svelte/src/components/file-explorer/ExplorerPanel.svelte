@@ -1,19 +1,22 @@
 <!-- apps/my-app-svelte/src/components/ExplorerPanel.svelte -->
 <script lang="ts">
-  import { projectFolders, folderTrees } from "../../stores/project-store";
+  import { PlusLg, Gear } from "svelte-bootstrap-icons";
+  import { Logger } from "tslog";
+  import { projectFolders, folderTrees } from "../../stores/project-store.svelte";
   import {
     connectionStates,
     isLoadingAddProjectFolder,
     isLoadingProjectFolders,
     isLoadingCreateChat,
     showToast,
-  } from "../../stores/ui-store";
+  } from "../../stores/ui-store.svelte";
   import { projectService } from "../../services/project-service";
   import { chatService } from "../../services/chat-service";
+  import { showContextMenu } from "../../stores/file-explorer-store.svelte";
   import TreeNode from "./TreeNode.svelte";
   import FileIcon from "./FileIcon.svelte";
-  import { PlusLg, Gear } from "svelte-bootstrap-icons";
-  import { Logger } from "tslog";
+  import ContextMenu from "./ContextMenu.svelte";
+  import RenameDialog from "./RenameDialog.svelte";
 
   const logger = new Logger({ name: "ExplorerPanel" });
 
@@ -49,11 +52,16 @@
     }
   }
 
-  function handleContextMenu(path: string) {
-    showToast("Context menu functionality coming soon", "info");
+  function handleContextMenu(path: string, event: MouseEvent) {
+    console.log("🎯 ExplorerPanel: Context menu requested for:", path);
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Use store function directly
+    showContextMenu(path, event.clientX, event.clientY);
   }
 
-  function handleStopTask(path: string) {
+  function handleStopTask(_path: string) {
     showToast("Stop task functionality coming soon", "info");
   }
 </script>
@@ -149,4 +157,10 @@
       Settings
     </button>
   </div>
+
+  <!-- Context Menu -->
+  <ContextMenu />
+
+  <!-- Rename Dialog -->
+  <RenameDialog />
 </div>

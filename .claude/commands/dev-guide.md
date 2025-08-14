@@ -78,6 +78,11 @@
   - Tailwind CSS v4
   - Shadcn-svelte (for Svelte v5 & Tailwind v4)
   - Bootstrap icons (svelte-bootstrap-icons)
+- **Frontend Architecture:**
+  - The frontend employs a decoupled architecture to separate logic, state, and presentation.
+  - **Service Layer (`/services`):** This layer contains all business logic. Services are responsible for orchestrating API calls, handling complex operations, and acting as the primary interface for any action that modifies the application.
+  - **State Layer (`/stores`):** All application state is managed here using reactive Svelte stores. Stores are the single source of truth for UI data and should ideally only be mutated by the service layer to ensure predictable state management.
+  - **Component Layer (`/components`):** Svelte components are dedicated to presentation. Their role is to subscribe to stores for data and render the UI accordingly. User interactions within components trigger calls to the service layer to perform actions, rather than directly manipulating state.
 - **Svelte v5 best practices:**
   - **Use runes for reactivity** - Prefer `$state()`, `$derived()`, `$effect()`, and `$props()` over legacy syntax
   - **Event handlers as properties** - Use `onclick={handler}` instead of `on:click={handler}`

@@ -1,15 +1,14 @@
-// apps/my-app-svelte/src/stores/task-store.ts
-import { writable, derived } from "svelte/store";
+// apps/my-app-svelte/src/stores/task-store.svelte.ts
 import type { Task } from "../services/task-service";
 
 // Core task state
-export const tasks = writable<Task[]>([]);
-export const tasksByPath = writable<Map<string, Task>>(new Map());
+export const tasks = $state<Task[]>([]);
+export const tasksByPath = $state<Map<string, Task>>(new Map());
 
 // Derived stores
-export const taskCount = derived(tasks, ($tasks) => $tasks.length);
+export const taskCount = $derived(tasks.length);
 
-export const tasksByStatus = derived(tasks, ($tasks) => {
+export const tasksByStatus = $derived(() => {
   const byStatus = {
     CREATED: [] as Task[],
     INITIALIZED: [] as Task[],
@@ -17,7 +16,7 @@ export const tasksByStatus = derived(tasks, ($tasks) => {
     COMPLETED: [] as Task[],
   };
 
-  $tasks.forEach((task) => {
+  tasks.forEach((task) => {
     if (byStatus[task.status]) {
       byStatus[task.status].push(task);
     }
@@ -26,31 +25,28 @@ export const tasksByStatus = derived(tasks, ($tasks) => {
   return byStatus;
 });
 
-export const activeTasks = derived(tasks, ($tasks) =>
-  $tasks.filter(
+export const activeTasks = $derived(
+  tasks.filter(
     (task) => task.status === "IN_PROGRESS" || task.status === "INITIALIZED",
   ),
 );
 
-export const completedTasks = derived(tasks, ($tasks) =>
-  $tasks.filter((task) => task.status === "COMPLETED"),
+export const completedTasks = $derived(
+  tasks.filter((task) => task.status === "COMPLETED"),
 );
 
-export const runningTasksCount = derived(
-  tasks,
-  ($tasks) => $tasks.filter((task) => task.status === "IN_PROGRESS").length,
+export const runningTasksCount = $derived(
+  tasks.filter((task) => task.status === "IN_PROGRESS").length,
 );
 
-export const pendingTasksCount = derived(
-  tasks,
-  ($tasks) =>
-    $tasks.filter(
-      (task) => task.status === "CREATED" || task.status === "INITIALIZED",
-    ).length,
+export const pendingTasksCount = $derived(
+  tasks.filter(
+    (task) => task.status === "CREATED" || task.status === "INITIALIZED",
+  ).length,
 );
 
-export const recentTasks = derived(tasks, ($tasks) => {
-  return [...$tasks]
+export const recentTasks = $derived(() => {
+  return [...tasks]
     .sort(
       (a, b) =>
         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
@@ -60,71 +56,50 @@ export const recentTasks = derived(tasks, ($tasks) => {
 
 // Helper functions for working with task stores
 export function getTaskForPath(directoryPath: string) {
-  return derived(
-    tasksByPath,
-    ($tasksByPath) => $tasksByPath.get(directoryPath) || null,
-  );
+  return $derived(tasksByPath.get(directoryPath) || null);
 }
 
 export function findTaskById(taskId: string) {
-  return derived(
-    tasks,
-    ($tasks) => $tasks.find((task) => task.id === taskId) || null,
-  );
+  return $derived(tasks.find((task) => task.id === taskId) || null);
 }
 
 export function addTask(task: Task) {
-  tasks.update((currentTasks) => [...currentTasks, task]);
+  tasks.push(task);
 
   if (task.absoluteDirectoryPath) {
-    tasksByPath.update(
-      (mapping) => new Map(mapping.set(task.absoluteDirectoryPath!, task)),
-    );
+    tasksByPath.set(task.absoluteDirectoryPath, task);
   }
 }
 
 export function updateTask(updatedTask: Task) {
   // Update tasks array
-  tasks.update((currentTasks) =>
-    currentTasks.map((task) =>
-      task.id === updatedTask.id ? updatedTask : task,
-    ),
-  );
+  const index = tasks.findIndex((task) => task.id === updatedTask.id);
+  if (index !== -1) {
+    tasks[index] = updatedTask;
+  }
 
   // Update tasksByPath mapping
   if (updatedTask.absoluteDirectoryPath) {
-    tasksByPath.update(
-      (mapping) =>
-        new Map(mapping.set(updatedTask.absoluteDirectoryPath!, updatedTask)),
-    );
+    tasksByPath.set(updatedTask.absoluteDirectoryPath, updatedTask);
   }
 }
 
 export function removeTask(taskId: string) {
-  let removedTask: Task | null = null;
-
-  tasks.update((currentTasks) => {
-    const index = currentTasks.findIndex((task) => task.id === taskId);
-    if (index !== -1) {
-      removedTask = currentTasks[index];
-      return currentTasks.filter((task) => task.id !== taskId);
+  const index = tasks.findIndex((task) => task.id === taskId);
+  if (index !== -1) {
+    const removedTask = tasks[index];
+    tasks.splice(index, 1);
+    
+    // Remove from path mapping
+    if (removedTask?.absoluteDirectoryPath) {
+      tasksByPath.delete(removedTask.absoluteDirectoryPath);
     }
-    return currentTasks;
-  });
-
-  // Remove from path mapping
-  if (removedTask?.absoluteDirectoryPath) {
-    tasksByPath.update((mapping) => {
-      const newMapping = new Map(mapping);
-      newMapping.delete(removedTask!.absoluteDirectoryPath!);
-      return newMapping;
-    });
   }
 }
 
 export function clearTasks() {
-  tasks.set([]);
-  tasksByPath.set(new Map());
+  tasks.splice(0, tasks.length);
+  tasksByPath.clear();
 }
 
 // Task status utilities

@@ -22,11 +22,21 @@ import {
   type OutputUpdateHandler,
   type AllToolCallsCompleteHandler,
   type ToolCallsUpdateHandler,
-  type ToolCallSchedulerOptions,
 } from "./types.js";
 
+interface ToolCallSchedulerOptions {
+  // toolRegistry: Promise<ToolRegistry>;
+  toolRegistry: ToolRegistry;
+  outputUpdateHandler?: OutputUpdateHandler;
+  onAllToolCallsComplete?: AllToolCallsCompleteHandler;
+  onToolCallsUpdate?: ToolCallsUpdateHandler;
+  approvalMode?: ApprovalMode;
+  eventBus: IEventBus;
+  logger: Logger<ILogObj>;
+}
+
 export class ToolCallScheduler {
-  private toolRegistry: Promise<ToolRegistry>;
+  private toolRegistry: ToolRegistry;
   private toolCalls: Map<string, ToolCall[]> = new Map(); // messageId -> ToolCall[]
   private outputUpdateHandler?: OutputUpdateHandler;
   private onAllToolCallsComplete?: AllToolCallsCompleteHandler;

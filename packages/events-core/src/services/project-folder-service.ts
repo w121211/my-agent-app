@@ -481,6 +481,339 @@ export class ProjectFolderService {
 
     return files;
   }
+
+  /**
+   * Copy a file or directory within project folders
+   */
+  public async copyFile(
+    sourceAbsolutePath: string,
+    destinationAbsolutePath: string,
+    correlationId?: string,
+  ): Promise<void> {
+    this.logger.info(
+      `Copying from ${sourceAbsolutePath} to ${destinationAbsolutePath}`,
+    );
+
+    // Validate both paths are absolute
+    if (!path.isAbsolute(sourceAbsolutePath)) {
+      throw new Error(
+        `Source path must be absolute, received: ${sourceAbsolutePath}`,
+      );
+    }
+    if (!path.isAbsolute(destinationAbsolutePath)) {
+      throw new Error(
+        `Destination path must be absolute, received: ${destinationAbsolutePath}`,
+      );
+    }
+
+    // Validate both paths are within project folders
+    const isSourceInProject = await this.isPathInProjectFolder(
+      sourceAbsolutePath,
+    );
+    const isDestinationInProject = await this.isPathInProjectFolder(
+      path.dirname(destinationAbsolutePath),
+    );
+
+    if (!isSourceInProject) {
+      throw new Error(
+        `Source path is not within any project folder: ${sourceAbsolutePath}`,
+      );
+    }
+    if (!isDestinationInProject) {
+      throw new Error(
+        `Destination path is not within any project folder: ${destinationAbsolutePath}`,
+      );
+    }
+
+    // Check if source exists
+    const sourceStats = await fs.stat(sourceAbsolutePath);
+
+    // Check if destination already exists
+    try {
+      await fs.stat(destinationAbsolutePath);
+      throw new Error(`Destination already exists: ${destinationAbsolutePath}`);
+    } catch (error) {
+      // Expected - destination should not exist
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    // Ensure destination directory exists
+    const destinationDir = path.dirname(destinationAbsolutePath);
+    await fs.mkdir(destinationDir, { recursive: true });
+
+    // Perform the copy
+    if (sourceStats.isDirectory()) {
+      await fs.cp(sourceAbsolutePath, destinationAbsolutePath, {
+        recursive: true,
+        preserveTimestamps: true,
+      });
+    } else {
+      await fs.copyFile(sourceAbsolutePath, destinationAbsolutePath);
+    }
+
+    this.logger.info(
+      `Successfully copied from ${sourceAbsolutePath} to ${destinationAbsolutePath}`,
+    );
+  }
+
+  /**
+   * Move a file or directory within project folders
+   */
+  public async moveFile(
+    sourceAbsolutePath: string,
+    destinationAbsolutePath: string,
+    correlationId?: string,
+  ): Promise<void> {
+    this.logger.info(
+      `Moving from ${sourceAbsolutePath} to ${destinationAbsolutePath}`,
+    );
+
+    // Validate both paths are absolute
+    if (!path.isAbsolute(sourceAbsolutePath)) {
+      throw new Error(
+        `Source path must be absolute, received: ${sourceAbsolutePath}`,
+      );
+    }
+    if (!path.isAbsolute(destinationAbsolutePath)) {
+      throw new Error(
+        `Destination path must be absolute, received: ${destinationAbsolutePath}`,
+      );
+    }
+
+    // Validate both paths are within project folders
+    const isSourceInProject = await this.isPathInProjectFolder(
+      sourceAbsolutePath,
+    );
+    const isDestinationInProject = await this.isPathInProjectFolder(
+      path.dirname(destinationAbsolutePath),
+    );
+
+    if (!isSourceInProject) {
+      throw new Error(
+        `Source path is not within any project folder: ${sourceAbsolutePath}`,
+      );
+    }
+    if (!isDestinationInProject) {
+      throw new Error(
+        `Destination path is not within any project folder: ${destinationAbsolutePath}`,
+      );
+    }
+
+    // Check if source exists
+    await fs.stat(sourceAbsolutePath);
+
+    // Check if destination already exists
+    try {
+      await fs.stat(destinationAbsolutePath);
+      throw new Error(`Destination already exists: ${destinationAbsolutePath}`);
+    } catch (error) {
+      // Expected - destination should not exist
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    // Ensure destination directory exists
+    const destinationDir = path.dirname(destinationAbsolutePath);
+    await fs.mkdir(destinationDir, { recursive: true });
+
+    // Perform the move
+    await fs.rename(sourceAbsolutePath, destinationAbsolutePath);
+
+    this.logger.info(
+      `Successfully moved from ${sourceAbsolutePath} to ${destinationAbsolutePath}`,
+    );
+  }
+
+  /**
+   * Rename a file or directory within project folders
+   */
+  public async renameFile(
+    absolutePath: string,
+    newName: string,
+    correlationId?: string,
+  ): Promise<void> {
+    this.logger.info(`Renaming ${absolutePath} to ${newName}`);
+
+    // Validate path is absolute
+    if (!path.isAbsolute(absolutePath)) {
+      throw new Error(`Path must be absolute, received: ${absolutePath}`);
+    }
+
+    // Check if the path being renamed is a project folder root
+    const settings = await this.userSettingsRepository.getSettings();
+    const isProjectFolderRoot = settings.projectFolders.some(
+      (folder) => folder.path === absolutePath,
+    );
+
+    if (isProjectFolderRoot) {
+      throw new Error("Cannot rename project folder. Project folders cannot be renamed.");
+    }
+
+    // Validate path is within project folders
+    const isInProject = await this.isPathInProjectFolder(absolutePath);
+    if (!isInProject) {
+      throw new Error(
+        `Path is not within any project folder: ${absolutePath}`,
+      );
+    }
+
+    // Validate new name
+    if (!newName.trim()) {
+      throw new Error("New name cannot be empty");
+    }
+
+    // Check for invalid characters in filename
+    const invalidChars = /[<>:"/\\|?*]/;
+    if (invalidChars.test(newName)) {
+      throw new Error("New name contains invalid characters");
+    }
+
+    // Check if source exists
+    await fs.stat(absolutePath);
+
+    // Build destination path
+    const parentDir = path.dirname(absolutePath);
+    const destinationPath = path.join(parentDir, newName);
+
+    // Check if destination already exists
+    try {
+      await fs.stat(destinationPath);
+      throw new Error(`A file or directory named "${newName}" already exists`);
+    } catch (error) {
+      // Expected - destination should not exist
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
+    // Perform the rename
+    await fs.rename(absolutePath, destinationPath);
+
+    this.logger.info(`Successfully renamed ${absolutePath} to ${destinationPath}`);
+  }
+
+  /**
+   * Delete a file or directory within project folders
+   */
+  public async deleteFile(
+    absolutePath: string,
+    correlationId?: string,
+  ): Promise<void> {
+    this.logger.info(`Deleting ${absolutePath}`);
+
+    // Validate path is absolute
+    if (!path.isAbsolute(absolutePath)) {
+      throw new Error(`Path must be absolute, received: ${absolutePath}`);
+    }
+
+    // Validate path is within project folders
+    const isInProject = await this.isPathInProjectFolder(absolutePath);
+    if (!isInProject) {
+      throw new Error(
+        `Path is not within any project folder: ${absolutePath}`,
+      );
+    }
+
+    // Check if source exists
+    const stats = await fs.stat(absolutePath);
+
+    // Perform the deletion
+    if (stats.isDirectory()) {
+      await fs.rm(absolutePath, { recursive: true, force: true });
+    } else {
+      await fs.unlink(absolutePath);
+    }
+
+    this.logger.info(`Successfully deleted ${absolutePath}`);
+  }
+
+  /**
+   * Duplicate a file or directory within project folders
+   */
+  public async duplicateFile(
+    sourceAbsolutePath: string,
+    newName?: string,
+    correlationId?: string,
+  ): Promise<string> {
+    this.logger.info(`Duplicating ${sourceAbsolutePath}`);
+
+    // Validate path is absolute
+    if (!path.isAbsolute(sourceAbsolutePath)) {
+      throw new Error(
+        `Source path must be absolute, received: ${sourceAbsolutePath}`,
+      );
+    }
+
+    // Validate path is within project folders
+    const isInProject = await this.isPathInProjectFolder(sourceAbsolutePath);
+    if (!isInProject) {
+      throw new Error(
+        `Source path is not within any project folder: ${sourceAbsolutePath}`,
+      );
+    }
+
+    // Check if source exists
+    await fs.stat(sourceAbsolutePath);
+
+    // Generate destination path
+    const parentDir = path.dirname(sourceAbsolutePath);
+    const originalName = path.basename(sourceAbsolutePath);
+    const destinationPath = await this.generateUniqueFileName(parentDir, newName || originalName);
+
+    // Use existing copyFile method to perform the duplication
+    await this.copyFile(sourceAbsolutePath, destinationPath, correlationId);
+
+    this.logger.info(`Successfully duplicated ${sourceAbsolutePath} to ${destinationPath}`);
+    return destinationPath;
+  }
+
+  /**
+   * Generate a unique filename in the given directory
+   */
+  private async generateUniqueFileName(
+    parentDir: string,
+    baseName: string,
+  ): Promise<string> {
+    const ext = path.extname(baseName);
+    const nameWithoutExt = path.basename(baseName, ext);
+    
+    let counter = 1;
+    let candidatePath = path.join(parentDir, baseName);
+
+    // Check if the original name is available
+    try {
+      await fs.stat(candidatePath);
+      // If we get here, file exists, so we need to generate a new name
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        // File doesn't exist, original name is available
+        return candidatePath;
+      }
+      throw error;
+    }
+
+    // Generate numbered variants until we find an available name
+    while (true) {
+      const newName = ext 
+        ? `${nameWithoutExt} (${counter})${ext}`
+        : `${nameWithoutExt} (${counter})`;
+      candidatePath = path.join(parentDir, newName);
+
+      try {
+        await fs.stat(candidatePath);
+        counter++;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          // Found an available name
+          return candidatePath;
+        }
+        throw error;
+      }
+    }
+  }
 }
 
 export function createProjectFolderService(

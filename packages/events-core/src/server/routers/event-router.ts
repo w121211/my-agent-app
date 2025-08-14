@@ -5,6 +5,7 @@ import { IEventBus, BaseEvent } from "../../event-bus.js";
 import { FileWatcherEvent } from "../../services/file-watcher-service.js";
 import { TaskUpdatedEvent } from "../../services/task-service.js";
 import { ProjectFolderUpdatedEvent } from "../../services/project-folder-service.js";
+import { ChatUpdatedEvent } from "../../services/chat-engine/events.js";
 import { router, publicProcedure } from "../trpc-server.js";
 
 // Define the known event kinds
@@ -12,6 +13,7 @@ const eventKindEnum = z.enum([
   "FileWatcherEvent",
   "TaskUpdatedEvent",
   "ProjectFolderUpdatedEvent",
+  "ChatUpdatedEvent",
 ] as const);
 
 // Map event kinds to their event types
@@ -19,6 +21,7 @@ interface EventTypeMap {
   FileWatcherEvent: FileWatcherEvent;
   TaskUpdatedEvent: TaskUpdatedEvent;
   ProjectFolderUpdatedEvent: ProjectFolderUpdatedEvent;
+  ChatUpdatedEvent: ChatUpdatedEvent;
   PingEvent: BaseEvent & { message: string };
 }
 
@@ -51,6 +54,7 @@ export function createEventRouter(eventBus: IEventBus) {
       eventBus,
       "ProjectFolderUpdatedEvent"
     ),
+    chatEvents: createEventSubscription(eventBus, "ChatUpdatedEvent"),
 
     // Subscribe to a specific event kind
     // subscribeToEvent: publicProcedure

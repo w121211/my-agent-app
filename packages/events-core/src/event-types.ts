@@ -1,27 +1,7 @@
-export type TaskStatus = "CREATED" | "INITIALIZED" | "IN_PROGRESS" | "COMPLETED"
-
 export type SubtaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED"
 
 export type ChatStatus = "ACTIVE" | "CLOSED"
 
-export type ChatSessionStatus = 'idle' | 'processing' | 'waiting_confirmation' | 'max_turns_reached'
-
-export type Role = "ASSISTANT" | "USER" | "FUNCTION_EXECUTOR"
-
-export type ChatMode = "chat" | "agent"
-
-/**
- * Role types for AI API format
- */
-export type AIMessageRole = "user" | "assistant" | "system"
-
-/**
- * Message format for AI API
- */
-export interface AIMessage {
-  role: AIMessageRole
-  content: string
-}
 
 /**
  * Structure representing a file system node in the folder tree
@@ -46,13 +26,6 @@ export const ClientEventKind = [
   "ClientStopSubtask",
   "ClientCloneSubtask",
 
-  // Chat related
-  "ClientCreateNewChat",
-  "ClientStartNewChat",
-  "ClientSubmitUserChatMessage",
-  "ClientCloneChat",
-  "ClientBranchChat",
-  "ClientApproveWork",
 
   // Tool call related
   "ClientScheduleToolCalls",
@@ -67,7 +40,6 @@ export const ClientEventKind = [
   "ClientEditorReloadRequested",
   "ClientEditorUpdated",
   "ClientFileChangeIgnored",
-  "ClientChatUpdated",
   "ClientTaskUpdated",
   "ClientUIStateUpdated",
   "ClientOpenFile",
@@ -95,19 +67,6 @@ export const ServerEventKind = [
   "ServerSubtaskUpdated",
   "ServerNextSubtaskTriggered",
 
-  // Chat related
-  "ServerChatFileCreated",
-  "ServerChatInitialized",
-  "ServerChatMessageAppended",
-  "ServerChatFileUpdated",
-  "ServerChatUpdated",
-  "ServerNewChatCreated", // Response to ClientCreateNewChat event
-
-  // AI processing
-  "ServerUserChatMessagePostProcessed",
-  "ServerAIResponseRequested",
-  "ServerAIResponseGenerated",
-  "ServerAIResponsePostProcessed",
 
   // File related
   "ServerFileOpened",
@@ -151,67 +110,7 @@ export interface Subtask {
   outputType: string
 }
 
-export interface Task {
-  id: string
-  seqNumber: number
-  title: string
-  status: TaskStatus
-  currentSubtaskId?: string
-  // subtasks: Subtask[];
-  folderPath?: string
-  config: Record<string, unknown>
-  createdAt: Date
-  updatedAt: Date
-}
 
-export interface ChatMessageMetadata {
-  subtaskId?: string
-  taskId?: string
-  functionCalls?: Record<string, unknown>[]
-  isPrompt?: boolean
-  fileReferences?: Array<{
-    path: string
-    md5: string
-  }>
-}
-
-export interface ChatMessage {
-  id: string
-  role: Role
-  content: string
-  timestamp: Date
-  metadata?: ChatMessageMetadata
-}
-
-export interface ChatMetadata {
-  title?: string
-  summary?: string
-  tags?: string[]
-  mode?: ChatMode
-  model?: string
-  knowledge?: string[]
-}
-
-export interface Chat {
-  id: string
-  taskId: string
-  // subtaskId: string;
-  messages: ChatMessage[]
-  status: ChatStatus
-  createdAt: Date
-  updatedAt: Date
-  metadata?: ChatMetadata
-  filePath?: string // Added filePath property to store the chat's file path
-}
-
-export interface ChatFile {
-  _type: string
-  chatId: string
-  createdAt: Date
-  updatedAt: Date
-  title?: string
-  messages: ChatMessage[]
-}
 
 export interface Artifact {
   id: string
@@ -300,57 +199,6 @@ export interface ClientCloneSubtaskEvent extends BaseClientEvent {
   subtaskId: string
 }
 
-export interface ClientCreateNewChatEvent extends BaseClientEvent {
-  kind: "ClientCreateNewChat"
-  newTask: boolean
-  mode: ChatMode
-  knowledge: string[]
-  prompt: string
-  model: string
-}
-
-export interface ClientCreateNewChatEvent extends BaseClientEvent {
-  kind: "ClientCreateNewChat"
-  newTask: boolean
-  mode: ChatMode
-  knowledge: string[]
-  prompt: string
-  model: string
-}
-
-export interface ClientStartNewChatEvent extends BaseClientEvent {
-  kind: "ClientStartNewChat"
-  taskId: string
-  subtaskId: string
-  metadata?: ChatMetadata
-}
-
-export interface ClientSubmitUserChatMessageEvent extends BaseClientEvent {
-  kind: "ClientSubmitUserChatMessage"
-  chatId: string
-  message: string
-  attachments?: Array<{
-    fileName: string
-    content: string
-  }>
-}
-
-export interface ClientCloneChatEvent extends BaseClientEvent {
-  kind: "ClientCloneChat"
-  chatId: string
-}
-
-export interface ClientBranchChatEvent extends BaseClientEvent {
-  kind: "ClientBranchChat"
-  chatId: string
-  messageId: string
-}
-
-export interface ClientApproveWorkEvent extends BaseClientEvent {
-  kind: "ClientApproveWork"
-  chatId: string
-  approvedWork?: string
-}
 
 export interface ClientOpenFileEvent extends BaseClientEvent {
   kind: "ClientOpenFile"
@@ -406,10 +254,6 @@ export interface ClientFileChangeIgnoredEvent extends BaseClientEvent {
   filePath: string
 }
 
-export interface ClientChatUpdatedEvent extends BaseClientEvent {
-  kind: "ClientChatUpdated"
-  chat: Chat
-}
 
 export interface ClientTaskUpdatedEvent extends BaseClientEvent {
   kind: "ClientTaskUpdated"
@@ -488,79 +332,6 @@ export interface ServerNextSubtaskTriggeredEvent extends BaseServerEvent {
   currentSubtaskId: string
 }
 
-export interface ServerChatFileCreatedEvent extends BaseServerEvent {
-  kind: "ServerChatFileCreated"
-  taskId: string
-  chatId: string
-  filePath: string
-}
-
-export interface ServerChatInitializedEvent extends BaseServerEvent {
-  kind: "ServerChatInitialized"
-  chatId: string
-  chatData: Chat
-}
-
-export interface ServerChatMessageAppendedEvent extends BaseServerEvent {
-  kind: "ServerChatMessageAppended"
-  chatId: string
-  message: ChatMessage
-}
-
-export interface ServerChatFileUpdatedEvent extends BaseServerEvent {
-  kind: "ServerChatFileUpdated"
-  chatId: string
-  filePath: string
-}
-
-export interface ServerChatUpdatedEvent extends BaseServerEvent {
-  kind: "ServerChatUpdated"
-  chatId: string
-  chat: Chat
-}
-
-export interface ServerNewChatCreatedEvent extends BaseServerEvent {
-  kind: "ServerNewChatCreated"
-  chatId: string
-  filePath: string
-}
-
-export interface ServerUserChatMessagePostProcessedEvent
-  extends BaseServerEvent {
-  kind: "ServerUserChatMessagePostProcessed"
-  chatId: string
-  messageId: string
-  processedContent: string
-  fileReferences: Array<{
-    path: string
-    md5: string
-  }>
-}
-
-export interface ServerAIResponseRequestedEvent extends BaseServerEvent {
-  kind: "ServerAIResponseRequested"
-  chatId: string
-  model: string
-  prompt?: string
-}
-
-export interface ServerAIResponseGeneratedEvent extends BaseServerEvent {
-  kind: "ServerAIResponseGenerated"
-  chatId: string
-  response: string
-  artifacts?: Array<{
-    id: string
-    type: string
-    content: string
-  }>
-}
-
-export interface ServerAIResponsePostProcessedEvent extends BaseServerEvent {
-  kind: "ServerAIResponsePostProcessed"
-  chatId: string
-  messageId: string
-  processedContent: string
-}
 
 export interface ServerFileOpenedEvent extends BaseServerEvent {
   kind: "ServerFileOpened"
@@ -714,12 +485,6 @@ export type ClientEventUnion =
   | ClientCompleteSubtaskEvent
   | ClientStopSubtaskEvent
   | ClientCloneSubtaskEvent
-  | ClientCreateNewChatEvent
-  | ClientStartNewChatEvent
-  | ClientSubmitUserChatMessageEvent
-  | ClientCloneChatEvent
-  | ClientBranchChatEvent
-  | ClientApproveWorkEvent
   | ClientOpenFileEvent
   | ClientRequestWorkspaceFolderTreeEvent
   | ClientTestPingEvent
@@ -729,7 +494,6 @@ export type ClientEventUnion =
   | ClientEditorReloadRequestedEvent
   | ClientEditorUpdatedEvent
   | ClientFileChangeIgnoredEvent
-  | ClientChatUpdatedEvent
   | ClientTaskUpdatedEvent
   | ClientUIStateUpdatedEvent
   | ClientScheduleToolCallsEvent
@@ -746,16 +510,6 @@ export type ServerEventUnion =
   | ServerSubtaskCompletedEvent
   | ServerSubtaskUpdatedEvent
   | ServerNextSubtaskTriggeredEvent
-  | ServerChatFileCreatedEvent
-  | ServerChatInitializedEvent
-  | ServerChatMessageAppendedEvent
-  | ServerChatFileUpdatedEvent
-  | ServerChatUpdatedEvent
-  | ServerNewChatCreatedEvent
-  | ServerUserChatMessagePostProcessedEvent
-  | ServerAIResponseRequestedEvent
-  | ServerAIResponseGeneratedEvent
-  | ServerAIResponsePostProcessedEvent
   | ServerFileOpenedEvent
   | ServerArtifactFileCreatedEvent
   | ServerFileWatcherEvent
@@ -807,13 +561,6 @@ export function isCommandEvent(event: BaseEvent): boolean {
     "ClientCompleteSubtask",
     "ClientStopSubtask",
     "ClientCloneSubtask",
-    "ClientStartNewChat",
-    "ClientCreateNewChat",
-    "ClientSubmitMessage",
-    "ClientSubmitUserChatMessage",
-    "ClientCloneChat",
-    "ClientBranchChat",
-    "ClientApproveWork",
     "ClientOpenFile",
     "ClientRunTest",
   ]

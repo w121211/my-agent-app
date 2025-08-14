@@ -1,6 +1,6 @@
 <!-- apps/my-app-svelte/src/components/shared/ToastProvider.svelte -->
 <script lang="ts">
-  import { toasts, removeToast, getToastClassName } from "../stores/ui-store";
+  import { toasts, removeToast, getToastClassName } from "../stores/ui-store.svelte";
   import {
     XLg,
     CheckCircleFill,

@@ -1,6 +1,5 @@
-// src/stores/tool-call-store.ts
+// src/stores/tool-call-store.svelte.ts
 
-import { writable, derived, type Writable } from "svelte/store"
 import type { 
   ToolCall, 
   ToolCallStatus,
@@ -8,37 +7,30 @@ import type {
 } from "../types/tool-call.types"
 
 // Main tool calls map: messageId -> ToolCall[]
-export const toolCallsMap: Writable<Map<string, ToolCall[]>> = writable(new Map())
+export const toolCallsMap = $state<Map<string, ToolCall[]>>(new Map());
 
 // Derived store to get tool calls for a specific message
 export function getMessageToolCalls(messageId: string) {
-  return derived(
-    toolCallsMap,
-    ($toolCallsMap) => $toolCallsMap.get(messageId) || []
-  )
+  return $derived(toolCallsMap.get(messageId) || []);
 }
 
 // Derived store to get all pending approvals across all messages
-export const pendingApprovals = derived(toolCallsMap, ($toolCallsMap) => {
-  const allToolCalls = Array.from($toolCallsMap.values()).flat()
-  return allToolCalls.filter((tc) => tc.status === "awaiting_approval")
-})
+export const pendingApprovals = $derived(() => {
+  const allToolCalls = Array.from(toolCallsMap.values()).flat();
+  return allToolCalls.filter((tc) => tc.status === "awaiting_approval");
+});
 
 // Derived store to check if any tool calls are executing
-export const hasExecutingToolCalls = derived(toolCallsMap, ($toolCallsMap) => {
-  const allToolCalls = Array.from($toolCallsMap.values()).flat()
-  return allToolCalls.some((tc) => tc.status === "executing")
-})
+export const hasExecutingToolCalls = $derived(() => {
+  const allToolCalls = Array.from(toolCallsMap.values()).flat();
+  return allToolCalls.some((tc) => tc.status === "executing");
+});
 
 // Tool call operations
 export const toolCallOperations = {
   // Update all tool calls for a message
   updateToolCalls(messageId: string, toolCalls: ToolCall[]) {
-    toolCallsMap.update((map) => {
-      const newMap = new Map(map)
-      newMap.set(messageId, toolCalls)
-      return newMap
-    })
+    toolCallsMap.set(messageId, toolCalls);
   },
 
   // Update a specific tool call's status and data
@@ -48,43 +40,35 @@ export const toolCallOperations = {
     status: ToolCallStatus,
     data?: Partial<ToolCall>
   ) {
-    toolCallsMap.update((map) => {
-      const newMap = new Map(map)
-      const toolCalls = newMap.get(messageId) || []
-      const updatedToolCalls = toolCalls.map((tc) =>
-        tc.request.callId === toolCallId 
-          ? { ...tc, status, ...data } 
-          : tc
-      )
-      newMap.set(messageId, updatedToolCalls)
-      return newMap
-    })
+    const toolCalls = toolCallsMap.get(messageId) || [];
+    const updatedToolCalls = toolCalls.map((tc) =>
+      tc.request.callId === toolCallId 
+        ? { ...tc, status, ...data } 
+        : tc
+    );
+    toolCallsMap.set(messageId, updatedToolCalls);
   },
 
   // Add live output to an executing tool call
   appendLiveOutput(messageId: string, toolCallId: string, outputChunk: string) {
     toolCallOperations.updateToolCallStatus(messageId, toolCallId, "executing", {
       liveOutput: (getCurrentLiveOutput(messageId, toolCallId) || "") + outputChunk
-    })
+    });
   },
 
   // Remove tool calls for a message (cleanup)
   removeToolCalls(messageId: string) {
-    toolCallsMap.update((map) => {
-      const newMap = new Map(map)
-      newMap.delete(messageId)
-      return newMap
-    })
+    toolCallsMap.delete(messageId);
   },
 
   // Clear all tool calls
   clearAll() {
-    toolCallsMap.set(new Map())
+    toolCallsMap.clear();
   },
 
   // Get summary statistics for a message
   getMessageSummary(messageId: string) {
-    const toolCalls = getCurrentToolCalls(messageId)
+    const toolCalls = getCurrentToolCalls(messageId);
     return {
       total: toolCalls.length,
       pending: toolCalls.filter(tc => tc.status === "awaiting_approval").length,
@@ -94,21 +78,17 @@ export const toolCallOperations = {
       ).length,
       successful: toolCalls.filter(tc => tc.status === "success").length,
       failed: toolCalls.filter(tc => tc.status === "error").length
-    }
+    };
   }
-}
+};
 
 // Helper functions to get current values synchronously
 function getCurrentToolCalls(messageId: string): ToolCall[] {
-  let currentToolCalls: ToolCall[] = []
-  toolCallsMap.subscribe(map => {
-    currentToolCalls = map.get(messageId) || []
-  })()
-  return currentToolCalls
+  return toolCallsMap.get(messageId) || [];
 }
 
 function getCurrentLiveOutput(messageId: string, toolCallId: string): string | undefined {
-  const toolCalls = getCurrentToolCalls(messageId)
-  const toolCall = toolCalls.find(tc => tc.request.callId === toolCallId)
-  return toolCall?.liveOutput
+  const toolCalls = getCurrentToolCalls(messageId);
+  const toolCall = toolCalls.find(tc => tc.request.callId === toolCallId);
+  return toolCall?.liveOutput;
 }

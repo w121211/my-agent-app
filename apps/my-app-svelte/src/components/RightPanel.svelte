@@ -1,8 +1,8 @@
 <!-- apps/my-app-svelte/src/components/RightPanel.svelte -->
 <script lang="ts">
   import { Logger } from "tslog";
-  import { showToast, isLoadingOpenFile } from "../stores/ui-store";
-  import { selectedPreviewFile } from "../stores/tree-store";
+  import { showToast, isLoadingOpenFile } from "../stores/ui-store.svelte";
+  import { selectedPreviewFile } from "../stores/tree-store.svelte";
   import { fileService } from "../services/file-service";
   import {
     Pencil,

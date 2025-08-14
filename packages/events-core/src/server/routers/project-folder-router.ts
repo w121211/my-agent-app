@@ -41,6 +41,35 @@ export const searchFilesSchema = z.object({
   limit: z.number().optional().default(20),
 });
 
+export const copyFileSchema = z.object({
+  sourceAbsolutePath: absolutePathSchema,
+  destinationAbsolutePath: absolutePathSchema,
+  correlationId: z.string().optional(),
+});
+
+export const moveFileSchema = z.object({
+  sourceAbsolutePath: absolutePathSchema,
+  destinationAbsolutePath: absolutePathSchema,
+  correlationId: z.string().optional(),
+});
+
+export const renameFileSchema = z.object({
+  absolutePath: absolutePathSchema,
+  newName: z.string().min(1, "New name cannot be empty"),
+  correlationId: z.string().optional(),
+});
+
+export const deleteFileSchema = z.object({
+  absolutePath: absolutePathSchema,
+  correlationId: z.string().optional(),
+});
+
+export const duplicateFileSchema = z.object({
+  sourceAbsolutePath: absolutePathSchema,
+  newName: z.string().optional(),
+  correlationId: z.string().optional(),
+});
+
 export function createProjectFolderRouter(
   projectFolderService: ProjectFolderService
 ) {
@@ -92,6 +121,56 @@ export function createProjectFolderRouter(
           input.projectId,
           input.limit
         );
+      }),
+
+    copyFile: publicProcedure
+      .input(copyFileSchema)
+      .mutation(async ({ input }) => {
+        await projectFolderService.copyFile(
+          input.sourceAbsolutePath,
+          input.destinationAbsolutePath,
+          input.correlationId
+        );
+      }),
+
+    moveFile: publicProcedure
+      .input(moveFileSchema)
+      .mutation(async ({ input }) => {
+        await projectFolderService.moveFile(
+          input.sourceAbsolutePath,
+          input.destinationAbsolutePath,
+          input.correlationId
+        );
+      }),
+
+    renameFile: publicProcedure
+      .input(renameFileSchema)
+      .mutation(async ({ input }) => {
+        await projectFolderService.renameFile(
+          input.absolutePath,
+          input.newName,
+          input.correlationId
+        );
+      }),
+
+    deleteFile: publicProcedure
+      .input(deleteFileSchema)
+      .mutation(async ({ input }) => {
+        await projectFolderService.deleteFile(
+          input.absolutePath,
+          input.correlationId
+        );
+      }),
+
+    duplicateFile: publicProcedure
+      .input(duplicateFileSchema)
+      .mutation(async ({ input }) => {
+        const newPath = await projectFolderService.duplicateFile(
+          input.sourceAbsolutePath,
+          input.newName,
+          input.correlationId
+        );
+        return { newPath };
       }),
   });
 }

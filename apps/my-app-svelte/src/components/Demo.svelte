@@ -4,15 +4,15 @@
   import {
     projectFolders,
     hasAnyProjectFolders,
-  } from "../stores/project-store";
-  import { currentChat, hasCurrentChat } from "../stores/chat-store";
-  import { tasks, taskCount } from "../stores/task-store";
+  } from "../stores/project-store.svelte";
+  import { currentChat, hasCurrentChat } from "../stores/chat-store.svelte";
+  import { tasks, taskCount } from "../stores/task-store.svelte";
   import {
     loadingStates,
     toasts,
     connectionStates,
     showToast,
-  } from "../stores/ui-store";
+  } from "../stores/ui-store.svelte";
   import { chatService } from "../services/chat-service";
   import { projectService } from "../services/project-service";
   import { taskService } from "../services/task-service";

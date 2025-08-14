@@ -1,9 +1,9 @@
 <!-- apps/my-app-svelte/src/components/TreeNode.svelte -->
 <script lang="ts">
-  import type { FolderTreeNode } from "../../stores/project-store";
+  import type { FolderTreeNode } from "../../stores/project-store.svelte";
   import type { Task } from "../../services/task-service";
-  import { expandedNodes, selectedTreeNode } from "../../stores/tree-store";
-  import { tasksByPath } from "../../stores/task-store";
+  import { expandedNodes, selectedTreeNode } from "../../stores/tree-store.svelte";
+  import { tasksByPath } from "../../stores/task-store.svelte";
   import TreeNode from "./TreeNode.svelte";
   import FileIcon from "./FileIcon.svelte";
   import {
@@ -20,7 +20,7 @@
     isCreatingChat?: boolean;
     onclick: (node: FolderTreeNode) => void;
     onNewChat: (path: string) => void;
-    onContextMenu: (path: string) => void;
+    onContextMenu: (path: string, event: MouseEvent) => void;
     onStopTask?: (path: string) => void;
   }
 
@@ -50,8 +50,9 @@
   }
 
   function handleContextMenu(e: MouseEvent) {
+    console.log("🌳 TreeNode handleContextMenu called for:", node.path);
     e.stopPropagation();
-    onContextMenu(node.path);
+    onContextMenu(node.path, e);
   }
 
   function handleStopTask(e: MouseEvent) {

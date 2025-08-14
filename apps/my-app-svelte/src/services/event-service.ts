@@ -4,7 +4,7 @@ import { trpcClient } from "../lib/trpc-client";
 import { projectService } from "./project-service";
 import { chatService } from "./chat-service";
 import { taskService } from "./task-service";
-import { setConnectionState } from "../stores/ui-store";
+import { setConnectionState } from "../stores/ui-store.svelte";
 
 interface Subscription {
   unsubscribe: () => void;

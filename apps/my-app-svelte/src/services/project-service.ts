@@ -7,14 +7,14 @@ import {
   folderTrees,
   type ProjectFolder,
   type FolderTreeNode,
-} from "../stores/project-store";
+} from "../stores/project-store.svelte";
 import {
   setTreeSelectionState,
   toggleNodeExpansion as toggleNodeExpansionStore,
   expandedNodes,
   expandParentDirectories,
-} from "../stores/tree-store";
-import { setLoading, showToast } from "../stores/ui-store";
+} from "../stores/tree-store.svelte";
+import { setLoading, showToast } from "../stores/ui-store.svelte";
 import { chatService } from "./chat-service";
 
 interface FileWatcherEvent {
@@ -193,6 +193,60 @@ class ProjectService {
 
   toggleNodeExpansion(nodePath: string) {
     toggleNodeExpansionStore(nodePath);
+  }
+
+  async copyFile(
+    sourceAbsolutePath: string,
+    destinationAbsolutePath: string,
+  ): Promise<void> {
+    setLoading("copyFile", true);
+
+    try {
+      this.logger.info(`Copying file from ${sourceAbsolutePath} to ${destinationAbsolutePath}`);
+      await trpcClient.projectFolder.copyFile.mutate({
+        sourceAbsolutePath,
+        destinationAbsolutePath,
+      });
+
+      this.logger.info("File copied successfully");
+      showToast("File copied successfully", "success");
+      
+      // Refresh affected project folders
+      await this.refreshAffectedProjectFolders(sourceAbsolutePath, destinationAbsolutePath);
+    } catch (error) {
+      this.logger.error("Failed to copy file:", error);
+      showToast(`Failed to copy file: ${error instanceof Error ? error.message : String(error)}`, "error");
+      throw error;
+    } finally {
+      setLoading("copyFile", false);
+    }
+  }
+
+  async moveFile(
+    sourceAbsolutePath: string,
+    destinationAbsolutePath: string,
+  ): Promise<void> {
+    setLoading("moveFile", true);
+
+    try {
+      this.logger.info(`Moving file from ${sourceAbsolutePath} to ${destinationAbsolutePath}`);
+      await trpcClient.projectFolder.moveFile.mutate({
+        sourceAbsolutePath,
+        destinationAbsolutePath,
+      });
+
+      this.logger.info("File moved successfully");
+      showToast("File moved successfully", "success");
+      
+      // Refresh affected project folders
+      await this.refreshAffectedProjectFolders(sourceAbsolutePath, destinationAbsolutePath);
+    } catch (error) {
+      this.logger.error("Failed to move file:", error);
+      showToast(`Failed to move file: ${error instanceof Error ? error.message : String(error)}`, "error");
+      throw error;
+    } finally {
+      setLoading("moveFile", false);
+    }
   }
 
   // Event handlers
@@ -400,6 +454,110 @@ class ProjectService {
       return { ...node, children: sortedChildren };
     }
     return node;
+  }
+
+  private async refreshAffectedProjectFolders(
+    sourceAbsolutePath: string,
+    destinationAbsolutePath: string,
+  ): Promise<void> {
+    const folders = get(projectFolders);
+    const affectedFolderIds = new Set<string>();
+
+    // Find project folders that contain source or destination paths
+    for (const folder of folders) {
+      if (
+        sourceAbsolutePath.startsWith(folder.path + "/") ||
+        sourceAbsolutePath === folder.path ||
+        destinationAbsolutePath.startsWith(folder.path + "/") ||
+        destinationAbsolutePath === folder.path
+      ) {
+        affectedFolderIds.add(folder.id);
+      }
+    }
+
+    // Refresh each affected project folder's tree
+    for (const folderId of affectedFolderIds) {
+      await this.refreshFolderTree(folderId);
+    }
+  }
+
+  async renameFile(
+    absolutePath: string,
+    newName: string,
+  ): Promise<void> {
+    setLoading("renameFile", true);
+
+    try {
+      this.logger.info(`Renaming ${absolutePath} to ${newName}`);
+      await trpcClient.projectFolder.renameFile.mutate({
+        absolutePath,
+        newName,
+      });
+
+      this.logger.info("File renamed successfully");
+      showToast("File renamed successfully", "success");
+      
+      // Refresh affected project folder (file stays in same directory)
+      await this.refreshAffectedProjectFolders(absolutePath, absolutePath);
+    } catch (error) {
+      this.logger.error("Failed to rename file:", error);
+      showToast(`Failed to rename file: ${error instanceof Error ? error.message : String(error)}`, "error");
+      throw error;
+    } finally {
+      setLoading("renameFile", false);
+    }
+  }
+
+  async deleteFile(absolutePath: string): Promise<void> {
+    setLoading("deleteFile", true);
+
+    try {
+      this.logger.info(`Deleting ${absolutePath}`);
+      await trpcClient.projectFolder.deleteFile.mutate({
+        absolutePath,
+      });
+
+      this.logger.info("File deleted successfully");
+      showToast("File deleted successfully", "success");
+      
+      // Refresh affected project folder
+      await this.refreshAffectedProjectFolders(absolutePath, absolutePath);
+    } catch (error) {
+      this.logger.error("Failed to delete file:", error);
+      showToast(`Failed to delete file: ${error instanceof Error ? error.message : String(error)}`, "error");
+      throw error;
+    } finally {
+      setLoading("deleteFile", false);
+    }
+  }
+
+  async duplicateFile(
+    sourceAbsolutePath: string,
+    newName?: string,
+  ): Promise<string> {
+    setLoading("duplicateFile", true);
+
+    try {
+      this.logger.info(`Duplicating ${sourceAbsolutePath}`);
+      const result = await trpcClient.projectFolder.duplicateFile.mutate({
+        sourceAbsolutePath,
+        newName,
+      });
+
+      this.logger.info(`File duplicated successfully to ${result.newPath}`);
+      showToast("File duplicated successfully", "success");
+      
+      // Refresh affected project folder
+      await this.refreshAffectedProjectFolders(sourceAbsolutePath, result.newPath);
+      
+      return result.newPath;
+    } catch (error) {
+      this.logger.error("Failed to duplicate file:", error);
+      showToast(`Failed to duplicate file: ${error instanceof Error ? error.message : String(error)}`, "error");
+      throw error;
+    } finally {
+      setLoading("duplicateFile", false);
+    }
   }
 }
 

@@ -24,6 +24,28 @@ export interface MCPServerConfig {
   };
 }
 
+export interface ToolMetadata {
+  name: string;
+  description: string;
+  category: string;
+  inputSchema: unknown;
+}
+
+export interface ToolsHealthReport {
+  totalTools: number;
+  healthyTools: number;
+  unhealthyTools: number;
+  mcpServers: {
+    total: number;
+    healthy: number;
+    unhealthy: number;
+  };
+  details: Map<
+    string,
+    { status: string; metadata?: ToolMetadata; error?: string }
+  >;
+}
+
 export interface ToolRegistrationMetadata {
   // category: string;
   source: "built-in" | "mcp";
@@ -32,7 +54,26 @@ export interface ToolRegistrationMetadata {
   confirmationLogic?: (input: any) => Promise<boolean>;
 }
 
-export class ToolRegistry {
+export interface ToolRegistry {
+  registerTool(
+    toolName: string,
+    tool: Tool,
+    metadata?: Partial<ToolRegistrationMetadata>,
+  ): void;
+  registerMCPServer(serverConfig: MCPServerConfig): Promise<void>;
+  getToolSet(toolNames?: string[], mcpServerNames?: string[]): ToolSet;
+  getToolSetByNames(toolNames: string[]): ToolSet;
+  isBuiltInTool(name: string): boolean;
+  isMCPTool(name: string): boolean;
+  getTool(name: string): Tool | undefined;
+  getMCPTool(name: string): Tool | undefined;
+  getAllTools(): Map<string, Tool>;
+  getToolMetadata(name: string): ToolRegistrationMetadata | undefined;
+  checkToolsHealth(): ToolsHealthReport;
+  // getToolsByCategory(category: string): Tool[];
+}
+
+export class ToolRegistryImpl implements ToolRegistry {
   private tools: Map<string, Tool> = new Map();
   private toolMetadata: Map<string, ToolRegistrationMetadata> = new Map();
   private mcpClients: Map<string, MCPClient> = new Map();
@@ -195,7 +236,7 @@ export class ToolRegistry {
     return this.tools.get(name);
   }
 
-  getMCPTool(name: string): Tool<any, any> | undefined {
+  getMCPTool(name: string): Tool | undefined {
     for (const mcpTools of Array.from(this.mcpToolSets.values())) {
       if (mcpTools[name]) {
         return mcpTools[name];
@@ -216,6 +257,10 @@ export class ToolRegistry {
 
   getToolMetadata(name: string): ToolRegistrationMetadata | undefined {
     return this.toolMetadata.get(name);
+  }
+
+  checkToolsHealth(): ToolsHealthReport {
+    throw new Error("checkToolsHealth is not implemented yet");
   }
 
   private async getOAuthToken(serverConfig: MCPServerConfig): Promise<string> {

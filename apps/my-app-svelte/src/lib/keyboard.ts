@@ -4,10 +4,10 @@ import {
   selectedTreeNode,
   selectedChatFile,
   selectedPreviewFile,
-} from "../stores/tree-store";
+} from "../stores/tree-store.svelte";
 import { chatService } from "../services/chat-service";
 import { projectService } from "../services/project-service";
-import { showToast } from "../stores/ui-store";
+import { showToast } from "../stores/ui-store.svelte";
 
 export interface KeyboardShortcut {
   key: string;

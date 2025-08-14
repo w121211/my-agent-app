@@ -2,12 +2,7 @@
 
 import { ILogObj, Logger } from "tslog";
 import { v4 as uuidv4 } from "uuid";
-import type {
-  ProviderRegistryProvider,
-  StreamTextResult,
-  ToolSet,
-  UserModelMessage,
-} from "ai";
+import type { StreamTextResult, ToolSet, UserModelMessage } from "ai";
 import { ChatSession } from "./chat-session.js";
 import { MessageProcessor } from "./message-processor.js";
 import type { IEventBus } from "../../event-bus.js";
@@ -29,7 +24,7 @@ import type { ModelRegistry } from "./types.js";
 // const DEFAULT_MODEL_ID = "anthropic:claude-3-sonnet"; // Format: `providerId:modelId`
 const DEFAULT_MODEL_ID = "openai/gpt-4o"; // Gateway model id format: `providerId/modelId`
 
-interface CreateChatConfig {
+export interface CreateChatSessionConfig {
   mode?: ChatMode;
   // modelId?: `${string}:${string}`; // `providerId:modelId`, e.g. "openai:gpt-4o"
   modelId?: `${string}/${string}`; // `providerId/modelId`, e.g. "openai/gpt-4o"
@@ -59,7 +54,10 @@ export class ChatClient<TOOLS extends ToolSet> {
     absoluteFilePath: string,
     chatSessionId: string,
     input: UserModelMessage | ToolExecutionResult<TOOLS>,
-  ): Promise<TurnResult<TOOLS>> {
+  ): Promise<{
+    turnResult: TurnResult<TOOLS>;
+    updatedChatSession: ChatSession<TOOLS>;
+  }> {
     const session = await this.getOrLoadChatSession(absoluteFilePath);
 
     if (session.id !== chatSessionId) {
@@ -79,7 +77,10 @@ export class ChatClient<TOOLS extends ToolSet> {
         result.toolCallsAwaitingConfirmation !== undefined &&
         result.toolCallsAwaitingConfirmation.length > 0
       ) {
-        return result;
+        return {
+          turnResult: result,
+          updatedChatSession: session,
+        };
       }
 
       // Check next speaker
@@ -98,7 +99,10 @@ export class ChatClient<TOOLS extends ToolSet> {
       result = await session.runTurn(mockHumanInput);
     }
 
-    return result;
+    return {
+      turnResult: result,
+      updatedChatSession: session,
+    };
   }
 
   // TODO: Create a backup of the current session before rerun to prevent data loss.
@@ -153,7 +157,10 @@ export class ChatClient<TOOLS extends ToolSet> {
     chatSessionId: string,
     toolCallId: string,
     outcome: ToolCallConfirmationOutcome,
-  ): Promise<TurnResult<TOOLS>> {
+  ): Promise<{
+    turnResult: TurnResult<TOOLS>;
+    updatedChatSession: ChatSession<TOOLS>;
+  }> {
     const session = await this.getOrLoadChatSession(absoluteFilePath);
 
     if (session.id !== chatSessionId) {
@@ -175,12 +182,16 @@ export class ChatClient<TOOLS extends ToolSet> {
     if (toolExecutionResult.status === "awaiting_confirmations") {
       // Still awaiting more confirmations, persist session and return current state
       await this.persistSession(session);
-      return {
+      const turnResult: TurnResult<TOOLS> = {
         sessionStatus: session.sessionStatus,
         streamResult: {} as StreamTextResult<TOOLS, never>, // This will be updated when we support proper streaming
         currentTurn: session.currentTurn,
         toolCallsAwaitingConfirmation:
           toolExecutionResult.toolCallsAwaitingConfirmation,
+      };
+      return {
+        turnResult,
+        updatedChatSession: session,
       };
     }
 
@@ -202,9 +213,9 @@ export class ChatClient<TOOLS extends ToolSet> {
     }
   }
 
-  async createChat(
+  async createChatSession(
     targetDirectory: string,
-    config?: CreateChatConfig,
+    config?: CreateChatSessionConfig,
   ): Promise<ChatSession<TOOLS>> {
     // Validate project folder
     const isInProjectFolder =
@@ -256,7 +267,13 @@ export class ChatClient<TOOLS extends ToolSet> {
     );
     chatSessionData.absoluteFilePath = filePath;
 
-    return this.createChatSession(chatSessionData);
+    const chatSession = this.createChatSessionFromData(chatSessionData);
+
+    // Add to session pool
+    this.sessions.set(chatSession.absoluteFilePath, chatSession);
+    this.sessionAccessTime.set(chatSession.absoluteFilePath, Date.now());
+
+    return chatSession;
   }
 
   async getOrLoadChatSession(
@@ -277,7 +294,7 @@ export class ChatClient<TOOLS extends ToolSet> {
     const chatSessionData =
       await this.chatSessionRepository.loadFromFile(absoluteFilePath);
 
-    return this.createChatSession(chatSessionData);
+    return this.createChatSessionFromData(chatSessionData);
   }
 
   async updateChat(
@@ -315,7 +332,7 @@ export class ChatClient<TOOLS extends ToolSet> {
     throw new Error("Method not implemented.");
   }
 
-  private createChatSession(data: ChatSessionData): ChatSession<TOOLS> {
+  private createChatSessionFromData(data: ChatSessionData): ChatSession<TOOLS> {
     const messageProcessor = new MessageProcessor(this.fileService);
     const chatSession = new ChatSession<TOOLS>(
       data,
@@ -324,10 +341,6 @@ export class ChatClient<TOOLS extends ToolSet> {
       messageProcessor,
       // this.providerRegistry,
     );
-
-    // Add to session pool
-    this.sessions.set(chatSession.absoluteFilePath, chatSession);
-    this.sessionAccessTime.set(chatSession.absoluteFilePath, Date.now());
 
     return chatSession;
   }

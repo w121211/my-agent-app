@@ -1,9 +1,8 @@
 // apps/my-app-svelte/src/services/task-service.ts
 import { Logger } from "tslog";
 import { trpcClient } from "../lib/trpc-client";
-import { tasks, tasksByPath } from "../stores/task-store";
-import { setLoading, showToast } from "../stores/ui-store";
-import { get } from "svelte/store";
+import { tasksByPath, addTask, updateTask, clearTasks } from "../stores/task-store.svelte";
+import { setLoading, showToast } from "../stores/ui-store.svelte";
 
 export interface Task {
   id: string;
@@ -46,14 +45,7 @@ class TaskService {
       const task = await this.getTaskById(result.taskId);
 
       // Update tasks store
-      tasks.update((currentTasks) => [...currentTasks, task]);
-
-      // Update tasksByPath mapping
-      if (task.absoluteDirectoryPath) {
-        tasksByPath.update(
-          (mapping) => new Map(mapping.set(task.absoluteDirectoryPath!, task)),
-        );
-      }
+      addTask(task);
 
       showToast("Task created successfully", "success");
       this.logger.info("Task created:", result.taskId);
@@ -120,7 +112,8 @@ class TaskService {
       const allTasks = await trpcClient.task.getAll.query();
 
       // Update tasks store
-      tasks.set(allTasks);
+      clearTasks();
+      allTasks.forEach(task => addTask(task));
 
       // Update tasksByPath mapping
       const pathMapping = new Map<string, Task>();
@@ -129,7 +122,7 @@ class TaskService {
           pathMapping.set(task.absoluteDirectoryPath, task);
         }
       });
-      tasksByPath.set(pathMapping);
+      // tasksByPath is already updated by addTask()
 
       this.logger.info(`Loaded ${allTasks.length} tasks`);
       return allTasks;
@@ -143,8 +136,7 @@ class TaskService {
   }
 
   getTaskForPath(directoryPath: string): Task | undefined {
-    const mapping = get(tasksByPath);
-    return mapping.get(directoryPath);
+    return tasksByPath.get(directoryPath);
   }
 
   getTaskStatusBadge(status: string) {
@@ -189,20 +181,7 @@ class TaskService {
   }
 
   private updateTaskInStores(updatedTask: Task) {
-    // Update tasks array
-    tasks.update((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === updatedTask.id ? updatedTask : task,
-      ),
-    );
-
-    // Update tasksByPath mapping
-    if (updatedTask.absoluteDirectoryPath) {
-      tasksByPath.update(
-        (mapping) =>
-          new Map(mapping.set(updatedTask.absoluteDirectoryPath!, updatedTask)),
-      );
-    }
+    updateTask(updatedTask);
   }
 }
 
