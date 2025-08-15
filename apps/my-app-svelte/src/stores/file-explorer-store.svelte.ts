@@ -13,24 +13,30 @@ export interface RenameDialogState {
   currentName: string;
 }
 
-// Core state stores
-export const contextMenu = $state<ContextMenuState>({
-  isVisible: false,
-  targetPath: "",
-  x: 0,
-  y: 0,
-});
+interface FileExplorerState {
+  contextMenu: ContextMenuState;
+  renameDialog: RenameDialogState;
+}
 
-export const renameDialog = $state<RenameDialogState>({
-  isVisible: false,
-  targetPath: "",
-  currentName: "",
+// Unified state object
+export const fileExplorerState = $state<FileExplorerState>({
+  contextMenu: {
+    isVisible: false,
+    targetPath: "",
+    x: 0,
+    y: 0,
+  },
+  renameDialog: {
+    isVisible: false,
+    targetPath: "",
+    currentName: "",
+  },
 });
 
 // Derived stores
-export const isContextMenuVisible = $derived(contextMenu.isVisible);
+export const isContextMenuVisible = $derived(fileExplorerState.contextMenu.isVisible);
 
-export const isRenameDialogVisible = $derived(renameDialog.isVisible);
+export const isRenameDialogVisible = $derived(fileExplorerState.renameDialog.isVisible);
 
 // Context Menu Actions
 export function showContextMenu(path: string, x: number, y: number) {
@@ -43,14 +49,14 @@ export function showContextMenu(path: string, x: number, y: number) {
   const finalX = x + menuWidth > window.innerWidth ? x - menuWidth : x;
   const finalY = y + menuHeight > window.innerHeight ? y - menuHeight : y;
   
-  contextMenu.isVisible = true;
-  contextMenu.targetPath = path;
-  contextMenu.x = finalX;
-  contextMenu.y = finalY;
+  fileExplorerState.contextMenu.isVisible = true;
+  fileExplorerState.contextMenu.targetPath = path;
+  fileExplorerState.contextMenu.x = finalX;
+  fileExplorerState.contextMenu.y = finalY;
 }
 
 export function closeContextMenu() {
-  contextMenu.isVisible = false;
+  fileExplorerState.contextMenu.isVisible = false;
 }
 
 // Dialog Actions
@@ -58,11 +64,11 @@ export function showRenameDialog(path: string) {
   const fileName = path.split('/').pop() || '';
   console.log("🎯 FileExplorerStore: Showing rename dialog for:", fileName);
   
-  renameDialog.isVisible = true;
-  renameDialog.targetPath = path;
-  renameDialog.currentName = fileName;
+  fileExplorerState.renameDialog.isVisible = true;
+  fileExplorerState.renameDialog.targetPath = path;
+  fileExplorerState.renameDialog.currentName = fileName;
 }
 
 export function closeRenameDialog() {
-  renameDialog.isVisible = false;
+  fileExplorerState.renameDialog.isVisible = false;
 }

@@ -9,6 +9,7 @@
   } from "svelte-bootstrap-icons";
   import { showToast } from "../stores/ui-store.svelte.js";
   import { extractFileReferences } from "../stores/chat-store.svelte.js";
+  import ToolResultDisplay from "./ToolResultDisplay.svelte";
   import type { ChatMessage } from "@repo/events-core/services/chat-engine/chat-session-repository";
   import type { ModelMessage } from "ai";
 
@@ -220,9 +221,7 @@
         {:else if part.type === "tool-result"}
           <div class="bg-green-50 border border-green-200 rounded p-2 my-1">
             <div class="text-sm font-medium text-green-800">✅ Tool Result</div>
-            <div class="text-xs text-green-600 mt-1">
-              {JSON.stringify(part.result, null, 2)}
-            </div>
+            <ToolResultDisplay output={part.output} />
           </div>
         {:else}
           <div class="text-muted text-xs">
@@ -296,11 +295,7 @@
             <strong>Call ID:</strong>
             {part.toolCallId}<br />
             <strong>Result:</strong>
-            <pre class="mt-1 whitespace-pre-wrap">{JSON.stringify(
-                part.result,
-                null,
-                2,
-              )}</pre>
+            <ToolResultDisplay output={part.output} />
           </div>
         {:else}
           <div class="text-xs text-yellow-700">

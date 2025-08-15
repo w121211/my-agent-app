@@ -4,6 +4,7 @@
   import { showToast, isLoadingOpenFile } from "../stores/ui-store.svelte";
   import { selectedPreviewFile } from "../stores/tree-store.svelte";
   import { fileService } from "../services/file-service";
+  import { projectService } from "../services/project-service";
   import {
     Pencil,
     CheckLg,
@@ -12,7 +13,6 @@
     XLg,
     ArrowClockwise,
     Share,
-    Gear,
   } from "svelte-bootstrap-icons";
 
   const logger = new Logger({ name: "RightPanel" });
@@ -21,7 +21,7 @@
   let projectContext = $state(`#<demo-project>/demo.md #/path/to/outside/file.md
 Text is also allowed here for additional context.`);
   let isEditingContext = $state(false);
-  let contextInput = $state(projectContext);
+  let contextInput = $state('');
 
   // Preview state
   let fileContent = $state<any>(null);
@@ -45,8 +45,8 @@ Text is also allowed here for additional context.`);
 
   // Load file content when preview file changes using $effect
   $effect(() => {
-    if ($selectedPreviewFile) {
-      loadFileContent($selectedPreviewFile);
+    if (selectedPreviewFile()) {
+      loadFileContent(selectedPreviewFile()!);
     }
   });
 
@@ -101,13 +101,13 @@ Text is also allowed here for additional context.`);
   }
 
   function handleRefresh() {
-    if ($selectedPreviewFile) {
-      loadFileContent($selectedPreviewFile);
+    if (selectedPreviewFile()) {
+      loadFileContent(selectedPreviewFile()!);
     }
   }
 
   function clearPreview() {
-    selectedPreviewFile.set(null);
+    projectService.clearSelection();
     fileContent = null;
     fileLoadError = null;
   }
@@ -192,6 +192,9 @@ Text is also allowed here for additional context.`);
         {#if !isEditingContext}
           <div
             onclick={handleEditContext}
+            onkeydown={(e) => e.key === 'Enter' && handleEditContext()}
+            role="button"
+            tabindex="0"
             class="bg-input-background border-input-border text-muted hover:border-accent/50 min-h-[100px] cursor-text rounded border p-3 text-sm transition-colors"
           >
             {#each renderContextContent(projectContext) as part (part.key)}
@@ -214,7 +217,6 @@ Text is also allowed here for additional context.`);
             rows="4"
             class="text-foreground bg-input-background border-input-border focus:border-accent placeholder-muted w-full resize-none rounded-md border px-3 py-2 text-sm focus:outline-none"
             placeholder="#<demo-project>/demo.md #/path/to/outside/file.md&#10;Text is also allowed"
-            autofocus
           ></textarea>
         {/if}
       </div>
@@ -243,6 +245,9 @@ Text is also allowed here for additional context.`);
             <div
               class="bg-panel hover:bg-hover group flex cursor-pointer items-center justify-between rounded p-2"
               onclick={() => handlePreviewFile(artifact.fileName)}
+              onkeydown={(e) => e.key === 'Enter' && handlePreviewFile(artifact.fileName)}
+              role="button"
+              tabindex="0"
             >
               <div class="flex items-center">
                 <FileEarmark class="text-foreground mr-2 text-sm" />
@@ -284,7 +289,7 @@ Text is also allowed here for additional context.`);
   </div>
 
   <!-- Overlay Layer: Preview Panel -->
-  {#if $selectedPreviewFile}
+  {#if selectedPreviewFile()}
     <div class="absolute inset-0 bg-surface z-20">
       <div class="flex h-full flex-col">
         <!-- Header -->
@@ -293,7 +298,7 @@ Text is also allowed here for additional context.`);
         >
           <div class="flex items-center">
             <span class="text-foreground font-medium">
-              {$selectedPreviewFile.split("/").pop()}
+              {selectedPreviewFile()?.split("/").pop()}
             </span>
             <span class="text-muted ml-2 text-xs">Preview</span>
           </div>
@@ -321,7 +326,7 @@ Text is also allowed here for additional context.`);
             </button>
             <button
               onclick={handleRefresh}
-              disabled={$isLoadingOpenFile}
+              disabled={isLoadingOpenFile}
               class="text-muted hover:text-accent disabled:opacity-50"
               title="Refresh"
             >
@@ -338,7 +343,7 @@ Text is also allowed here for additional context.`);
         </div>
 
         <!-- Content -->
-        {#if $isLoadingOpenFile}
+        {#if isLoadingOpenFile}
           <div class="flex flex-1 items-center justify-center">
             <div class="text-muted">Loading file...</div>
           </div>
@@ -348,7 +353,7 @@ Text is also allowed here for additional context.`);
               <FileEarmark class="mx-auto mb-4 text-5xl" />
               <p class="mb-2">Failed to load file</p>
               <p class="text-muted mb-3 text-sm">
-                {$selectedPreviewFile.split("/").pop()}
+                {selectedPreviewFile()?.split("/").pop()}
               </p>
               <p class="text-red-400 mb-3 text-sm">{fileLoadError}</p>
               <button

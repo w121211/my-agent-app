@@ -2,9 +2,9 @@
 <script lang="ts">
   import { PlusLg, Gear } from "svelte-bootstrap-icons";
   import { Logger } from "tslog";
-  import { projectFolders, folderTrees } from "../../stores/project-store.svelte";
+  import { projectState } from "../../stores/project-store.svelte.js";
   import {
-    connectionStates,
+    uiState,
     isLoadingAddProjectFolder,
     isLoadingProjectFolders,
     isLoadingCreateChat,
@@ -74,7 +74,7 @@
     </span>
     <button
       onclick={handleAddProjectFolder}
-      disabled={$isLoadingAddProjectFolder}
+      disabled={isLoadingAddProjectFolder}
       class="text-muted hover:text-accent p-1 disabled:opacity-50"
       title="Add Project"
     >
@@ -84,9 +84,9 @@
 
   <!-- Tree Content -->
   <div class="flex-1 overflow-y-auto p-1">
-    {#if $isLoadingProjectFolders}
+    {#if isLoadingProjectFolders}
       <div class="text-muted p-4 text-sm">Loading project folders...</div>
-    {:else if $projectFolders.length === 0}
+    {:else if projectState.projectFolders.length === 0}
       <div class="text-muted text-center p-4 text-sm">
         <FileIcon
           fileName=""
@@ -98,13 +98,13 @@
         <p class="text-xs mt-1">Add a project folder to get started</p>
       </div>
     {:else}
-      {#each $projectFolders as folder (folder.id)}
-        {@const tree = $folderTrees[folder.id]}
+      {#each projectState.projectFolders as folder (folder.id)}
+        {@const tree = projectState.folderTrees[folder.id]}
         {#if tree}
           <TreeNode
             node={tree}
             level={0}
-            isCreatingChat={$isLoadingCreateChat}
+            isCreatingChat={isLoadingCreateChat}
             onclick={handleNodeClick}
             onNewChat={handleNewChat}
             onContextMenu={handleContextMenu}
@@ -120,29 +120,29 @@
     <div class="text-muted space-y-1 text-xs">
       <div class="flex items-center">
         <div
-          class="mr-2 h-2 w-2 rounded-full {$connectionStates.fileWatcher ===
+          class="mr-2 h-2 w-2 rounded-full {uiState.connectionStates.fileWatcher ===
           'connected'
             ? 'bg-green-500'
-            : $connectionStates.fileWatcher === 'connecting'
+            : uiState.connectionStates.fileWatcher === 'connecting'
               ? 'bg-yellow-500'
-              : $connectionStates.fileWatcher === 'error'
+              : uiState.connectionStates.fileWatcher === 'error'
                 ? 'bg-red-500'
                 : 'bg-muted'}"
         ></div>
-        File watcher: {$connectionStates.fileWatcher}
+        File watcher: {uiState.connectionStates.fileWatcher}
       </div>
       <div class="flex items-center">
         <div
-          class="mr-2 h-2 w-2 rounded-full {$connectionStates.taskEvents ===
+          class="mr-2 h-2 w-2 rounded-full {uiState.connectionStates.taskEvents ===
           'connected'
             ? 'bg-green-500'
-            : $connectionStates.taskEvents === 'connecting'
+            : uiState.connectionStates.taskEvents === 'connecting'
               ? 'bg-yellow-500'
-              : $connectionStates.taskEvents === 'error'
+              : uiState.connectionStates.taskEvents === 'error'
                 ? 'bg-red-500'
                 : 'bg-muted'}"
         ></div>
-        Task events: {$connectionStates.taskEvents}
+        Task events: {uiState.connectionStates.taskEvents}
       </div>
     </div>
   </div>

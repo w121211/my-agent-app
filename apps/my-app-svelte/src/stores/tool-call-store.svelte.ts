@@ -6,23 +6,29 @@ import type {
   PendingApproval 
 } from "../types/tool-call.types"
 
-// Main tool calls map: messageId -> ToolCall[]
-export const toolCallsMap = $state<Map<string, ToolCall[]>>(new Map());
+interface ToolCallState {
+  toolCallsMap: Map<string, ToolCall[]>;
+}
+
+// Unified state object
+export const toolCallState = $state<ToolCallState>({
+  toolCallsMap: new Map(),
+});
 
 // Derived store to get tool calls for a specific message
 export function getMessageToolCalls(messageId: string) {
-  return $derived(toolCallsMap.get(messageId) || []);
+  return $derived(toolCallState.toolCallsMap.get(messageId) || []);
 }
 
 // Derived store to get all pending approvals across all messages
 export const pendingApprovals = $derived(() => {
-  const allToolCalls = Array.from(toolCallsMap.values()).flat();
+  const allToolCalls = Array.from(toolCallState.toolCallsMap.values()).flat();
   return allToolCalls.filter((tc) => tc.status === "awaiting_approval");
 });
 
 // Derived store to check if any tool calls are executing
 export const hasExecutingToolCalls = $derived(() => {
-  const allToolCalls = Array.from(toolCallsMap.values()).flat();
+  const allToolCalls = Array.from(toolCallState.toolCallsMap.values()).flat();
   return allToolCalls.some((tc) => tc.status === "executing");
 });
 
@@ -30,7 +36,7 @@ export const hasExecutingToolCalls = $derived(() => {
 export const toolCallOperations = {
   // Update all tool calls for a message
   updateToolCalls(messageId: string, toolCalls: ToolCall[]) {
-    toolCallsMap.set(messageId, toolCalls);
+    toolCallState.toolCallsMap.set(messageId, toolCalls);
   },
 
   // Update a specific tool call's status and data
@@ -40,13 +46,13 @@ export const toolCallOperations = {
     status: ToolCallStatus,
     data?: Partial<ToolCall>
   ) {
-    const toolCalls = toolCallsMap.get(messageId) || [];
+    const toolCalls = toolCallState.toolCallsMap.get(messageId) || [];
     const updatedToolCalls = toolCalls.map((tc) =>
       tc.request.callId === toolCallId 
         ? { ...tc, status, ...data } 
         : tc
     );
-    toolCallsMap.set(messageId, updatedToolCalls);
+    toolCallState.toolCallsMap.set(messageId, updatedToolCalls);
   },
 
   // Add live output to an executing tool call
@@ -58,12 +64,12 @@ export const toolCallOperations = {
 
   // Remove tool calls for a message (cleanup)
   removeToolCalls(messageId: string) {
-    toolCallsMap.delete(messageId);
+    toolCallState.toolCallsMap.delete(messageId);
   },
 
   // Clear all tool calls
   clearAll() {
-    toolCallsMap.clear();
+    toolCallState.toolCallsMap.clear();
   },
 
   // Get summary statistics for a message
@@ -84,7 +90,7 @@ export const toolCallOperations = {
 
 // Helper functions to get current values synchronously
 function getCurrentToolCalls(messageId: string): ToolCall[] {
-  return toolCallsMap.get(messageId) || [];
+  return toolCallState.toolCallsMap.get(messageId) || [];
 }
 
 function getCurrentLiveOutput(messageId: string, toolCallId: string): string | undefined {

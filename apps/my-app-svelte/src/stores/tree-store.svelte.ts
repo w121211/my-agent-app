@@ -1,24 +1,35 @@
 // apps/my-app-svelte/src/stores/tree-store.svelte.ts
-import { projectFolders } from "./project-store.svelte";
+import { projectState } from "./project-store.svelte.js";
+
+interface TreeState {
+  selectedNode: string | null;
+  selectedChatFile: string | null;
+  selectedPreviewFile: string | null;
+  expandedNodes: Set<string>;
+}
 
 // Tree view UI state - only selection and expansion state
-export const selectedTreeNode = $state<string | null>(null);
-export const selectedChatFile = $state<string | null>(null);
-export const selectedPreviewFile = $state<string | null>(null);
-export const expandedNodes = $state<Set<string>>(new Set());
+export const treeState = $state<TreeState>({
+  selectedNode: null,
+  selectedChatFile: null,
+  selectedPreviewFile: null,
+  expandedNodes: new Set()
+});
 
 // Tree view derived stores
 export const selectedProjectFolder = $derived(() => {
-  if (!selectedTreeNode) return null;
+  if (!treeState.selectedNode) return null;
 
   return (
-    projectFolders.find(
+    projectState.projectFolders.find(
       (folder) =>
-        selectedTreeNode === folder.path ||
-        selectedTreeNode.startsWith(folder.path + "/"),
+        treeState.selectedNode === folder.path ||
+        treeState.selectedNode!.startsWith(folder.path + "/"),
     ) || null
   );
 });
+
+export const selectedPreviewFile = $derived(() => treeState.selectedPreviewFile);
 
 // Internal store functions - used by service layer
 // These handle only the state updates, not business logic
@@ -32,19 +43,19 @@ export function setTreeSelectionState(
   chatPath: string | null,
   previewPath: string | null,
 ) {
-  selectedTreeNode = treePath;
-  selectedChatFile = chatPath;
-  selectedPreviewFile = previewPath;
+  treeState.selectedNode = treePath;
+  treeState.selectedChatFile = chatPath;
+  treeState.selectedPreviewFile = previewPath;
 }
 
 /**
  * Toggle node expansion state
  */
 export function toggleNodeExpansion(nodePath: string) {
-  if (expandedNodes.has(nodePath)) {
-    expandedNodes.delete(nodePath);
+  if (treeState.expandedNodes.has(nodePath)) {
+    treeState.expandedNodes.delete(nodePath);
   } else {
-    expandedNodes.add(nodePath);
+    treeState.expandedNodes.add(nodePath);
   }
 }
 
@@ -52,7 +63,7 @@ export function toggleNodeExpansion(nodePath: string) {
  * Expand a specific node
  */
 export function expandNode(nodePath: string) {
-  expandedNodes.add(nodePath);
+  treeState.expandedNodes.add(nodePath);
 }
 
 /**
@@ -69,23 +80,33 @@ export function expandParentDirectories(filePath: string) {
   }
   
   // Expand all parent directories
-  parentPaths.forEach(path => expandedNodes.add(path));
+  parentPaths.forEach(path => treeState.expandedNodes.add(path));
 }
 
 /**
  * Collapse a specific node
  */
 export function collapseNode(nodePath: string) {
-  expandedNodes.delete(nodePath);
+  treeState.expandedNodes.delete(nodePath);
 }
 
 /**
  * Clear all selections
  */
 export function clearSelection() {
-  selectedTreeNode = null;
-  selectedChatFile = null;
-  selectedPreviewFile = null;
+  treeState.selectedNode = null;
+  treeState.selectedChatFile = null;
+  treeState.selectedPreviewFile = null;
+}
+
+/**
+ * Reset all tree state
+ */
+export function resetTreeState() {
+  treeState.selectedNode = null;
+  treeState.selectedChatFile = null;
+  treeState.selectedPreviewFile = null;
+  treeState.expandedNodes.clear();
 }
 
 // Legacy function - kept for backward compatibility
@@ -95,13 +116,13 @@ export function selectFile(filePath: string) {
     "selectFile() is deprecated. Use projectService.selectFile() instead.",
   );
 
-  selectedTreeNode = filePath;
+  treeState.selectedNode = filePath;
 
   if (filePath.endsWith(".chat.json")) {
-    selectedChatFile = filePath;
-    selectedPreviewFile = null;
+    treeState.selectedChatFile = filePath;
+    treeState.selectedPreviewFile = null;
   } else {
-    selectedChatFile = null;
-    selectedPreviewFile = filePath;
+    treeState.selectedChatFile = null;
+    treeState.selectedPreviewFile = filePath;
   }
 }

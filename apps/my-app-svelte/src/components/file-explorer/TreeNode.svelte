@@ -2,7 +2,7 @@
 <script lang="ts">
   import type { FolderTreeNode } from "../../stores/project-store.svelte";
   import type { Task } from "../../services/task-service";
-  import { expandedNodes, selectedTreeNode } from "../../stores/tree-store.svelte";
+  import { treeState } from "../../stores/tree-store.svelte";
   import { tasksByPath } from "../../stores/task-store.svelte";
   import TreeNode from "./TreeNode.svelte";
   import FileIcon from "./FileIcon.svelte";
@@ -35,9 +35,9 @@
   }: TreeNodeProps = $props();
 
   // Computed values from stores
-  const isExpanded = $derived($expandedNodes.has(node.path));
-  const isSelected = $derived($selectedTreeNode === node.path);
-  const task = $derived($tasksByPath.get(node.path));
+  const isExpanded = $derived(treeState.expandedNodes.has(node.path));
+  const isSelected = $derived(treeState.selectedNode === node.path);
+  const task = $derived(tasksByPath.get(node.path));
   const isTaskDir = $derived(isTaskFolder(node.name));
 
   function handleNodeClick() {

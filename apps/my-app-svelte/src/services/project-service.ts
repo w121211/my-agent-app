@@ -1,19 +1,22 @@
 // apps/my-app-svelte/src/services/project-service.ts
-import { get } from "svelte/store";
 import { Logger } from "tslog";
 import { trpcClient } from "../lib/trpc-client";
 import {
-  projectFolders,
-  folderTrees,
+  projectState,
+  setProjectFolders,
+  addProjectFolder,
+  removeProjectFolder,
+  setFolderTree,
+  removeFolderTree,
+  updateFolderTrees,
   type ProjectFolder,
   type FolderTreeNode,
-} from "../stores/project-store.svelte";
+} from "../stores/project-store.svelte.js";
 import {
   setTreeSelectionState,
   toggleNodeExpansion as toggleNodeExpansionStore,
-  expandedNodes,
   expandParentDirectories,
-} from "../stores/tree-store.svelte";
+} from "../stores/tree-store.svelte.js";
 import { setLoading, showToast } from "../stores/ui-store.svelte";
 import { chatService } from "./chat-service";
 
@@ -47,7 +50,7 @@ class ProjectService {
       const folders =
         await trpcClient.projectFolder.getAllProjectFolders.query();
 
-      projectFolders.set(folders);
+      setProjectFolders(folders);
       this.logger.info(`Loaded ${folders.length} project folders`);
 
       // Load folder trees for each project
@@ -74,8 +77,7 @@ class ProjectService {
       });
 
       // Update project folders list
-      const currentFolders = get(projectFolders);
-      projectFolders.set([...currentFolders, newFolder]);
+      addProjectFolder(newFolder);
 
       // Load folder tree for new project
       await this.loadFolderTree(newFolder.id, newFolder.path);
@@ -106,17 +108,10 @@ class ProjectService {
       });
 
       // Update project folders list
-      const currentFolders = get(projectFolders);
-      const updatedFolders = currentFolders.filter(
-        (f) => f.id !== projectFolderId,
-      );
-      projectFolders.set(updatedFolders);
+      removeProjectFolder(projectFolderId);
 
       // Remove folder tree
-      folderTrees.update((trees) => {
-        const { [projectFolderId]: removed, ...rest } = trees;
-        return rest;
-      });
+      removeFolderTree(projectFolderId);
 
       showToast("Project folder removed successfully", "success");
       this.logger.info("Project folder removed");
@@ -133,7 +128,7 @@ class ProjectService {
   }
 
   async refreshFolderTree(projectFolderId: string) {
-    const folders = get(projectFolders);
+    const folders = projectState.projectFolders;
     const folder = folders.find((f) => f.id === projectFolderId);
 
     if (!folder) {
@@ -193,6 +188,14 @@ class ProjectService {
 
   toggleNodeExpansion(nodePath: string) {
     toggleNodeExpansionStore(nodePath);
+  }
+
+  /**
+   * Clear all file selections
+   */
+  clearSelection() {
+    this.logger.info("Clearing file selection");
+    setTreeSelectionState(null, null, null);
   }
 
   async copyFile(
@@ -260,7 +263,7 @@ class ProjectService {
     );
 
     // Find which project folder this file belongs to
-    const folders = get(projectFolders);
+    const folders = projectState.projectFolders;
     const affectedFolder = folders.find((folder) =>
       event.absoluteFilePath.startsWith(folder.path + "/") || 
       event.absoluteFilePath === folder.path,
@@ -280,16 +283,12 @@ class ProjectService {
 
     // Update folder tree directly
     if (["add", "addDir", "unlink", "unlinkDir"].includes(event.eventType)) {
-      const currentTrees = get(folderTrees);
-      const currentTree = currentTrees[affectedFolder.id];
+      const currentTree = projectState.folderTrees[affectedFolder.id];
 
       if (currentTree) {
         const updatedTree = this.updateTreeNodeDirectly(currentTree, event);
         
-        folderTrees.update((trees) => ({
-          ...trees,
-          [affectedFolder.id]: updatedTree,
-        }));
+        setFolderTree(affectedFolder.id, updatedTree);
         
         this.logger.debug("Tree updated in store for folder:", affectedFolder.name);
       } else {
@@ -300,7 +299,7 @@ class ProjectService {
 
   handleProjectFolderEvent(event: ProjectFolderUpdatedEvent) {
     this.logger.debug("Handling project folder event:", event.updateType);
-    projectFolders.set(event.projectFolders);
+    setProjectFolders(event.projectFolders);
   }
 
   private async loadAllFolderTrees(folders: ProjectFolder[]) {
@@ -317,10 +316,7 @@ class ProjectService {
       });
 
       const sortedTree = this.sortTreeRecursively(tree);
-      folderTrees.update((trees) => ({
-        ...trees,
-        [projectFolderId]: sortedTree,
-      }));
+      setFolderTree(projectFolderId, sortedTree);
 
       this.logger.debug("Folder tree loaded for:", projectPath);
     } catch (error) {
@@ -460,7 +456,7 @@ class ProjectService {
     sourceAbsolutePath: string,
     destinationAbsolutePath: string,
   ): Promise<void> {
-    const folders = get(projectFolders);
+    const folders = projectState.projectFolders;
     const affectedFolderIds = new Set<string>();
 
     // Find project folders that contain source or destination paths

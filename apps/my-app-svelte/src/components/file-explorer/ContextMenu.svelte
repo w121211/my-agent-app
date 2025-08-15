@@ -3,18 +3,18 @@
   import { Link45deg, Pencil, Files, Trash } from "svelte-bootstrap-icons";
   import { fileExplorerService } from "../../services/file-explorer-service";
   import {
-    contextMenu,
+    fileExplorerState,
     closeContextMenu,
   } from "../../stores/file-explorer-store.svelte";
 
   function handleAction(action: string) {
     console.log("🎯 ContextMenu handleAction called with action:", action);
-    fileExplorerService.handleFileAction(action, $contextMenu.targetPath);
+    fileExplorerService.handleFileAction(action, fileExplorerState.contextMenu.targetPath);
   }
 
   function handleClickOutside(event: MouseEvent) {
     if (
-      $contextMenu.isVisible &&
+      fileExplorerState.contextMenu.isVisible &&
       !(event.target as Element).closest(".context-menu")
     ) {
       closeContextMenu();
@@ -22,7 +22,7 @@
   }
 
   $effect(() => {
-    if ($contextMenu.isVisible) {
+    if (fileExplorerState.contextMenu.isVisible) {
       document.addEventListener("click", handleClickOutside);
       return () => {
         document.removeEventListener("click", handleClickOutside);
@@ -31,10 +31,10 @@
   });
 </script>
 
-{#if $contextMenu.isVisible}
+{#if fileExplorerState.contextMenu.isVisible}
   <div
     class="context-menu bg-panel border-border fixed z-50 w-48 rounded-md border py-1 shadow-lg"
-    style="left: {$contextMenu.x}px; top: {$contextMenu.y}px;"
+    style="left: {fileExplorerState.contextMenu.x}px; top: {fileExplorerState.contextMenu.y}px;"
   >
     <!-- Add to current chat -->
     <button

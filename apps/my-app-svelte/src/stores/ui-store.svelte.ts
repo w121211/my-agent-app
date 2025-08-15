@@ -1,8 +1,5 @@
 // apps/my-app-svelte/src/stores/ui-store.svelte.ts
 
-// Loading states for different operations
-export const loadingStates = $state<Record<string, boolean>>({});
-
 // Toast notifications
 export interface Toast {
   id: string;
@@ -12,41 +9,46 @@ export interface Toast {
   timestamp: number;
 }
 
-export const toasts = $state<Toast[]>([]);
+interface UiState {
+  loadingStates: Record<string, boolean>;
+  toasts: Toast[];
+  modals: Record<string, boolean>;
+  connectionStates: Record<string, "idle" | "connecting" | "connected" | "error">;
+}
 
-// Modal states
-export const modals = $state<Record<string, boolean>>({});
-
-// Connection states for subscriptions
-export const connectionStates = $state<
-  Record<string, "idle" | "connecting" | "connected" | "error">
->({
-  fileWatcher: "idle",
-  chatEvents: "idle",
-  taskEvents: "idle",
-  projectFolderEvents: "idle",
+// Unified state object
+export const uiState = $state<UiState>({
+  loadingStates: {},
+  toasts: [],
+  modals: {},
+  connectionStates: {
+    fileWatcher: "idle",
+    chatEvents: "idle",
+    taskEvents: "idle",
+    projectFolderEvents: "idle",
+  },
 });
 
 // Derived stores
 export const isAnyLoading = $derived(
-  Object.values(loadingStates).some(Boolean),
+  Object.values(uiState.loadingStates).some(Boolean),
 );
 
-export const activeToastCount = $derived(toasts.length);
+export const activeToastCount = $derived(uiState.toasts.length);
 
 export const isAnyModalOpen = $derived(
-  Object.values(modals).some(Boolean),
+  Object.values(uiState.modals).some(Boolean),
 );
 
 export const allConnectionsHealthy = $derived(
-  Object.values(connectionStates).every(
+  Object.values(uiState.connectionStates).every(
     (state) => state === "connected" || state === "idle",
   ),
 );
 
 export const connectionIssues = $derived(() => {
   const issues: string[] = [];
-  Object.entries(connectionStates).forEach(([name, state]) => {
+  Object.entries(uiState.connectionStates).forEach(([name, state]) => {
     if (state === "error") {
       issues.push(name);
     }
@@ -56,23 +58,23 @@ export const connectionIssues = $derived(() => {
 
 // Loading state functions
 export function setLoading(operation: string, isLoading: boolean) {
-  loadingStates[operation] = isLoading;
+  uiState.loadingStates[operation] = isLoading;
 }
 
 export function getIsLoading(operation: string) {
-  return loadingStates[operation] || false;
+  return uiState.loadingStates[operation] || false;
 }
 
 // Create specific loading state getters
-export const isLoadingOpenChat = $derived(loadingStates["openChat"] || false);
-export const isLoadingSubmitMessage = $derived(loadingStates["submitMessage"] || false);
-export const isLoadingAddProjectFolder = $derived(loadingStates["addProjectFolder"] || false);
-export const isLoadingProjectFolders = $derived(loadingStates["projectFolders"] || false);
-export const isLoadingCreateChat = $derived(loadingStates["createChat"] || false);
-export const isLoadingOpenFile = $derived(loadingStates["openFile"] || false);
+export const isLoadingOpenChat = $derived(uiState.loadingStates["openChat"] || false);
+export const isLoadingSubmitMessage = $derived(uiState.loadingStates["submitMessage"] || false);
+export const isLoadingAddProjectFolder = $derived(uiState.loadingStates["addProjectFolder"] || false);
+export const isLoadingProjectFolders = $derived(uiState.loadingStates["projectFolders"] || false);
+export const isLoadingCreateChat = $derived(uiState.loadingStates["createChat"] || false);
+export const isLoadingOpenFile = $derived(uiState.loadingStates["openFile"] || false);
 
 export function clearAllLoading() {
-  Object.keys(loadingStates).forEach(key => delete loadingStates[key]);
+  Object.keys(uiState.loadingStates).forEach(key => delete uiState.loadingStates[key]);
 }
 
 // Toast functions
@@ -89,7 +91,7 @@ export function showToast(
     timestamp: Date.now(),
   };
 
-  toasts.push(toast);
+  uiState.toasts.push(toast);
 
   // Auto-remove non-error toasts after duration
   if (toast.duration && toast.duration > 0) {
@@ -102,35 +104,35 @@ export function showToast(
 }
 
 export function removeToast(toastId: string) {
-  const index = toasts.findIndex(toast => toast.id === toastId);
+  const index = uiState.toasts.findIndex(toast => toast.id === toastId);
   if (index !== -1) {
-    toasts.splice(index, 1);
+    uiState.toasts.splice(index, 1);
   }
 }
 
 export function clearAllToasts() {
-  toasts.splice(0, toasts.length);
+  uiState.toasts.splice(0, uiState.toasts.length);
 }
 
 // Modal functions
 export function openModal(modalName: string) {
-  modals[modalName] = true;
+  uiState.modals[modalName] = true;
 }
 
 export function closeModal(modalName: string) {
-  modals[modalName] = false;
+  uiState.modals[modalName] = false;
 }
 
 export function toggleModal(modalName: string) {
-  modals[modalName] = !modals[modalName];
+  uiState.modals[modalName] = !uiState.modals[modalName];
 }
 
 export function getIsModalOpen(modalName: string) {
-  return modals[modalName] || false;
+  return uiState.modals[modalName] || false;
 }
 
 export function closeAllModals() {
-  Object.keys(modals).forEach(key => delete modals[key]);
+  Object.keys(uiState.modals).forEach(key => delete uiState.modals[key]);
 }
 
 // Connection state functions
@@ -138,11 +140,11 @@ export function setConnectionState(
   connection: string,
   state: "idle" | "connecting" | "connected" | "error",
 ) {
-  connectionStates[connection] = state;
+  uiState.connectionStates[connection] = state;
 }
 
 export function getConnectionState(connection: string) {
-  return connectionStates[connection] || "idle";
+  return uiState.connectionStates[connection] || "idle";
 }
 
 // Toast type helpers

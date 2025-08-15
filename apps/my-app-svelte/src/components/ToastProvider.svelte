@@ -1,6 +1,6 @@
 <!-- apps/my-app-svelte/src/components/shared/ToastProvider.svelte -->
 <script lang="ts">
-  import { toasts, removeToast, getToastClassName } from "../stores/ui-store.svelte";
+  import { uiState, removeToast, getToastClassName } from "../stores/ui-store.svelte";
   import {
     XLg,
     CheckCircleFill,
@@ -50,9 +50,9 @@
 {@render children()}
 
 <!-- Toast container -->
-{#if $toasts.length > 0}
+{#if uiState.toasts.length > 0}
   <div class="fixed right-4 top-4 z-50 flex flex-col gap-2">
-    {#each $toasts as toast (toast.id)}
+    {#each uiState.toasts as toast (toast.id)}
       {@const IconComponent = getIconComponent(toast.type)}
       <div
         class="w-full max-w-sm rounded-lg border p-4 shadow-lg animate-in fade-in slide-in-from-top-2 duration-300 {getToastClassName(

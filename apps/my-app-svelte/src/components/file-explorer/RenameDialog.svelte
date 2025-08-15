@@ -1,22 +1,22 @@
 <!-- apps/my-app-svelte/src/components/file-explorer/RenameDialog.svelte -->
 <script lang="ts">
   import { fileExplorerService } from "../../services/file-explorer-service";
-  import { renameDialog, closeRenameDialog } from "../../stores/file-explorer-store.svelte";
+  import { fileExplorerState, closeRenameDialog } from "../../stores/file-explorer-store.svelte";
 
-  let inputValue = $state($renameDialog.currentName);
+  let inputValue = $state(fileExplorerState.renameDialog.currentName);
   let inputElement = $state<HTMLInputElement>();
 
   function handleSubmit() {
     const newName = inputValue.trim();
-    if (newName && newName !== $renameDialog.currentName) {
-      fileExplorerService.handleRename($renameDialog.targetPath, newName);
+    if (newName && newName !== fileExplorerState.renameDialog.currentName) {
+      fileExplorerService.handleRename(fileExplorerState.renameDialog.targetPath, newName);
     } else {
       closeRenameDialog();
     }
   }
 
   function handleCancel() {
-    inputValue = $renameDialog.currentName;
+    inputValue = fileExplorerState.renameDialog.currentName;
     closeRenameDialog();
   }
 
@@ -31,15 +31,15 @@
   }
 
   function handleClickOutside(event: MouseEvent) {
-    if ($renameDialog.isVisible && !(event.target as Element).closest('.rename-dialog')) {
+    if (fileExplorerState.renameDialog.isVisible && !(event.target as Element).closest('.rename-dialog')) {
       handleCancel();
     }
   }
 
   $effect(() => {
-    console.log("🎯 RenameDialog $effect triggered, isVisible:", $renameDialog.isVisible, "currentName:", $renameDialog.currentName);
-    if ($renameDialog.isVisible) {
-      inputValue = $renameDialog.currentName;
+    console.log("🎯 RenameDialog $effect triggered, isVisible:", fileExplorerState.renameDialog.isVisible, "currentName:", fileExplorerState.renameDialog.currentName);
+    if (fileExplorerState.renameDialog.isVisible) {
+      inputValue = fileExplorerState.renameDialog.currentName;
       document.addEventListener('click', handleClickOutside);
       
       // Focus and select text after a small delay to ensure DOM is ready
@@ -57,7 +57,7 @@
   });
 </script>
 
-{#if $renameDialog.isVisible}
+{#if fileExplorerState.renameDialog.isVisible}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/20">
     <div class="rename-dialog bg-surface border-border w-80 rounded-lg border p-4 shadow-xl">
       <h3 class="text-foreground mb-3 text-lg font-semibold">Rename</h3>
@@ -86,7 +86,7 @@
         </button>
         <button
           onclick={handleSubmit}
-          disabled={!inputValue.trim() || inputValue.trim() === $renameDialog.currentName}
+          disabled={!inputValue.trim() || inputValue.trim() === fileExplorerState.renameDialog.currentName}
           class="bg-accent hover:bg-accent/80 disabled:bg-muted disabled:text-muted rounded px-3 py-1.5 text-sm text-white transition-colors disabled:cursor-not-allowed"
         >
           Rename

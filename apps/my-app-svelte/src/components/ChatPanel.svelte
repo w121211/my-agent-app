@@ -12,18 +12,17 @@
     aiStreamingContent,
     chatState,
     updateMessageInput,
-  } from "../stores/chat-store.svelte";
-  import { projectFolders } from "../stores/project-store.svelte";
-  import { selectedProjectFolder } from "../stores/tree-store.svelte";
-  import { trpcClient } from "../lib/trpc-client";
+  } from "../stores/chat-store.svelte.js";
+  import { projectState } from "../stores/project-store.svelte.js";
+  import { selectedProjectFolder } from "../stores/tree-store.svelte.js";
+  import { trpcClient } from "../lib/trpc-client.js";
   import {
-    connectionStates,
+    uiState,
     isLoadingOpenChat,
     isLoadingSubmitMessage,
     showToast,
-  } from "../stores/ui-store.svelte";
-  import { chatService } from "../services/chat-service";
-  import { toolCallService } from "../services/tool-call-service";
+  } from "../stores/ui-store.svelte.js";
+  import { chatService } from "../services/chat-service.js";
   import {
     Send,
     Paperclip,
@@ -91,25 +90,6 @@
     previousChatId = currentChatId;
   });
 
-  // Tool call polling setup for active chats
-  $effect(() => {
-    const currentChatId = chatState.currentChat?.id;
-    let cleanupPolling: (() => void) | null = null;
-
-    if (currentChatId) {
-      // Start polling for tool call updates for this chat
-      // This is a fallback in case real-time events aren't working
-      // toolCallService.pollToolCallUpdates(currentChatId, 2000).then(cleanup => {
-      //   cleanupPolling = cleanup;
-      // });
-    }
-
-    return () => {
-      if (cleanupPolling) {
-        cleanupPolling();
-      }
-    };
-  });
 
   async function handleSendMessage() {
     if (!chatState.messageInput.trim() || !chatState.currentChat) return;
@@ -118,7 +98,11 @@
     const chatId = chatState.currentChat.id;
 
     try {
-      await chatService.submitMessage(chatId, message);
+      await chatService.sendMesage(
+        chatState.currentChat.absoluteFilePath,
+        chatId,
+        message,
+      );
     } catch (error) {
       // Error handling done in service
     }
@@ -181,7 +165,8 @@
   // Perform file search
   async function performFileSearch(query: string) {
     // Get current project ID
-    const currentProject = selectedProjectFolder || projectFolders[0];
+    const currentProject =
+      selectedProjectFolder() || projectState.projectFolders[0];
     if (!currentProject) {
       searchResults = [];
       return;
@@ -336,9 +321,11 @@
       <HouseDoor class="text-muted text-sm" />
       {#if currentChatBreadcrumb()}
         {@const breadcrumb = currentChatBreadcrumb()}
-        <span class="text-muted text-xs">{breadcrumb.parentDir}</span>
-        <ChevronRight class="text-muted text-xs" />
-        <span class="text-muted text-xs">{breadcrumb.fileName}</span>
+        {#if breadcrumb}
+          <span class="text-muted text-xs">{breadcrumb.parentDir}</span>
+          <ChevronRight class="text-muted text-xs" />
+          <span class="text-muted text-xs">{breadcrumb.fileName}</span>
+        {/if}
       {/if}
       <div class="ml-auto flex items-center space-x-2">
         <button
@@ -350,11 +337,11 @@
           {isLoadingOpenChat ? "Refreshing..." : "Refresh"}
         </button>
         <div class="text-muted text-xs">
-          {#if connectionStates.chatEvents === "connected"}
+          {#if uiState.connectionStates.chatEvents === "connected"}
             <span class="text-green-400">🟢 Live</span>
-          {:else if connectionStates.chatEvents === "connecting"}
+          {:else if uiState.connectionStates.chatEvents === "connecting"}
             <span class="text-yellow-400">🟡 Connecting</span>
-          {:else if connectionStates.chatEvents === "error"}
+          {:else if uiState.connectionStates.chatEvents === "error"}
             <span class="text-red-400">🔴 Disconnected</span>
           {:else}
             <span class="text-muted">⚪ Idle</span>

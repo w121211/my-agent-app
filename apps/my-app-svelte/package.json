@@ -12,6 +12,7 @@
     "test": "npm run test:unit -- --run"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "2.0.0-beta.1",
     "@sveltejs/vite-plugin-svelte": "^5.1.0",
     "@tailwindcss/vite": "^4.0.0",
     "@tsconfig/svelte": "^5.0.4",

@@ -13,20 +13,58 @@ export interface FolderTreeNode {
   children?: FolderTreeNode[];
 }
 
-// Core project state - only project data, no UI state
-export const projectFolders = $state<ProjectFolder[]>([]);
-export const folderTrees = $state<Record<string, FolderTreeNode>>({});
+interface ProjectState {
+  projectFolders: ProjectFolder[];
+  folderTrees: Record<string, FolderTreeNode>;
+}
+
+// Unified state object
+export const projectState = $state<ProjectState>({
+  projectFolders: [],
+  folderTrees: {},
+});
 
 // Project-related derived stores
 export const hasAnyProjectFolders = $derived(
-  projectFolders.length > 0,
+  projectState.projectFolders.length > 0,
 );
 
 export const projectFolderCount = $derived(
-  projectFolders.length,
+  projectState.projectFolders.length,
 );
 
 // Helper function for getting folder tree for a specific project
 export function getFolderTreeForProject(projectId: string) {
-  return $derived(folderTrees[projectId] || null);
+  return $derived(projectState.folderTrees[projectId] || null);
+}
+
+// Mutation functions
+export function setProjectFolders(folders: ProjectFolder[]) {
+  projectState.projectFolders = folders;
+}
+
+export function addProjectFolder(folder: ProjectFolder) {
+  projectState.projectFolders = [...projectState.projectFolders, folder];
+}
+
+export function removeProjectFolder(projectFolderId: string) {
+  projectState.projectFolders = projectState.projectFolders.filter(
+    (f) => f.id !== projectFolderId,
+  );
+}
+
+export function setFolderTree(projectId: string, tree: FolderTreeNode) {
+  projectState.folderTrees = {
+    ...projectState.folderTrees,
+    [projectId]: tree,
+  };
+}
+
+export function removeFolderTree(projectId: string) {
+  const { [projectId]: removed, ...rest } = projectState.folderTrees;
+  projectState.folderTrees = rest;
+}
+
+export function updateFolderTrees(updater: (trees: Record<string, FolderTreeNode>) => Record<string, FolderTreeNode>) {
+  projectState.folderTrees = updater(projectState.folderTrees);
 }

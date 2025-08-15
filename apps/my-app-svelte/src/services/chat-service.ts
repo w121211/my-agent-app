@@ -16,13 +16,13 @@ import {
   updateStreamingContent,
   completeAiGeneration,
   clearAiGenerationState,
-} from "../stores/chat-store.svelte.js";
-import { projectFolders } from "../stores/project-store.svelte.js";
+} from "../stores/chat-store.svelte";
+import { projectState } from "../stores/project-store.svelte.js";
 import {
   selectFile,
   expandParentDirectories,
-} from "../stores/tree-store.svelte.js";
-import { setLoading, showToast } from "../stores/ui-store.svelte.js";
+} from "../stores/tree-store.svelte";
+import { setLoading, showToast } from "../stores/ui-store.svelte";
 import { projectService } from "./project-service.js";
 
 class ChatService {
@@ -371,7 +371,7 @@ class ChatService {
    */
   private async refreshProjectTreeForFile(filePath: string) {
     try {
-      const folders = projectFolders;
+      const folders = projectState.projectFolders;
       const affectedFolder = folders.find((folder) =>
         filePath.startsWith(folder.path),
       );
