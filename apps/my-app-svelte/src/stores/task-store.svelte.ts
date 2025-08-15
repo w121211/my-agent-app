@@ -5,63 +5,7 @@ import type { Task } from "../services/task-service";
 export const tasks = $state<Task[]>([]);
 export const tasksByPath = $state<Map<string, Task>>(new Map());
 
-// Derived stores
-export const taskCount = $derived(tasks.length);
-
-export const tasksByStatus = $derived(() => {
-  const byStatus = {
-    CREATED: [] as Task[],
-    INITIALIZED: [] as Task[],
-    IN_PROGRESS: [] as Task[],
-    COMPLETED: [] as Task[],
-  };
-
-  tasks.forEach((task) => {
-    if (byStatus[task.status]) {
-      byStatus[task.status].push(task);
-    }
-  });
-
-  return byStatus;
-});
-
-export const activeTasks = $derived(
-  tasks.filter(
-    (task) => task.status === "IN_PROGRESS" || task.status === "INITIALIZED",
-  ),
-);
-
-export const completedTasks = $derived(
-  tasks.filter((task) => task.status === "COMPLETED"),
-);
-
-export const runningTasksCount = $derived(
-  tasks.filter((task) => task.status === "IN_PROGRESS").length,
-);
-
-export const pendingTasksCount = $derived(
-  tasks.filter(
-    (task) => task.status === "CREATED" || task.status === "INITIALIZED",
-  ).length,
-);
-
-export const recentTasks = $derived(() => {
-  return [...tasks]
-    .sort(
-      (a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    )
-    .slice(0, 5);
-});
-
 // Helper functions for working with task stores
-export function getTaskForPath(directoryPath: string) {
-  return $derived(tasksByPath.get(directoryPath) || null);
-}
-
-export function findTaskById(taskId: string) {
-  return $derived(tasks.find((task) => task.id === taskId) || null);
-}
 
 export function addTask(task: Task) {
   tasks.push(task);

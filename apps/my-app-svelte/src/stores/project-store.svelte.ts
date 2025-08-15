@@ -24,19 +24,6 @@ export const projectState = $state<ProjectState>({
   folderTrees: {},
 });
 
-// Project-related derived stores
-export const hasAnyProjectFolders = $derived(
-  projectState.projectFolders.length > 0,
-);
-
-export const projectFolderCount = $derived(
-  projectState.projectFolders.length,
-);
-
-// Helper function for getting folder tree for a specific project
-export function getFolderTreeForProject(projectId: string) {
-  return $derived(projectState.folderTrees[projectId] || null);
-}
 
 // Mutation functions
 export function setProjectFolders(folders: ProjectFolder[]) {

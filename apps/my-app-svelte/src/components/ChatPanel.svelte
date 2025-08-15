@@ -6,22 +6,17 @@
   import ToolCallConfirmation from "./ToolCallConfirmation.svelte";
   import AiGenerationDisplay from "./AiGenerationDisplay.svelte";
   import {
-    hasCurrentChat,
-    currentChatMessages,
-    currentChatBreadcrumb,
     chatState,
     updateMessageInput,
   } from "../stores/chat-store.svelte.js";
   import { projectState } from "../stores/project-store.svelte.js";
-  import { selectedProjectFolder } from "../stores/tree-store.svelte.js";
-  import { trpcClient } from "../lib/trpc-client.js";
   import {
     uiState,
-    isLoadingOpenChat,
-    isLoadingSubmitMessage,
     showToast,
   } from "../stores/ui-store.svelte.js";
   import { chatService } from "../services/chat-service.js";
+  import { fileSearchService } from "../services/file-search-service.js";
+  import { fileSearchState } from "../stores/file-search-store.svelte.js";
   import {
     Send,
     Paperclip,
@@ -36,26 +31,31 @@
 
   const logger = new Logger({ name: "ChatPanel" });
 
+  // Derived loading states
+  const isLoadingOpenChat = $derived(uiState.loadingStates["openChat"] || false);
+  const isLoadingSubmitMessage = $derived(uiState.loadingStates["submitMessage"] || false);
+
+  // Derived chat states
+  const hasCurrentChat = $derived(chatState.currentChat !== null);
+  const currentChatMessages = $derived(chatState.currentChat?.messages || []);
+  const currentChatBreadcrumb = $derived(() => {
+    if (!chatState.currentChat) return null;
+
+    const pathParts = chatState.currentChat.absoluteFilePath.split("/");
+    const fileName = pathParts.pop();
+    const parentDir = pathParts.slice(-2, -1).join("/");
+
+    return {
+      parentDir,
+      fileName,
+      fullPath: chatState.currentChat.absoluteFilePath,
+    };
+  });
+
   let messageInputElement = $state<HTMLTextAreaElement>();
   let messagesContainer = $state<HTMLDivElement>();
   let draftTimeout: NodeJS.Timeout;
 
-  // File search state
-  let searchQuery = $state<string>("");
-  let searchResults = $state<any[]>([]);
-  let showSearchMenu = $state<boolean>(false);
-  let selectedIndex = $state<number>(0);
-  let isSearching = $state<boolean>(false);
-  let searchTimeout: NodeJS.Timeout;
-
-  // File search interfaces
-  interface FileSearchResult {
-    name: string;
-    relativePath: string;
-    absolutePath: string;
-    score?: number;
-    highlight?: string;
-  }
 
   // Auto-scroll to bottom when new messages arrive using $effect
   $effect(() => {
@@ -111,7 +111,7 @@
     updateMessageInput(value);
 
     // Handle @ file reference detection
-    detectFileReference(value);
+    fileSearchService.detectFileReference(value, messageInputElement);
 
     // Save draft when user actively types (including clearing content)
     if (chatState.currentChat) {
@@ -122,150 +122,34 @@
     }
   }
 
-  // Detect @ file reference trigger
-  function detectFileReference(value: string) {
-    if (!messageInputElement) return;
-
-    const cursorPos = messageInputElement.selectionStart;
-
-    // Only process if cursor is at end (Ultra-MVP approach)
-    if (cursorPos !== value.length) {
-      hideSearchMenu();
-      return;
-    }
-
-    // Find last @ symbol
-    const lastAtIndex = value.lastIndexOf("@");
-    if (lastAtIndex === -1) {
-      hideSearchMenu();
-      return;
-    }
-
-    // Extract text after @
-    const afterAt = value.slice(lastAtIndex + 1);
-    if (afterAt.includes(" ")) {
-      hideSearchMenu();
-      return;
-    }
-
-    // Trigger search
-    const query = afterAt;
-    searchQuery = query;
-    showSearchMenu = true;
-    selectedIndex = 0;
-
-    // Debounced search
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-      performFileSearch(query);
-    }, 300);
-  }
-
-  // Perform file search
-  async function performFileSearch(query: string) {
-    // Get current project ID
-    const currentProject =
-      selectedProjectFolder() || projectState.projectFolders[0];
-    if (!currentProject) {
-      searchResults = [];
-      return;
-    }
-
-    isSearching = true;
-
-    try {
-      const results = await trpcClient.projectFolder.searchFiles.query({
-        query: query || "", // Show all files if query is empty
-        projectId: currentProject.id,
-        limit: 10,
-      });
-
-      searchResults = results;
-    } catch (error) {
-      logger.error("File search failed:", error);
-      searchResults = [];
-    } finally {
-      isSearching = false;
-    }
-  }
-
-  // Hide search menu
-  function hideSearchMenu() {
-    showSearchMenu = false;
-    searchResults = [];
-    searchQuery = "";
-    selectedIndex = 0;
-    clearTimeout(searchTimeout);
-  }
-
   // Handle file selection from dropdown
-  function handleFileSelect(file: FileSearchResult) {
-    if (!messageInputElement) return;
-
-    const value = chatState.messageInput;
-    const lastAtIndex = value.lastIndexOf("@");
-
-    if (lastAtIndex !== -1) {
-      // Replace @query with @filename and add space
-      const beforeAt = value.slice(0, lastAtIndex);
-      const newValue = `${beforeAt}@${file.relativePath} `;
-
-      updateMessageInput(newValue);
-
-      // Set cursor after the space
-      tick().then(() => {
-        if (messageInputElement) {
-          messageInputElement.focus();
-          messageInputElement.setSelectionRange(
-            newValue.length,
-            newValue.length,
-          );
-        }
-      });
-    }
-
-    hideSearchMenu();
+  function handleFileSelect(file: any) {
+    fileSearchService.handleFileSelect(
+      file,
+      messageInputElement,
+      chatState.messageInput,
+    );
   }
 
   // Handle search menu cancel
   function handleSearchCancel() {
-    hideSearchMenu();
-    if (messageInputElement) {
-      messageInputElement.focus();
-    }
+    fileSearchService.handleSearchCancel(messageInputElement);
   }
 
   // Handle search menu hover (for keyboard navigation)
   function handleSearchHover(index: number) {
-    selectedIndex = index;
+    fileSearchService.handleSearchHover(index);
   }
 
   function handleKeyPress(event: KeyboardEvent) {
     // Handle search menu navigation
-    if (showSearchMenu) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        selectedIndex = Math.min(selectedIndex + 1, searchResults.length - 1);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        selectedIndex = Math.max(selectedIndex - 1, 0);
-        return;
-      }
-      if (event.key === "Enter" || event.key === "Tab") {
-        event.preventDefault();
-        if (searchResults[selectedIndex]) {
-          handleFileSelect(searchResults[selectedIndex]);
-        }
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        handleSearchCancel();
-        return;
-      }
-    }
+    const handled = fileSearchService.handleSearchKeydown(
+      event,
+      messageInputElement,
+      chatState.messageInput,
+    );
+
+    if (handled) return;
 
     // Normal message sending
     if (event.key === "Enter" && !event.shiftKey) {
@@ -306,7 +190,7 @@
   $effect(() => {
     return () => {
       clearTimeout(draftTimeout);
-      clearTimeout(searchTimeout);
+      fileSearchService.cleanup();
     };
   });
 </script>
@@ -391,10 +275,10 @@
 
         <!-- File Search Dropdown -->
         <FileSearchDropdown
-          results={searchResults}
-          {selectedIndex}
-          visible={showSearchMenu}
-          loading={isSearching}
+          results={fileSearchState.results}
+          selectedIndex={fileSearchState.selectedIndex}
+          visible={fileSearchState.showMenu}
+          loading={fileSearchState.isSearching}
           onselect={handleFileSelect}
           oncancel={handleSearchCancel}
           onhover={handleSearchHover}

@@ -1,5 +1,4 @@
 // apps/my-app-svelte/src/stores/tree-store.svelte.ts
-import { projectState } from "./project-store.svelte.js";
 
 interface TreeState {
   selectedNode: string | null;
@@ -16,20 +15,6 @@ export const treeState = $state<TreeState>({
   expandedNodes: new Set()
 });
 
-// Tree view derived stores
-export const selectedProjectFolder = $derived(() => {
-  if (!treeState.selectedNode) return null;
-
-  return (
-    projectState.projectFolders.find(
-      (folder) =>
-        treeState.selectedNode === folder.path ||
-        treeState.selectedNode!.startsWith(folder.path + "/"),
-    ) || null
-  );
-});
-
-export const selectedPreviewFile = $derived(() => treeState.selectedPreviewFile);
 
 // Internal store functions - used by service layer
 // These handle only the state updates, not business logic

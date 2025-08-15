@@ -1,10 +1,10 @@
 <!-- apps/my-app-svelte/src/App.svelte -->
 <script lang="ts">
   import { Logger } from "tslog";
-  import Demo from "./components/Demo.svelte";
+  // import Demo from "./components/Demo.svelte";
   import MainLayout from "./components/MainLayout.svelte";
-  import MainLayoutDemo from "./components/MainLayoutDemo.svelte";
-  import ToolCallDemo from "./components/ToolCallDemo.svelte";
+  // import MainLayoutDemo from "./components/MainLayoutDemo.svelte";
+  // import ToolCallDemo from "./components/ToolCallDemo.svelte";
   import ToastProvider from "./components/ToastProvider.svelte";
   // import ErrorBoundary from "./components/ErrorBoundary.svelte";
   // import DevPanel from "./components/shared/DevPanel.svelte";
@@ -55,6 +55,10 @@
 </script>
 
 <ToastProvider>
+  <MainLayout />
+</ToastProvider>
+
+<!-- <ToastProvider>
   {#if showToolCallChatDemo}
     <MainLayoutDemo />
   {:else if showToolCallDemo}
@@ -64,7 +68,7 @@
   {:else}
     <MainLayout />
   {/if}
-</ToastProvider>
+</ToastProvider> -->
 
 <!-- <ErrorBoundary onError={handleError}>
   <ToastProvider>

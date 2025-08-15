@@ -5,9 +5,6 @@
   import { projectState } from "../../stores/project-store.svelte.js";
   import {
     uiState,
-    isLoadingAddProjectFolder,
-    isLoadingProjectFolders,
-    isLoadingCreateChat,
     showToast,
   } from "../../stores/ui-store.svelte";
   import { projectService } from "../../services/project-service";
@@ -19,6 +16,11 @@
   import RenameDialog from "./RenameDialog.svelte";
 
   const logger = new Logger({ name: "ExplorerPanel" });
+
+  // Derived loading states
+  const isLoadingAddProjectFolder = $derived(uiState.loadingStates["addProjectFolder"] || false);
+  const isLoadingProjectFolders = $derived(uiState.loadingStates["projectFolders"] || false);
+  const isLoadingCreateChat = $derived(uiState.loadingStates["createChat"] || false);
 
   async function handleAddProjectFolder() {
     const folderPath = prompt("Enter project folder path:");

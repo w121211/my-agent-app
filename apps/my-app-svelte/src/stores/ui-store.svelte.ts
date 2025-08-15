@@ -29,33 +29,6 @@ export const uiState = $state<UiState>({
   },
 });
 
-// Derived stores
-export const isAnyLoading = $derived(
-  Object.values(uiState.loadingStates).some(Boolean),
-);
-
-export const activeToastCount = $derived(uiState.toasts.length);
-
-export const isAnyModalOpen = $derived(
-  Object.values(uiState.modals).some(Boolean),
-);
-
-export const allConnectionsHealthy = $derived(
-  Object.values(uiState.connectionStates).every(
-    (state) => state === "connected" || state === "idle",
-  ),
-);
-
-export const connectionIssues = $derived(() => {
-  const issues: string[] = [];
-  Object.entries(uiState.connectionStates).forEach(([name, state]) => {
-    if (state === "error") {
-      issues.push(name);
-    }
-  });
-  return issues;
-});
-
 // Loading state functions
 export function setLoading(operation: string, isLoading: boolean) {
   uiState.loadingStates[operation] = isLoading;
@@ -64,14 +37,6 @@ export function setLoading(operation: string, isLoading: boolean) {
 export function getIsLoading(operation: string) {
   return uiState.loadingStates[operation] || false;
 }
-
-// Create specific loading state getters
-export const isLoadingOpenChat = $derived(uiState.loadingStates["openChat"] || false);
-export const isLoadingSubmitMessage = $derived(uiState.loadingStates["submitMessage"] || false);
-export const isLoadingAddProjectFolder = $derived(uiState.loadingStates["addProjectFolder"] || false);
-export const isLoadingProjectFolders = $derived(uiState.loadingStates["projectFolders"] || false);
-export const isLoadingCreateChat = $derived(uiState.loadingStates["createChat"] || false);
-export const isLoadingOpenFile = $derived(uiState.loadingStates["openFile"] || false);
 
 export function clearAllLoading() {
   Object.keys(uiState.loadingStates).forEach(key => delete uiState.loadingStates[key]);

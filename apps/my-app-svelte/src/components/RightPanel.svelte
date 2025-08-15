@@ -1,8 +1,8 @@
 <!-- apps/my-app-svelte/src/components/RightPanel.svelte -->
 <script lang="ts">
   import { Logger } from "tslog";
-  import { showToast, isLoadingOpenFile } from "../stores/ui-store.svelte";
-  import { selectedPreviewFile } from "../stores/tree-store.svelte";
+  import { showToast, uiState } from "../stores/ui-store.svelte";
+  import { treeState } from "../stores/tree-store.svelte";
   import { fileService } from "../services/file-service";
   import { projectService } from "../services/project-service";
   import {
@@ -16,6 +16,9 @@
   } from "svelte-bootstrap-icons";
 
   const logger = new Logger({ name: "RightPanel" });
+
+  // Derived loading state
+  const isLoadingOpenFile = $derived(uiState.loadingStates["openFile"] || false);
 
   // Context management state
   let projectContext = $state(`#<demo-project>/demo.md #/path/to/outside/file.md
@@ -45,8 +48,8 @@ Text is also allowed here for additional context.`);
 
   // Load file content when preview file changes using $effect
   $effect(() => {
-    if (selectedPreviewFile()) {
-      loadFileContent(selectedPreviewFile()!);
+    if (treeState.selectedPreviewFile) {
+      loadFileContent(treeState.selectedPreviewFile);
     }
   });
 
@@ -101,8 +104,8 @@ Text is also allowed here for additional context.`);
   }
 
   function handleRefresh() {
-    if (selectedPreviewFile()) {
-      loadFileContent(selectedPreviewFile()!);
+    if (treeState.selectedPreviewFile) {
+      loadFileContent(treeState.selectedPreviewFile);
     }
   }
 
@@ -289,7 +292,7 @@ Text is also allowed here for additional context.`);
   </div>
 
   <!-- Overlay Layer: Preview Panel -->
-  {#if selectedPreviewFile()}
+  {#if treeState.selectedPreviewFile}
     <div class="absolute inset-0 bg-surface z-20">
       <div class="flex h-full flex-col">
         <!-- Header -->
@@ -298,7 +301,7 @@ Text is also allowed here for additional context.`);
         >
           <div class="flex items-center">
             <span class="text-foreground font-medium">
-              {selectedPreviewFile()?.split("/").pop()}
+              {treeState.selectedPreviewFile?.split("/").pop()}
             </span>
             <span class="text-muted ml-2 text-xs">Preview</span>
           </div>
@@ -353,7 +356,7 @@ Text is also allowed here for additional context.`);
               <FileEarmark class="mx-auto mb-4 text-5xl" />
               <p class="mb-2">Failed to load file</p>
               <p class="text-muted mb-3 text-sm">
-                {selectedPreviewFile()?.split("/").pop()}
+                {treeState.selectedPreviewFile?.split("/").pop()}
               </p>
               <p class="text-red-400 mb-3 text-sm">{fileLoadError}</p>
               <button

@@ -13,6 +13,7 @@ import {
   type FolderTreeNode,
 } from "../stores/project-store.svelte.js";
 import {
+  treeState,
   setTreeSelectionState,
   toggleNodeExpansion as toggleNodeExpansionStore,
   expandParentDirectories,
@@ -197,6 +198,7 @@ class ProjectService {
     this.logger.info("Clearing file selection");
     setTreeSelectionState(null, null, null);
   }
+
 
   async copyFile(
     sourceAbsolutePath: string,
@@ -555,6 +557,7 @@ class ProjectService {
       setLoading("duplicateFile", false);
     }
   }
+
 }
 
 export const projectService = new ProjectService();

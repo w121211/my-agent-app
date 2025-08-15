@@ -33,10 +33,6 @@ export const fileExplorerState = $state<FileExplorerState>({
   },
 });
 
-// Derived stores
-export const isContextMenuVisible = $derived(fileExplorerState.contextMenu.isVisible);
-
-export const isRenameDialogVisible = $derived(fileExplorerState.renameDialog.isVisible);
 
 // Context Menu Actions
 export function showContextMenu(path: string, x: number, y: number) {

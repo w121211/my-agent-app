@@ -22,69 +22,7 @@ export const chatState = $state<ChatState>({
   isSubmittingMessage: false,
 });
 
-// Derived stores
-export const hasCurrentChat = $derived(chatState.currentChat !== null);
 
-export const currentChatMessages = $derived(
-  chatState.currentChat?.messages || [],
-);
-
-export const currentChatId = $derived(chatState.currentChat?.id || null);
-
-export const currentChatTitle = $derived(() => {
-  if (!chatState.currentChat) return null;
-
-  return (
-    chatState.currentChat.metadata?.title ||
-    chatState.currentChat.absoluteFilePath
-      .split("/")
-      .pop()
-      ?.replace(".chat.json", "") ||
-    "Untitled Chat"
-  );
-});
-
-export const hasMessageInput = $derived(
-  chatState.messageInput.trim().length > 0,
-);
-
-export const currentChatBreadcrumb = $derived(() => {
-  if (!chatState.currentChat) return null;
-
-  const pathParts = chatState.currentChat.absoluteFilePath.split("/");
-  const fileName = pathParts.pop();
-  const parentDir = pathParts.slice(-2, -1).join("/");
-
-  return {
-    parentDir,
-    fileName,
-    fullPath: chatState.currentChat.absoluteFilePath,
-  };
-});
-
-export const messageCount = $derived(currentChatMessages.length);
-
-export const lastMessage = $derived(
-  currentChatMessages[currentChatMessages.length - 1] || null,
-);
-
-export const lastUserMessage = $derived(() => {
-  for (let i = currentChatMessages.length - 1; i >= 0; i--) {
-    if (currentChatMessages[i].message.role === "user") {
-      return currentChatMessages[i];
-    }
-  }
-  return null;
-});
-
-export const lastAssistantMessage = $derived(() => {
-  for (let i = currentChatMessages.length - 1; i >= 0; i--) {
-    if (currentChatMessages[i].message.role === "assistant") {
-      return currentChatMessages[i];
-    }
-  }
-  return null;
-});
 
 
 // Helper functions for working with chat stores
