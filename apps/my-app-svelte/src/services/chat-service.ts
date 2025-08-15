@@ -12,10 +12,6 @@ import {
   clearCurrentChat,
   updateMessageInput,
   clearMessageInput,
-  startAiGeneration,
-  updateStreamingContent,
-  completeAiGeneration,
-  clearAiGenerationState,
 } from "../stores/chat-store.svelte";
 import { projectState } from "../stores/project-store.svelte.js";
 import {
@@ -165,29 +161,27 @@ class ChatService {
     toolCallId: string,
     outcome: "yes" | "no" | "yes_always",
   ) {
-    throw new Error("confirmToolCall is not implemented yet.");
-
-    // setLoading("confirmToolCall", true);
-    // try {
-    //   this.logger.info("Confirming tool call:", toolCallId, outcome);
-    //   const result = await trpcClient.chatClient.confirmToolCall.mutate({
-    //     absoluteFilePath,
-    //     chatSessionId,
-    //     toolCallId,
-    //     outcome,
-    //   });
-    //   this.logger.info("Tool call confirmed successfully");
-    //   return result;
-    // } catch (error) {
-    //   this.logger.error("Failed to confirm tool call:", error);
-    //   showToast(
-    //     `Failed to confirm tool call: ${error instanceof Error ? error.message : String(error)}`,
-    //     "error",
-    //   );
-    //   throw error;
-    // } finally {
-    //   setLoading("confirmToolCall", false);
-    // }
+    try {
+      this.logger.info("Confirming tool call:", toolCallId, outcome);
+      const result = await trpcClient.chatClient.confirmToolCall.mutate({
+        absoluteFilePath,
+        chatSessionId,
+        toolCallId,
+        outcome,
+      });
+      
+      // Update current chat with the returned session data
+      setCurrentChat(result.updatedChatSession);
+      this.logger.info("Tool call confirmed successfully");
+      return result;
+    } catch (error) {
+      this.logger.error("Failed to confirm tool call:", error);
+      showToast(
+        `Failed to confirm tool call: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+      throw error;
+    }
   }
 
   async abortChat(absoluteFilePath: string, chatSessionId: string) {
@@ -325,26 +319,14 @@ class ChatService {
     if (chatState.currentChat && chatState.currentChat.id === event.chatId) {
       switch (event.updateType) {
         case "AI_RESPONSE_STARTED":
-          // Start AI generation state
-          startAiGeneration(event.chatId);
           this.logger.debug("AI response started for chat:", event.chatId);
           setCurrentChat(event.chat);
           break;
         case "AI_RESPONSE_STREAMING":
-          // Update streaming content
-          const streamingContent =
-            event.update.accumulatedContent || event.update.chunk || "";
-          updateStreamingContent(streamingContent);
-          this.logger.debug(
-            "AI streaming content updated:",
-            streamingContent.length,
-            "chars",
-          );
+          this.logger.debug("AI streaming content updated");
           setCurrentChat(event.chat);
           break;
         case "AI_RESPONSE_COMPLETED":
-          // Complete AI generation
-          completeAiGeneration();
           this.logger.debug("AI response completed for chat:", event.chatId);
           setCurrentChat(event.chat);
           break;

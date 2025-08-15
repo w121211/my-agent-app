@@ -3,13 +3,12 @@
   import { tick } from "svelte";
   import FileSearchDropdown from "./file-explorer/FileSearchDropdown.svelte";
   import ChatMessage from "./ChatMessage.svelte";
+  import ToolCallConfirmation from "./ToolCallConfirmation.svelte";
+  import AiGenerationDisplay from "./AiGenerationDisplay.svelte";
   import {
     hasCurrentChat,
     currentChatMessages,
     currentChatBreadcrumb,
-    isAiGeneratingForCurrentChat,
-    aiGenerationStage,
-    aiStreamingContent,
     chatState,
     updateMessageInput,
   } from "../stores/chat-store.svelte.js";
@@ -359,69 +358,19 @@
         <ChatMessage {chatMessage} />
       {/each}
 
-      <!-- AI Generation Message Block -->
-      {#if isAiGeneratingForCurrentChat}
-        <div class="group flex flex-col items-start">
-          <div class="mb-0.5 flex items-center gap-2">
-            <span
-              class="bg-accent flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white"
-            >
-              C
-            </span>
-            <span class="text-muted text-xs font-medium">Claude Sonnet 4</span>
-            <span class="text-muted text-xs">
-              {#if aiGenerationStage === "starting"}
-                Starting to respond...
-              {:else if aiGenerationStage === "streaming"}
-                Responding...
-              {:else}
-                Completing...
-              {/if}
-            </span>
-          </div>
+      <!-- AI Generation Display -->
+      {#if chatState.currentChat?.sessionStatus === "processing"}
+        <AiGenerationDisplay chatSession={chatState.currentChat} />
+      {/if}
 
-          <div class="text-foreground pl-7 leading-normal">
-            {#if aiGenerationStage === "starting"}
-              <!-- Starting stage -->
-              <div class="flex items-center gap-2">
-                <div class="animate-pulse text-muted">Thinking...</div>
-                <div class="flex space-x-1">
-                  <div
-                    class="h-1 w-1 bg-muted rounded-full animate-pulse"
-                  ></div>
-                  <div
-                    class="h-1 w-1 bg-muted rounded-full animate-pulse delay-75"
-                  ></div>
-                  <div
-                    class="h-1 w-1 bg-muted rounded-full animate-pulse delay-150"
-                  ></div>
-                </div>
-              </div>
-            {:else if aiGenerationStage === "streaming"}
-              <!-- Streaming stage -->
-              <div class="whitespace-pre-wrap">
-                {aiStreamingContent}
-                <span class="animate-pulse">|</span>
-              </div>
-            {:else}
-              <!-- Completing stage -->
-              <div class="flex items-center gap-2">
-                <div class="animate-pulse text-muted">Finalizing...</div>
-                <div class="flex space-x-1">
-                  <div
-                    class="h-1 w-1 bg-muted rounded-full animate-pulse"
-                  ></div>
-                  <div
-                    class="h-1 w-1 bg-muted rounded-full animate-pulse delay-75"
-                  ></div>
-                  <div
-                    class="h-1 w-1 bg-muted rounded-full animate-pulse delay-150"
-                  ></div>
-                </div>
-              </div>
-            {/if}
-          </div>
-        </div>
+      <!-- Tool Call Confirmation Block -->
+      {#if chatState.currentChat?.sessionStatus === "waiting_confirmation"}
+        {@const lastMessage = currentChatMessages[currentChatMessages.length - 1]?.message}
+        <ToolCallConfirmation
+          chatId={chatState.currentChat.id}
+          absoluteFilePath={chatState.currentChat.absoluteFilePath}
+          lastAssistantMessage={lastMessage}
+        />
       {/if}
     </div>
 
@@ -437,7 +386,7 @@
           placeholder="Type your message... Use @ to reference files"
           class="bg-input-background border-input-border focus:border-accent placeholder-muted text-foreground w-full resize-none rounded-md border px-3 py-3 text-[15px] focus:outline-none"
           rows="3"
-          disabled={isLoadingSubmitMessage}
+          disabled={isLoadingSubmitMessage || chatState.currentChat?.sessionStatus !== "idle"}
         ></textarea>
 
         <!-- File Search Dropdown -->
@@ -501,7 +450,7 @@
         <!-- Send button -->
         <button
           onclick={handleSendMessage}
-          disabled={!chatState.messageInput.trim() || isLoadingSubmitMessage}
+          disabled={!chatState.messageInput.trim() || isLoadingSubmitMessage || chatState.currentChat?.sessionStatus !== "idle"}
           class="hover:bg-accent/80 bg-accent text-white ml-auto rounded px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-50"
           title="Send"
         >

@@ -9,6 +9,8 @@
     Download,
   } from "svelte-bootstrap-icons";
   import { showToast } from "../stores/ui-store.svelte.js";
+  import { extractFileReferences } from "../stores/chat-store.svelte.js";
+  import ToolResultDisplay from "./ToolResultDisplay.svelte";
   import type { ChatMessage } from "@repo/events-core/services/chat-engine/chat-session-repository";
 
   interface Props {
@@ -75,25 +77,6 @@
     return Array.isArray(content) ? content : [];
   }
 
-  // Helper to detect and extract file references from text
-  function extractFileReferencesFromText(text: string) {
-    const patterns = [
-      /@([^\s]+)/g, // @file patterns
-      /([^\s]+\.\w+)/g // basic file.ext patterns
-    ];
-    
-    const refs: Array<{path: string, syntax: string}> = [];
-    for (const pattern of patterns) {
-      const matches = text.matchAll(pattern);
-      for (const match of matches) {
-        const fullMatch = match[0];
-        if (fullMatch.startsWith('@')) {
-          refs.push({ path: fullMatch.slice(1), syntax: '@' });
-        }
-      }
-    }
-    return refs;
-  }
 </script>
 
 {#if isSystem}
@@ -117,7 +100,7 @@
       <div class="leading-normal">
         {#each getContentParts(message.content) as part}
           {#if part.type === "text"}
-            {@const fileReferences = extractFileReferencesFromText(part.text)}
+            {@const fileReferences = extractFileReferences(part.text)}
             
             <!-- File References -->
             {#if fileReferences.length > 0}
@@ -235,9 +218,7 @@
         {:else if part.type === "tool-result"}
           <div class="bg-green-50 border border-green-200 rounded p-2 my-1">
             <div class="text-sm font-medium text-green-800">✅ Tool Result</div>
-            <div class="text-xs text-green-600 mt-1">
-              {JSON.stringify(part.output, null, 2)}
-            </div>
+            <ToolResultDisplay output={part.output} />
           </div>
         {:else}
           <div class="text-muted text-xs">
@@ -311,11 +292,7 @@
             <strong>Call ID:</strong>
             {part.toolCallId}<br />
             <strong>Result:</strong>
-            <pre class="mt-1 whitespace-pre-wrap">{JSON.stringify(
-                part.output,
-                null,
-                2,
-              )}</pre>
+            <ToolResultDisplay output={part.output} />
           </div>
         {:else}
           <div class="text-xs text-yellow-700">
